@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wall-on.sh — включить эксперимент живых обоев (Deskland PoC).
+# wall-on.sh — включить эксперимент живых обоев (Mintland PoC).
 # Контракт — SAFETY.md: без gsettings/dconf, только свои процессы.
 
 set -u
@@ -9,10 +9,10 @@ mkdir -p "$RUN"
 PIDF="$RUN/wall.pid"
 LOG="$RUN/wall.log"
 
-say() { notify-send -a Deskland "Deskland" "$1" 2>/dev/null || true; }
+say() { notify-send -a Mintland "Mintland" "$1" 2>/dev/null || true; }
 
 # 0. Очистка возможного зависшего состояния (осиротевшие окна от предыдущего запуска)
-for p in $(pgrep -f 'deskland/themehost\.py'); do kill "$p" 2>/dev/null; done
+for p in $(pgrep -f 'mintland/themehost\.py'); do kill "$p" 2>/dev/null; done
 for p in $(pgrep -x deskwall); do kill "$p" 2>/dev/null; done
 sleep 0.5
 rm -f "$PIDF"
@@ -36,7 +36,7 @@ fi
 
 # 4. Зафиксировать PID группы (experiment.sh делает setsid)
 sleep 1
-PID="$(pgrep -f 'deskland/themehost\.py' | head -1)"
+PID="$(pgrep -f 'mintland/themehost\.py' | head -1)"
 if [ -z "$PID" ]; then
     say "Слой не поднялся — см. run/wall.log"
     exit 1

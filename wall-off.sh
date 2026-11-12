@@ -27,10 +27,10 @@ if [ -f "$PIDF" ]; then
 fi
 
 # 2. Фолбэк: по пути скрипта хоста (строго, чтобы не задеть чужое)
-if pgrep -f 'deskland/themehost\.py' >/dev/null; then
-    pkill -TERM -f 'deskland/themehost\.py' 2>/dev/null
+if pgrep -f 'mintland/themehost\.py' >/dev/null; then
+    pkill -TERM -f 'mintland/themehost\.py' 2>/dev/null
     sleep 1
-    pkill -KILL -f 'deskland/themehost\.py' 2>/dev/null
+    pkill -KILL -f 'mintland/themehost\.py' 2>/dev/null
     STOPPED=1
 fi
 
@@ -42,7 +42,7 @@ if pgrep -f 'deskwall --create' >/dev/null; then
 fi
 
 # 3. Проверка чистоты: наших процессов не осталось
-LEFT="$(pgrep -f 'deskland/themehost\.py' | tr '\n' ' ')"
+LEFT="$(pgrep -f 'mintland/themehost\.py' | tr '\n' ' ')"
 if [ -n "$LEFT" ]; then
     say "Внимание: остались процессы ($LEFT) — посмотрите run/wall.log"
 fi

@@ -38,21 +38,21 @@ except Exception:
 import iconsource
 
 HERE = Path(__file__).resolve().parent
-MARKER = "deskland-poc-wall"
+MARKER = "mintland-poc-wall"
 _DISPLAY = _libX11.XOpenDisplay(None)
 
 SHIM_JS = """
 (function () {
-    if (window.__deskland) return;
+    if (window.__mintland) return;
     const listeners = [];
     window.chrome = { webview: {
         addEventListener: function (type, cb) { listeners.push(cb); },
         postMessage: function (msg) {
-            try { window.webkit.messageHandlers.deskland.postMessage(String(msg)); }
+            try { window.webkit.messageHandlers.mintland.postMessage(String(msg)); }
             catch (e) {}
         }
     }};
-    window.__desklandRecv = function (json) {
+    window.__mintlandRecv = function (json) {
         for (const cb of listeners) cb({ data: json });
     };
 })();
@@ -206,8 +206,8 @@ class ThemeHost:
             None,
             None,
         ))
-        ucm.register_script_message_handler("deskland")
-        ucm.connect("script-message-received::deskland", self.on_page_message)
+        ucm.register_script_message_handler("mintland")
+        ucm.connect("script-message-received::mintland", self.on_page_message)
 
         uri = "file://" + str(self.html_path) + "?wallpaper=1"
         self._log("loading " + uri)
@@ -282,7 +282,7 @@ class ThemeHost:
 
     def send(self, json_str: str):
         try:
-            self.view.run_javascript("__desklandRecv('%s')" % json_str.replace("'", "\\'"))
+            self.view.run_javascript("__mintlandRecv('%s')" % json_str.replace("'", "\\'"))
         except Exception:
             pass
 
