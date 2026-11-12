@@ -1,0 +1,552 @@
+{
+  "name": "English",
+  "ui": {
+    "adaptive": "Adaptive",
+    "themes": "Themes",
+    "collectionTitle": "Find your scenery.",
+    "collectionSubtitle": "Make your icons part of the landscape.",
+    "language": "Language",
+    "langAuto": "System default",
+    "langAutoWith": "System default ({name})",
+    "autostart": "Start with Windows",
+    "autostartTitle": "Run Deskland automatically when you sign in",
+    "autostartBlocked": "Start with Windows may have been blocked",
+    "autostartWarnSw": "Deskland didn't start automatically this time — {sw} may have blocked it. Open {sw}, find Deskland in its startup manager and set it to Allow.",
+    "autostartWarnGeneric": "Deskland didn't start automatically this time — your security software or the Windows Startup apps setting may have blocked it. Turn Deskland on in your security software's startup manager, or in Windows Settings → Apps → Startup.",
+    "gotIt": "Got it",
+    "updateAvailable": "Update available",
+    "updateVersion": "Deskland {version} is ready. Your current theme and settings will be kept.",
+    "updateProgram": "Update now",
+    "updateRetry": "Retry update",
+    "updateWorking": "Updating…",
+    "updateDownloading": "Downloading and installing… {progress}",
+    "updateInstalling": "Installing the update… {progress}",
+    "updateCompletedTitle": "Update complete",
+    "updateCompleted": "The update has been downloaded and installed. If Deskland does not restart automatically, open it again.",
+    "updateDone": "Done",
+    "updateCanceled": "The update was canceled. You can try again later.",
+    "updateLowBattery": "The update could not finish on battery power. Plug in your device and try again.",
+    "updateWifiRecommended": "This network may incur charges. Switch networks or try again later.",
+    "updateWifiRequired": "Connect to Wi-Fi to download this update.",
+    "updateStoreRequired": "This update method is only available in the Microsoft Store edition.",
+    "updateFailed": "The update failed. Check your connection or Microsoft Store and try again.",
+    "updateCheckingTitle": "Checking for updates",
+    "updateChecking": "Connecting to the update server and checking for a new version…",
+    "updateFailedTitle": "Update not completed",
+    "updateCheckFailedTitle": "Couldn't check for updates",
+    "networkTimeout": "The connection or download timed out. Check your network, proxy or firewall and try again. If other websites work, the server may also be responding slowly.",
+    "networkDns": "The server address couldn't be resolved. Check your network, DNS or proxy settings and try again.",
+    "networkTls": "A secure connection couldn't be established. Check the system time and any security interception by your network or proxy, then try again.",
+    "networkLocal": "The network connection failed or was interrupted. Check your network, proxy or firewall and try again.",
+    "serverUnavailable": "The server was reached, but the service is temporarily unavailable (HTTP 5xx). Please try again later.",
+    "serverRejected": "The server rejected the request (HTTP 4xx). Try again later or contact support if this continues.",
+    "serverInvalid": "The server returned an unrecognized response. Try again later or contact support if this continues.",
+    "downloadInvalid": "The download was incomplete or failed security verification, so installation was stopped. Try again or contact support if this keeps happening.",
+    "livePreview": "Live preview",
+    "previewIcons": "Live preview · using the {n} icons on your desktop",
+    "previewNoIcons": "Live preview · desktop icons are hidden",
+    "refresh": "Refresh",
+    "refreshTitle": "Generate a new scene for this theme",
+    "shareImage": "Share image",
+    "shareImageTitle": "Share your desktop image while protecting your privacy",
+    "shareVideo": "Share video",
+    "shareVideoTitle": "Share your desktop animation while protecting your privacy",
+    "generating": "Generating…",
+    "preparingRec": "Getting ready…",
+    "recording": "Recording {p}%",
+    "savingVideo": "Saving…",
+    "shareFailImage": "Couldn't create the image: {msg}",
+    "shareFailVideo": "Couldn't record the video: {msg}",
+    "unknownReason": "unknown error",
+    "shareReadyImage": "Your desktop picture is ready",
+    "shareReadyVideo": "Your desktop clip is ready",
+    "sharePrivacy": "Icons are replaced with sample icons and file names with color blocks, so none of your files are shown.",
+    "shareCopiedImage": "The image is on your clipboard — paste it straight into a chat or a post.",
+    "shareCopiedVideo": "The video file is on your clipboard — paste it into a chat window to send it.",
+    "shareBrowserHint": " (Browser preview: click “{btn}” to download.)",
+    "savedTo": "Saved to {path}",
+    "openFolder": "Show in folder",
+    "openImage": "Open image",
+    "openVideo": "Open video",
+    "saveImage": "Save image",
+    "saveVideo": "Save video",
+    "ok": "OK",
+    "sharePreviewAlt": "Preview of the shared image",
+    "autosave": "Changes are saved automatically and applied to your desktop right away",
+    "saved": "Saved ✓",
+    "resetAll": "Reset all",
+    "resetAllTitle": "Reset all settings of this theme to their defaults",
+    "helpButtonTitle": "Common questions and troubleshooting",
+    "helpTitle": "Help",
+    "helpSubtitle": "Common questions and troubleshooting",
+    "helpWallpaperQ": "Deskland keeps flickering or restarting. How do I fix it?",
+    "helpWallpaperA": "If your regular Windows wallpaper changes automatically, each change can make Deskland flicker or restart. Use a fixed background that does not rotate.",
+    "helpWallpaperStep1": "Open Windows Settings → Personalization → Background.",
+    "helpWallpaperStep2": "Set ‘Personalize your background’ to ‘Picture’ or ‘Solid color’. Do not use ‘Slideshow’ or ‘Windows spotlight’.",
+    "helpWallpaperStep3": "Restart Deskland after changing this setting.",
+    "badgeOn": "In use",
+    "badgeReady": "Available",
+    "badgeSoon": "Coming soon",
+    "badgeLocked": "Wallpaper",
+    "lockedTitle": "{name} · Wallpaper edition theme; click for purchase details",
+    "purchaseLocalTitle": "Unlock the Wallpaper edition",
+    "purchaseLocalTheme": "“{name}” is included in the Wallpaper edition.",
+    "purchaseLocalMessage": "After you buy from the current store, Deskland verifies your purchase and unlocks it automatically—no account sign-in needed. If you just bought it, check again.",
+    "purchaseRecheck": "Check purchases on this PC",
+    "purchaseChecking": "Checking…",
+    "purchaseCrossChannel": "Restore another channel",
+    "ongoingTitle": "More on the way",
+    "ongoingDesc": "New scenes and elements will be added over time.",
+    "noParams": "This theme has no settings yet",
+    "resetOne": "Reset to default: {v}",
+    "resetOneAria": "Reset {label} to default",
+    "dblclickReset": "Double-click to reset ({v})",
+    "comingSoon": "Coming soon:",
+    "purchaseTitle": "Get the Wallpaper edition",
+    "purchaseTheme": "“{name}” is included in the Wallpaper edition.",
+    "purchaseMessage": "The preview includes Beach and Meadow forever. Get the Wallpaper edition to unlock more themes in the same Deskland app.",
+    "purchaseLater": "Keep exploring",
+    "purchaseWebsite": "Visit website"
+  },
+  "host": {
+    "traySettings": "Settings…",
+    "trayPause": "Pause animation",
+    "trayReload": "Reload",
+    "trayAutostart": "Start with Windows",
+    "trayExit": "Exit (restore wallpaper)",
+    "welcomeTitle": "Deskland is running",
+    "welcomeBody": "Click the beach icon in the system tray{hotkey} to open the menu.\nCan't see it? Click ^ on the right side of the taskbar.",
+    "welcomeHotkey": " or press Ctrl+Alt+H",
+    "errNotReady": "The wallpaper isn't ready yet",
+    "errNoImage": "No image came back",
+    "errNoVideo": "No video came back",
+    "errBusyImage": "The previous image is still being generated",
+    "errBusyVideo": "The previous clip is still recording",
+    "errImageTimeout": "Generating took too long",
+    "errVideoTimeout": "Recording took too long",
+    "errBadData": "The page returned incomplete data",
+    "errRebuilt": "Windows kept rebuilding the wallpaper layer, so Deskland has stopped.",
+    "errSeeLog": "See the log for details: {path}",
+    "errSettings": "Couldn't open the settings window: {msg}",
+    "errNoPage": "Page not found: {path}",
+    "errNoDesktop": "Couldn't find the desktop window, so the wallpaper can't be attached.",
+    "errStart": "Couldn't start: {msg}"
+  },
+  "themes": {
+    "lotus": {
+      "name": "Lotus Pond",
+      "desc": "Lotus leaves and blossoms fill the pond, with koi swimming between the leaves and icons and leaving ripples",
+      "groups": [
+        "Around icons",
+        "Details"
+      ],
+      "params": {
+        "density": {
+          "label": "Lotus leaf density",
+          "hint": "How much of the water is covered by leaves; 100% is the original density, 0 hides leaves and their flowers"
+        },
+        "sigma": {
+          "label": "Open water",
+          "hint": "How much open water surrounds your icons"
+        },
+        "fish": {
+          "label": "Koi",
+          "hint": "Koi swimming between lotus leaves and icons",
+          "unit": ""
+        },
+        "flowers": {
+          "label": "Lotus flowers",
+          "hint": "The amount of lotus blossoms, buds and water lilies"
+        }
+      }
+    },
+    "lake": {
+      "name": "Lake",
+      "desc": "Watercolor grass surrounds a clear lake, with painted stones beneath the shallows and crisp reflections of puffy clouds",
+      "groups": [
+        "Shore",
+        "Water",
+        "Clouds"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Grassy shore",
+          "hint": "How far the grassy banks extend from your icons"
+        },
+        "warp": {
+          "label": "Winding shore",
+          "hint": "How much the lakeshore curves"
+        },
+        "shoal": {
+          "label": "Clear shallows",
+          "hint": "How far the underwater stones remain visible from the shore"
+        },
+        "depth": {
+          "label": "Water depth",
+          "hint": "The distance from turquoise blue shallows to teal deeper water"
+        },
+        "flow": {
+          "label": "Water movement",
+          "hint": "The speed of gentle ripples, shimmering light and cloud reflections"
+        },
+        "clouds": {
+          "label": "Cloud count",
+          "hint": "The number of reflected clouds on the lake; set to 0 to hide",
+          "unit": ""
+        }
+      }
+    },
+    "beach-turquoise": {
+      "name": "Maldives",
+      "desc": "Turquoise water and pale beige sand, with schools of little fish swimming between dark coral reefs",
+      "groups": [
+        "Shoreline",
+        "Water",
+        "Details"
+      ],
+      "params": {
+        "fishSchools": {
+          "label": "Fish schools",
+          "hint": "Number of dense fish schools swimming in deep water; set to 0 to hide",
+          "unit": ""
+        },
+        "palms": {
+          "label": "Coconut palms",
+          "hint": "Number of coastal palms; 0 to hide. Fewer appear if there is not enough sand.",
+          "unit": ""
+        },
+        "sigma": {
+          "label": "Distance from icons",
+          "hint": "How far the shoreline sits from your icons"
+        },
+        "warp": {
+          "label": "Winding coast",
+          "hint": "How much the shoreline twists and turns"
+        },
+        "shoal": {
+          "label": "Clear shallows",
+          "hint": "How wide the see-through water over the sand is"
+        },
+        "shallow": {
+          "label": "Shallow sea",
+          "hint": "The distance from pale mint shallows to deep turquoise"
+        },
+        "kayaks": {
+          "label": "Kayaks",
+          "unit": ""
+        },
+        "birds": {
+          "label": "Seabirds",
+          "hint": "Gulls gliding and circling overhead",
+          "unit": ""
+        },
+        "turtles": {
+          "label": "Sea turtles",
+          "hint": "Slowly swimming sea turtles; set to 0 to hide",
+          "unit": ""
+        }
+      }
+    },
+    "beach": {
+      "name": "Beach",
+      "desc": "The shoreline curves around your files as waves roll up the sand",
+      "groups": [
+        "Shoreline",
+        "Water",
+        "Details"
+      ],
+      "params": {
+        "palms": {
+          "label": "Coconut palms",
+          "hint": "Number of coastal palms; 0 to hide. Fewer appear if there is not enough sand.",
+          "unit": ""
+        },
+        "sigma": {
+          "label": "Distance from icons",
+          "hint": "How far the shoreline sits from your icons"
+        },
+        "warp": {
+          "label": "Winding coast",
+          "hint": "How much the shoreline twists and turns"
+        },
+        "shoal": {
+          "label": "Clear shallows",
+          "hint": "How wide the see-through water over the sand is"
+        },
+        "shallow": {
+          "label": "Shallow sea",
+          "hint": "How far the water fades from turquoise to deep blue"
+        },
+        "kayaks": {
+          "label": "Kayaks",
+          "unit": ""
+        },
+        "birds": {
+          "label": "Seabirds",
+          "hint": "Gulls gliding and circling overhead",
+          "unit": ""
+        }
+      }
+    },
+    "sky": {
+      "name": "Sky",
+      "desc": "A cartoon blue sky where your icons sit on puffy round clouds — day, dusk or night",
+      "groups": [
+        "Time of day",
+        "Around icons",
+        "Clouds",
+        "Details"
+      ],
+      "params": {
+        "time": {
+          "label": "Time of day",
+          "hint": "Follow the clock: dawn at 6:00, day at 7:00, dusk at 17:30, night at 19:00",
+          "options": [
+            "Auto",
+            "Day",
+            "Dusk",
+            "Night"
+          ]
+        },
+        "sigma": {
+          "label": "Cloud size",
+          "hint": "How far the clouds spread out from your icons"
+        },
+        "cover": {
+          "label": "Clouds in the sky",
+          "hint": "How many clouds drift across the open sky"
+        },
+        "flow": {
+          "label": "Drift speed",
+          "hint": "How fast the clouds drift and their puffs change"
+        },
+        "birds": {
+          "label": "Birds",
+          "hint": "They don't fly at night",
+          "unit": ""
+        },
+        "plane": {
+          "label": "Plane",
+          "hint": "A little plane trails across the top of the screen",
+          "options": [
+            "Never",
+            "Now and then",
+            "Often"
+          ]
+        },
+        "moon": {
+          "label": "Moon",
+          "hint": "The moon and moonlight at night",
+          "options": [
+            "Off",
+            "On"
+          ]
+        },
+        "stars": {
+          "label": "Star size",
+          "hint": "Stars at night; turn it up for bright stars with cross-shaped sparkles"
+        }
+      }
+    },
+    "ocean": {
+      "name": "Ocean",
+      "desc": "Looking down on a blue ocean — your icons hide in white clouds whose shadows fall on the sea",
+      "groups": [
+        "Around icons",
+        "Clouds",
+        "Details"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Cloud size",
+          "hint": "How far the clouds around your icons spread out"
+        },
+        "cover": {
+          "label": "Clouds over the sea",
+          "hint": "How many clouds drift over the open sea"
+        },
+        "flow": {
+          "label": "Drift speed",
+          "hint": "How fast the clouds drift and their puffs change"
+        },
+        "boats": {
+          "label": "Sailboats",
+          "hint": "White and gray sailboats sailing slowly across open water",
+          "unit": ""
+        },
+        "yachts": {
+          "label": "Yachts",
+          "hint": "White and gray yachts with dark gray windows, pale gray seats and foamy wakes",
+          "unit": ""
+        },
+        "birds": {
+          "label": "Seabirds",
+          "hint": "White gulls gliding and circling over the sea",
+          "unit": ""
+        }
+      }
+    },
+    "meadow": {
+      "name": "Meadow",
+      "desc": "A pen-and-wash meadow where your icons hide in white clouds that cast dark green shadows",
+      "groups": [
+        "Around icons",
+        "Clouds",
+        "Characters"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Cloud size",
+          "hint": "How far the clouds around your icons spread out"
+        },
+        "cover": {
+          "label": "Clouds over the meadow",
+          "hint": "How many clouds drift over the open meadow"
+        },
+        "flow": {
+          "label": "Drift speed",
+          "hint": "How fast the clouds drift and their puffs change"
+        },
+        "showBoy": {
+          "label": "Show boy",
+          "hint": "Show or hide the boy together with his kite",
+          "options": [
+            "Hide",
+            "Show"
+          ]
+        },
+        "showCat": {
+          "label": "Show kitten",
+          "hint": "The little black kitten resting on the grass",
+          "options": [
+            "Hide",
+            "Show"
+          ]
+        }
+      }
+    },
+    "forest": {
+      "name": "Forest",
+      "desc": "Your icons sit in a clearing ringed by gouache cartoon trees swaying in the breeze",
+      "groups": [
+        "Around icons",
+        "Trees",
+        "Details"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Clearing size",
+          "hint": "How big the clearing around your icons is, and how far away the trees stand"
+        },
+        "wind": {
+          "label": "Wind",
+          "hint": "How much the treetops sway; 0 means no wind"
+        },
+        "birds": {
+          "label": "Birds",
+          "hint": "Mostly perched on treetops, now and then flying to a nearby tree — they stay in the woods",
+          "unit": ""
+        }
+      }
+    },
+    "pinkforest": {
+      "name": "Pink Forest",
+      "desc": "A watercolor forest: translucent pink treetops on fine ink trunks",
+      "groups": [
+        "Around icons",
+        "Trees",
+        "Details"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Clearing size",
+          "hint": "How big the clearing around your icons is, and how far away the trees stand"
+        },
+        "wind": {
+          "label": "Wind",
+          "hint": "How much the treetops sway; 0 means no wind"
+        },
+        "birds": {
+          "label": "Birds",
+          "hint": "Little ink birds, mostly perched on treetops, now and then flying to a nearby tree",
+          "unit": ""
+        }
+      }
+    },
+    "map": {
+      "name": "Hand-drawn City",
+      "desc": "A bird's-eye map of an old town: rows of ink-drawn houses line the streets, and your icons sit in the squares",
+      "groups": [
+        "Around icons",
+        "Town"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Square size",
+          "hint": "How big the open squares around your icons are"
+        },
+        "canals": {
+          "label": "Canals",
+          "hint": "How many canals cross the town, with little boats drifting along",
+          "unit": ""
+        }
+      }
+    },
+    "citymap": {
+      "name": "Colorful City",
+      "desc": "An illustrated city map with red roofs and yellow, pink and blue walls; your icons sit in the squares",
+      "groups": [
+        "Around icons"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Square size",
+          "hint": "How big the open squares around your icons are"
+        }
+      }
+    },
+    "worldmap": {
+      "name": "Old Map",
+      "desc": "A parchment continent: icons become seas, dotted roads link towns, and horse-drawn wagons carry supplies between them",
+      "groups": [
+        "Around icons",
+        "Details"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Sea size",
+          "hint": "How much sea surrounds your icons"
+        },
+        "ships": {
+          "label": "Sailing ships",
+          "hint": "Three-masted ships bobbing on the sea",
+          "unit": ""
+        },
+        "wagons": {
+          "label": "Trade wagons",
+          "hint": "Wagons carry crates and grain sacks between towns; set to 0 to hide them",
+          "unit": ""
+        }
+      }
+    },
+    "nauticalmap": {
+      "name": "Nautical Chart",
+      "desc": "A parchment sea chart with coastal ports and lighthouses, winding sea routes, sailing ships and hand-drawn sea monsters",
+      "groups": [
+        "Around icons",
+        "Details"
+      ],
+      "params": {
+        "sigma": {
+          "label": "Land size",
+          "hint": "How far the land extends around your icons"
+        },
+        "ships": {
+          "label": "Sailing ships",
+          "hint": "Hand-drawn galleons, schooners and cutters gently bobbing between the islands",
+          "unit": ""
+        }
+      }
+    }
+  }
+}

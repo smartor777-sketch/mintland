@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deskland Preview</title>
+<!--
+  Deskland 设置窗口
+  - 由桌面宿主（host/Deskland.exe）在 WebView2 里打开；单独用浏览器打开时使用模拟数据，方便调界面
+  - 主题与参数来自 themes.json，控件按清单自动生成
+  - 实时预览：iframe 加载主题页面的 ?preview=1 模式，用你桌面上真实的图标位置
+  - 和宿主的消息（JSON 字符串）：
+      发出：hello / set {theme,key,value} / reset {theme} / theme {id} / autostart {v} / share / shareVideo / openShare / revealShare / updateProgram
+      收到：init {theme,params,screen,autostart,autostartWarn} / icons {vis,r} / autostart {v} / recProgress {p}
+            / shareResult {ok,kind?,thumb,path,url?,msg}（kind = 'video' 时 url 是能直接播放的视频地址）
+            / updateState {version,status,progress,error}（商店版下载安装进度由宿主提供）
+      autostartWarn：开机自启这次没跑起来（被安全软件拦了）时的提醒文字，空字符串 = 没问题；点"知道了"发 autostartWarnSeen
+-->
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f5f5f3; --panel-2: #ebebe8; --line: #deded9;
+    --text: #171717; --muted: #646461; --faint: #80807c;
+    --accent: #171717; --accent-ink: #ffffff; --accent-soft: rgba(0, 0, 0, .06); --track: #deded9;
+    --shadow: 0 0 0 transparent; --selection-shadow: 0 0 0 1px rgba(128, 128, 128, .28), 0 6px 18px rgba(0, 0, 0, .09);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171717; --panel: #232322; --panel-2: #30302e; --line: #42423e;
+      --text: #f5f5f1; --muted: #b7b7b0; --faint: #999991;
+      --accent: #f5f5f1; --accent-ink: #171717; --accent-soft: rgba(255, 255, 255, .08); --track: #454540;
+      --selection-shadow: 0 0 0 1px rgba(160, 160, 160, .45), 0 6px 18px rgba(0, 0, 0, .24);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); overflow: hidden;
+    font: 13px/1.5 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); user-select: none;   /* 顶栏 / 左右两栏 / 底栏 */
+  }
+  h1, h2, h3, p { margin: 0; }
+
+  /* ---------- 顶栏：左边"主题"，右边开机自启 ---------- */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 32px 24px; }
+  .brand { font-size: 25px; line-height: 1; font-weight: 750; letter-spacing: -1.2px; }
+  .top .section-title { margin: 0; color: var(--text); font-size: 13px; letter-spacing: 0; padding: 5px 0; border-bottom: 2px solid var(--text); }
+  .top-left { display: flex; align-items: center; gap: 28px; }
+  .top-right { display: flex; align-items: center; gap: 18px; }
+  .lang-row { display: flex; flex: none; align-items: center; gap: 6px; color: var(--muted); }
+  .lang-row svg { width: 15px; height: 15px; flex: none; }
+  .lang-row select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    width: 170px; flex: none; padding: 7px 9px; cursor: pointer; }
+  .lang-row select:hover, .lang-row select:focus-visible { border-color: var(--accent); outline: none; }
+  html:not(.ready) body { visibility: hidden; }   /* 按界面语言填好文字再显示，免得先闪一下中文 */
+
+  .switch-row { position: relative; display: flex; align-items: center; gap: 9px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .switch-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch { flex: none; width: 34px; height: 20px; border-radius: 10px; background: var(--track); position: relative; transition: background .15s; }
+  .switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+    transition: transform .15s, background .15s; }
+  .switch-row input:checked + .switch { background: var(--accent); }
+  .switch-row input:checked + .switch::after { transform: translateX(14px); background: var(--accent-ink); }
+  .switch-row input:focus-visible + .switch { outline: 2px solid var(--muted); outline-offset: 3px; }
+  .switch-row.is-disabled { cursor: not-allowed; opacity: .45; }
+  .switch-row.is-disabled .switch { background: var(--track); }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--muted); outline-offset: 3px; }
+
+  /* ---------- 提醒（开机自启被拦） ---------- */
+  .warn { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+    background: rgba(240, 160, 40, .12); border: 1px solid rgba(220, 140, 30, .35); color: var(--text); }
+  .warn[hidden] { display: none; }
+  .warn b { color: #c27310; }
+  .warn p { flex: 1; }
+  .warn button { flex: none; font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+
+  /* 有更新时才出现；版本信息由宿主统一提供，不在页面里猜下载地址。 */
+  .update-notice { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; padding: 14px 16px;
+    border: 1px solid var(--line); border-radius: 14px; background: #f5f5f3; }
+  .update-notice[hidden] { display: none; }
+  .update-symbol { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%;
+    background: #278b78; color: #fff; }
+  .update-symbol svg { width: 17px; height: 17px; }
+  .update-copy { flex: 1; min-width: 0; }
+  .update-copy b { display: block; font-size: 13px; }
+  .update-copy p { margin-top: 2px; color: var(--muted); font-size: 11px; }
+  .update-action { flex: none; border-color: #171717; background: #171717; color: #fff; }
+  .update-action:hover { border-color: #000; background: #000; }
+  .update-action:disabled { opacity: .65; cursor: default; }
+
+  /* ---------- 左右两栏：左边主题，右边预览 + 参数 ---------- */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 28px; padding: 0 32px; min-height: 0; }
+  .side { display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 22px; background: var(--panel); border-radius: 24px; }
+
+  /* ---------- 主题 ---------- */
+  .themes { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .collection-head { flex: none; padding: 2px 4px 22px; }
+  .collection-head h1 { font-size: clamp(26px, 2.8vw, 36px); font-weight: 650; letter-spacing: -.05em; line-height: 1.25; }
+  .collection-head p { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .04em; margin-bottom: 10px; }
+  /* 按宽度自动排几列，主题多了就往下滚（以后会有很多辑、上百个主题） */
+  .theme-list { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+    align-content: start; gap: 16px; padding: 4px 8px 18px 4px; margin-left: -4px; margin-right: -8px; }
+  .theme-list::-webkit-scrollbar { width: 8px; }
+  .theme-list::-webkit-scrollbar-thumb { background: var(--track); border-radius: 4px; }
+  .theme {
+    position: relative; display: flex; flex-direction: column; min-width: 0; padding: 0; border-radius: 22px; border: 1px solid transparent;
+    background: var(--panel); text-align: left; color: inherit; font: inherit; cursor: pointer;
+    transition: transform .12s, box-shadow .12s, border-color .12s;
+  }
+  .theme:hover:not(:disabled) { transform: translateY(-2px); background: var(--panel-2); }
+  .theme.on { border-color: rgba(128, 128, 128, .5); box-shadow: var(--selection-shadow); }
+  .theme:disabled { cursor: default; }
+  /* 缩略图使用 prototype/thumbs/ 中的自定义图片（见 themes.json 的 thumb），渐变作为图片未加载时的底色 */
+  .theme-copy { flex: 1; padding: 16px 16px 14px; }
+  .theme-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .theme-arrow { flex: none; width: 17px; height: 17px; color: var(--muted); }
+  .theme .thumb { flex: none; width: 100%; height: 112px; border-radius: 20px; position: relative; overflow: hidden; }
+  .theme .thumb > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .theme:disabled .thumb { filter: saturate(.55) brightness(1.02); opacity: .75; }
+  .theme.locked .thumb { filter: none; opacity: 1; }
+  .purchase-box { max-width: 440px; }
+  .purchase-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 16px; border-radius: 14px;
+    background: var(--panel-2); color: var(--text); }
+  .purchase-icon svg { width: 21px; height: 21px; }
+  .theme .lock-mark { position: absolute; right: 12px; bottom: 12px; display: grid; place-items: center; width: 30px; height: 30px;
+    border-radius: 50%; background: rgba(255, 255, 255, .94); color: #252a28; box-shadow: 0 2px 10px rgba(0, 0, 0, .14); }
+  .theme .lock-mark svg { width: 15px; height: 15px; }
+  .theme.ongoing-card { border-color: var(--line); border-style: dashed; }
+  .theme.ongoing-card:disabled .thumb { filter: none; opacity: 1; }
+  .ongoing-art { display: grid; place-items: center; background: var(--panel-2); color: var(--muted); }
+  .ongoing-art svg { width: 34px; height: 34px; }
+  .theme .badge {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; line-height: 1.5;
+    background: var(--panel-2); color: var(--muted);
+  }
+  .theme.on .badge { background: var(--accent); color: var(--accent-ink); }
+  .theme.on .badge::before { content: ""; width: 4px; height: 4px; background: currentColor; border-radius: 50%; }
+  .theme .name { margin-top: 12px; font-weight: 650; font-size: 22px; line-height: 1.2; letter-spacing: -.035em; }
+  .theme .desc { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.5; min-height: 3em;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }   /* 两行摘要，完整说明在右侧 */
+
+  /* ---------- 预览 + 参数 ---------- */
+  .card { min-height: 0; }
+  .preview-card { flex: none; }
+  .preview-head { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .adaptive-switch[hidden] { display: none; }
+  .preview-head h2 { font-size: 28px; font-weight: 650; letter-spacing: -.04em; line-height: 1.2; }
+  .stage { display: flex; justify-content: center; }
+  .preview { position: relative; overflow: hidden; border-radius: 16px; background: var(--panel-2); }
+  .preview iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; }
+  .preview-foot { margin-top: 12px; color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 6px; }
+  .live-dot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--text); }
+
+  .controls { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--line); padding-right: 4px; margin-right: -4px; }
+  .controls::-webkit-scrollbar { width: 8px; }
+  .controls::-webkit-scrollbar-thumb { background: var(--track); border-radius: 4px; }
+  .group { padding: 16px 0 10px; border-bottom: 1px solid var(--line); }
+  .group:last-child { border-bottom: 0; }
+  .group h3 { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; margin-bottom: 6px; }
+  .param { padding: 6px 0; }
+  .param .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .param .label { font-weight: 600; }
+  .param .hint { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; font-weight: 400; }
+  .param .value { color: var(--text); font-variant-numeric: tabular-nums; font-size: 11px; min-width: 44px; text-align: right; white-space: nowrap; }
+  .param.changed .value { color: var(--accent); font-weight: 600; }
+  .param .right { display: flex; align-items: center; gap: 4px; }
+  /* 单项恢复默认：只有改过才出现 */
+  .undo {
+    width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+    font: 13px/20px "Segoe UI Symbol", "Segoe UI", sans-serif; cursor: pointer; visibility: hidden;
+  }
+  .param.changed .undo { visibility: visible; }
+  .undo:hover { background: var(--accent-soft); color: var(--accent); }
+  /* 选项（分段按钮）：比如时段 白天 / 傍晚 / 晚上 */
+  .opts { display: flex; gap: 3px; margin: 8px 0 2px; padding: 3px; background: var(--panel-2); border-radius: 10px; }
+  .opts button { flex: 1; min-width: 0; padding: 6px 3px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+  .opts button:hover { background: var(--accent-soft); }
+  .opts button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .track { position: relative; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 2px 0 0; background: transparent; cursor: pointer; }
+  input[type=range]:focus { outline: none; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--accent) 0 var(--p, 50%), var(--track) var(--p, 50%) 100%);
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
+    background: var(--accent); border: 3px solid var(--panel); box-shadow: 0 0 0 1px var(--accent); transition: transform .1s;
+  }
+  input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15); }
+  input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-soft), 0 1px 3px rgba(0, 0, 0, .25); }
+  .soon { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0 4px; color: var(--faint); font-size: 11.5px; }
+  .chip { padding: 2px 9px; border-radius: 10px; border: 1px dashed var(--line); background: var(--panel-2); color: var(--muted); }
+  .empty { padding: 40px 10px; text-align: center; color: var(--muted); }
+
+  /* ---------- 一键分享 ---------- */
+  .preview-actions { display: grid; grid-template-columns: minmax(0, .8fr) repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
+  .preview-actions .share { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 5px; padding: 9px 5px; font-size: 11px; white-space: nowrap; }
+  #share { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  #share:hover { opacity: .8; }
+  .modal video { display: block; width: 100%; border-radius: 8px; background: #000; box-shadow: inset 0 0 0 1px var(--line), var(--shadow); }
+  .modal video[hidden], .modal img[hidden] { display: none; }
+  .preview-actions .share svg { width: 14px; height: 14px; flex: none; }
+  .preview-actions .share span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* 别的语言字长，放不下用省略号（按钮有完整的提示） */
+  :is(:lang(ru), :lang(es), :lang(pt), :lang(fr), :lang(de), :lang(ja), :lang(ko)) .preview-actions .share span { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+  :lang(ja) body { font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif; }
+  :lang(ko) body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; word-break: keep-all; }
+  .preview-actions .share:disabled { opacity: .6; cursor: default; }
+  .modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0, 0, 0, .38); }
+  .modal[hidden] { display: none; }
+  .modal .box { width: 560px; max-width: calc(100vw - 48px); background: var(--bg); border-radius: 24px; padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .2); }
+  .modal h3 { margin: 0 0 8px; font-size: 24px; font-weight: 650; letter-spacing: -.03em; }
+  .modal .sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+  .modal img { display: block; width: 100%; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--line), var(--shadow); }
+  .modal .path { margin: 10px 0 0; color: var(--faint); font-size: 11.5px; word-break: break-all; }
+  .modal .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .modal .actions .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .modal .actions .primary:hover { color: var(--accent-ink); opacity: .8; }
+  .help-box { position: relative; width: 520px; max-height: calc(100vh - 48px); overflow-y: auto; }
+  .help-article { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+  .help-article h4 { margin: 0; font-size: 14px; line-height: 1.5; }
+  .help-article p { margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.7; user-select: text; }
+  .help-article ol { margin: 12px 0 0; padding-left: 21px; color: var(--text); font-size: 12px; line-height: 1.7; user-select: text; }
+  .help-article li + li { margin-top: 6px; }
+  .feedback-field { display: block; margin-top: 14px; color: var(--muted); font-size: 11px; font-weight: 600; }
+  .feedback-input { display: block; width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px;
+    outline: none; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; font-weight: 400; user-select: text; }
+  textarea.feedback-input { min-height: 128px; max-height: 280px; resize: vertical; line-height: 1.6; }
+  .feedback-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .feedback-note { margin-top: 12px; color: var(--faint); font-size: 11px; line-height: 1.6; }
+  .feedback-error { margin-top: 10px; color: #c14d3f; font-size: 12px; line-height: 1.5; }
+  .feedback-error[hidden], .feedback-success[hidden] { display: none; }
+  .feedback-hp { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .feedback-success { padding: 26px 8px 10px; text-align: center; }
+  .feedback-success .check { display: grid; place-items: center; width: 42px; height: 42px; margin: 0 auto 14px; border-radius: 50%;
+    background: rgba(39, 139, 120, .12); color: #278b78; font-size: 23px; }
+  .feedback-success p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .ghost-btn.feedback-button { display: inline-flex; align-items: center; gap: 6px; }
+  .feedback-button svg { display: block; flex: none; width: 14px; height: 14px; }
+
+  /* ---------- 底栏 ---------- */
+  .bottom { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 32px 20px; color: var(--faint); font-size: 11px; }
+  .saved { transition: color .2s; }
+  .saved.flash { color: var(--text); }
+  .bottom-actions { display: flex; align-items: center; gap: 8px; }
+  .ghost-btn.help-button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 16px; font-weight: 800; line-height: 1; }
+  .ghost-btn {
+    display: inline-block; text-decoration: none; font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 13px; cursor: pointer; transition: background .12s, border-color .12s;
+  }
+  .ghost-btn[hidden] { display: none; }
+  .ghost-btn:hover { border-color: var(--muted); background: var(--accent-soft); }
+  @media (max-width: 1000px) {
+    .top { padding: 18px 24px 20px; gap: 14px; }
+    .top { flex-wrap: wrap; }
+    .top-left { gap: 20px; }
+    .top-right { gap: 12px; }
+    .layout { grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; padding: 0 24px; }
+    .theme-list { grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 12px; }
+    .theme-copy { padding: 14px 13px 12px; }
+    .theme .name { font-size: 20px; }
+    .side { padding: 18px; }
+    .bottom { padding: 14px 24px 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-left">
+    <div class="brand">Deskland Preview</div>
+    <div class="section-title" data-i18n="themes">主题</div>
+  </div>
+  <div class="top-right">
+    <label class="lang-row">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg>
+      <select id="lang" data-i18n-title="language" aria-label="Language"></select>
+    </label>
+    <label class="switch-row" data-i18n-title="autostartTitle" title="开机后自动运行 Deskland">
+      <span data-i18n="autostart">开机自动启动</span><input type="checkbox" id="autostart"><i class="switch"></i>
+    </label>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="themes">
+    <div class="collection-head">
+      <h1 data-i18n="collectionTitle">选一片风景。</h1>
+      <p data-i18n="collectionSubtitle">让图标成为风景的一部分。</p>
+    </div>
+    <div class="update-notice" id="updateNotice" hidden role="status" aria-live="polite">
+      <span class="update-symbol" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5"/><path d="M4 12v3.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V12"/></svg></span>
+      <div class="update-copy"><b data-i18n="updateAvailable">有更新可用</b><p id="updateVersion"></p></div>
+      <button class="ghost-btn update-action" id="updateProgram" data-i18n="updateProgram">立即更新</button>
+    </div>
+    <div class="warn" id="autostartWarn" hidden role="alert"><p><b data-i18n="autostartBlocked">开机自动启动可能被拦截了</b><br><span id="autostartWarnText"></span></p><button id="autostartWarnOk" data-i18n="gotIt">知道了</button></div>
+    <div class="theme-list" id="themes"></div>
+  </section>
+
+  <div class="side">
+    <section class="card preview-card">
+      <div class="preview-head"><h2 id="themeName">　</h2><label class="switch-row adaptive-switch" id="adaptiveRow" hidden><span data-i18n="adaptive">自适应</span><input type="checkbox" id="adaptive" role="switch" checked><i class="switch" aria-hidden="true"></i></label></div>
+      <div class="stage" id="stage"><div class="preview" id="previewBox"><iframe id="preview" data-i18n-title="livePreview" title="实时预览" tabindex="-1"></iframe></div></div>
+      <p class="preview-foot"><span class="live-dot"></span><span id="previewFoot">实时预览</span></p>
+      <div class="preview-actions">
+        <button class="ghost-btn share" id="reseed" data-i18n-title="refreshTitle" title="重新生成这个主题的画面">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.75"/><path d="M13.4 2.6v3.2h-3.2"/></svg>
+          <span data-i18n="refresh">刷新</span></button>
+        <button class="ghost-btn share" id="share" data-i18n-title="shareImageTitle" title="用保护隐私的方式分享你的桌面图片">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1.2"/><path d="m2.5 11.5 3.5-3 2.5 2 2-1.5 3 2.5"/></svg>
+          <span id="shareText">分享图片</span></button>
+        <button class="ghost-btn share" id="shareVideo" data-i18n-title="shareVideoTitle" title="用保护隐私的方式分享你的桌面动画">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="3.5" width="9" height="9" rx="1.5"/><path d="m10.8 6.6 3.4-2v6.8l-3.4-2"/></svg>
+          <span id="shareVideoText">分享动画</span></button>
+      </div>
+    </section>
+    <section class="card controls" id="controls"></section>
+  </div>
+</main>
+
+<div class="modal" id="purchaseModal" hidden role="dialog" aria-modal="true" aria-labelledby="purchaseTitle">
+  <div class="box purchase-box">
+    <div class="purchase-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+    <h3 id="purchaseTitle" data-i18n="purchaseTitle">购买壁纸版</h3>
+    <p class="sub" id="purchaseTheme"></p>
+    <p class="sub" data-i18n="purchaseMessage">体验版可永久使用沙滩和草地。壁纸版可解锁更多主题，并在同一个 Deskland 中使用。</p>
+    <div class="actions">
+      <button class="ghost-btn" id="purchaseLater" data-i18n="purchaseLater">继续体验</button>
+      <button class="ghost-btn primary" id="purchaseWebsite" data-i18n="purchaseWebsite">前往官网</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="shareModal" hidden role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="box">
+    <h3 id="shareTitle">桌面图已经准备好了</h3>
+    <p class="sub" id="shareSub">图标换成了示例图标，文件名换成了色块，不会露出你的文件。图片已复制到剪贴板，可以直接粘贴到聊天、微博、小红书……</p>
+    <img id="shareImg" data-i18n-alt="sharePreviewAlt" alt="分享图预览">
+    <video id="shareVid" hidden autoplay loop muted playsinline controls></video>
+    <p class="path" id="sharePath"></p>
+    <div class="actions">
+      <button class="ghost-btn" id="shareReveal" data-i18n="openFolder">打开所在文件夹</button>
+      <button class="ghost-btn" id="shareOpen">打开图片</button>
+      <a class="ghost-btn" id="shareDownload" hidden download="Deskland.png">保存图片</a>
+      <button class="ghost-btn primary" id="shareClose" data-i18n="ok">好的</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="helpModal" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="box help-box">
+    <button class="auth-close" id="helpCloseX" data-i18n-title="close" title="关闭" aria-label="Close">×</button>
+    <h3 id="helpTitle" data-i18n="helpTitle">使用帮助</h3>
+    <p class="sub" data-i18n="helpSubtitle">常见使用问题和解决方法</p>
+    <section class="help-article">
+      <h4 data-i18n="helpWallpaperQ">Deskland 频繁闪烁或重启，怎么办？</h4>
+      <p data-i18n="helpWallpaperA">如果系统壁纸会定时自动切换，切换时可能让 Deskland 闪烁或反复重启。请把常规壁纸改成不会自动切换的固定背景。</p>
+      <ol>
+        <li data-i18n="helpWallpaperStep1">打开 Windows 设置 → 个性化 → 背景。</li>
+        <li data-i18n="helpWallpaperStep2">将“个性化设置背景”设为“图片”或“纯色”，不要选择“幻灯片放映”或“Windows 聚焦”。</li>
+        <li data-i18n="helpWallpaperStep3">改完后重新打开 Deskland。</li>
+      </ol>
+    </section>
+    <div class="actions"><button class="ghost-btn primary" id="helpDone" data-i18n="gotIt">知道了</button></div>
+  </div>
+</div>
+
+<footer class="bottom">
+  <span class="saved" id="saved" data-i18n="autosave">设置会自动保存，并立即应用到桌面</span>
+  <div class="bottom-actions">
+    <button class="ghost-btn help-button" id="helpOpen" data-i18n-title="helpButtonTitle" title="常见问题" aria-label="Help">?</button>
+  </div>
+</footer>
+
+<script src="thumbs-data.js"></script>
+<script>
+'use strict';
+const host = window.chrome && window.chrome.webview;
+const send = m => { if (host) host.postMessage(JSON.stringify(m)); };
+
+const state = { registry0: null, registry: null, theme: 'beach', params: {}, screen: null, icons: null,
+  langSetting: 'auto', langSys: 'zh-CN', autostartWarn: false, autostartSw: '',
+  updateVersion: '', updateStatus: '', updateProgress: -1, updateError: '' };
+const $ = id => document.getElementById(id);
+const frame = $('preview');
+
+/* ---------- 界面语言：文字表在 i18n/<语言>.json（ui：界面文字；themes：主题名和参数——简体中文的就是 themes.json 本身） ---------- */
+// 增加语言时同步宿主 I18n.Supported 与体验版导出的语言列表。
+const LANGS = { 'en': 'English', 'zh-CN': '简体中文' };
+const I18N = {};
+let lang = 'zh-CN';
+const loadLang = code => I18N[code] ? Promise.resolve() :
+  fetch('i18n/' + code + '.json').then(r => r.json()).then(j => { I18N[code] = j; }).catch(() => { I18N[code] = {}; });
+// 一句界面文字：当前语言 → 英文 → 简体中文；{名字} 换成 vars 里的值
+function t(key, vars) {
+  const pick = c => I18N[c] && I18N[c].ui && I18N[c].ui[key];
+  let str = pick(lang) ?? pick('en') ?? pick('zh-CN') ?? key;
+  if (vars) str = str.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+  return str;
+}
+// 更新、授权和反馈共用同一组底层连接错误；各业务仍可覆盖成更具体的提示。
+function connectionErrorText(code) {
+  const keys = { network_timeout: 'networkTimeout', network_dns: 'networkDns', network_tls: 'networkTls',
+    network_local: 'networkLocal', network_error: 'networkLocal', server_unavailable: 'serverUnavailable',
+    server_rejected: 'serverRejected', server_invalid: 'serverInvalid', download_invalid: 'downloadInvalid' };
+  return keys[code] ? t(keys[code]) : '';
+}
+// 没有宿主时（浏览器里调界面）"跟随系统"按浏览器的语言
+function browserLang() {
+  for (const l of navigator.languages || [navigator.language]) {
+    const x = (l || '').toLowerCase();
+    if (x.startsWith('zh')) return 'zh-CN';
+    if (LANGS[x.slice(0, 2)]) return x.slice(0, 2);
+  }
+  return 'en';
+}
+// 主题名、说明、分组、参数按界面语言换：当前语言 → 英文 → themes.json 原文（简体中文）
+function localizeRegistry() {
+  const reg = JSON.parse(JSON.stringify(state.registry0));
+  const srcs = lang === 'zh-CN' ? [] : [lang, 'en'].map(c => (I18N[c] && I18N[c].themes) || {});
+  for (const th of reg.themes) {
+    const trs = srcs.map(x => x[th.id]).filter(Boolean);
+    const get = f => { for (const x of trs) { const v = f(x); if (v != null) return v; } return null; };
+    th.name = get(x => x.name) ?? th.name;
+    th.desc = get(x => x.desc) ?? th.desc;
+    (th.groups || []).forEach((g, gi) => {
+      g.name = get(x => x.groups && x.groups[gi]) ?? g.name;
+      for (const p of g.params) {
+        const q = f => get(x => x.params && x.params[p.key] ? f(x.params[p.key]) : null);
+        p.label = q(y => y.label) ?? p.label;
+        p.hint = q(y => y.hint) ?? p.hint;
+        p.options = q(y => y.options) ?? p.options;
+        p.unit = q(y => y.unit) ?? p.unit;
+      }
+    });
+  }
+  state.registry = reg;
+}
+function applyStatic() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-alt]').forEach(el => { el.alt = t(el.dataset.i18nAlt); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  $('lang').innerHTML = `<option value="auto" title="${t('langAutoWith', { name: LANGS[state.langSys] || '' })}">${t('langAuto')}</option>` +
+    Object.entries(LANGS).map(([c, n]) => `<option value="${c}">${n}</option>`).join('');
+  $('lang').value = state.langSetting in LANGS ? state.langSetting : 'auto';
+  $('lang').setAttribute('aria-label', t('language'));
+}
+async function setLang(code) {
+  if (!LANGS[code]) code = 'en';
+  await Promise.all([loadLang('zh-CN'), loadLang('en'), loadLang(code)]);
+  lang = code;
+  localizeRegistry();
+  applyStatic();
+}
+// 换了语言：界面上的字都重新填一遍（预览不用重新加载）
+function rerenderTexts() {
+  if (!state.screen) return;
+  renderHead(); renderThemes(); renderControls(); updateFoot(); shareBusy(shareState); showAutostartWarn(); showUpdate(); updatePurchaseText();
+}
+$('lang').addEventListener('change', e => {
+  state.langSetting = e.target.value;
+  if (host) send({ t: 'lang', v: state.langSetting });     // 宿主存下来、换托盘菜单的文字，再回一条 lang（实际用哪种）
+  else setLang(state.langSetting === 'auto' ? state.langSys : state.langSetting).then(rerenderTexts);
+});
+
+/* ---------- 主题清单 ---------- */
+const themeById = id => state.registry.themes.find(t => t.id === id);
+function defaultsOf(theme) {
+  const d = {};
+  if (theme.adaptive) d.adaptive = 1;
+  for (const g of theme.groups || []) for (const p of g.params) d[p.key] = p.default;
+  return d;
+}
+function valuesOf(theme) { return Object.assign(defaultsOf(theme), state.params[theme.id] || {}); }
+function fmt(p, v) {
+  if (p.options) return p.options[v] || '';
+  if (p.format === 'times') return '×' + v.toFixed(2);
+  if (p.format === 'percent') return Math.round(v * 100) + '%';
+  const s = Number.isInteger(p.step) ? String(Math.round(v)) : v.toFixed(2);
+  return p.unit ? s + ' ' + p.unit : s;
+}
+
+const thumbUrl = (value, id) => window.DESKLAND_THUMBS?.[id] || String(value || '').match(/^url\(([^)]+)\)/)?.[1] || '';
+function renderThemes() {
+  $('themes').innerHTML = state.registry.themes.map(th => {
+    const locked = th.locked === true, ready = th.status === 'ready', on = th.id === state.theme;
+    const label = locked ? t('lockedTitle', { name: th.name }) : th.name;
+    return `<button class="theme${on ? ' on' : ''}${locked ? ' locked' : ''}" data-id="${th.id}" data-locked="${locked}" aria-pressed="${on}" aria-label="${label}" ${ready || locked ? '' : 'disabled'}>
+      <div class="theme-copy"><div class="theme-meta"><span class="badge">${t(on ? 'badgeOn' : locked ? 'badgeLocked' : ready ? 'badgeReady' : 'badgeSoon')}</span>
+        <svg class="theme-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></div>
+        <div class="name">${th.name}</div></div>
+      <div class="thumb" style="background:${th.thumb || '#ccc'}">${thumbUrl(th.thumb, th.id) ? `<img src="${thumbUrl(th.thumb, th.id)}" alt="" decoding="async">` : ''}${locked ? `<span class="lock-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>` : ''}</div></button>`;
+  }).join('');
+}
+let purchaseThemeId = null, purchaseReturnFocus = null;
+function updatePurchaseText() {
+  const th = themeById(purchaseThemeId);
+  if (th) $('purchaseTheme').textContent = t('purchaseTheme', { name: th.name });
+}
+function showPurchase(id) {
+  purchaseThemeId = id;
+  purchaseReturnFocus = document.activeElement;
+  updatePurchaseText();
+  $('purchaseModal').hidden = false;
+  $('purchaseWebsite').focus();
+}
+function closePurchase() {
+  if ($('purchaseModal').hidden) return;
+  $('purchaseModal').hidden = true;
+  if (purchaseReturnFocus) purchaseReturnFocus.focus();
+}
+$('themes').addEventListener('click', e => {
+  const b = e.target.closest('.theme');
+  if (!b || b.disabled) return;
+  if (b.dataset.locked === 'true') { showPurchase(b.dataset.id); return; }
+  if (b.dataset.id === state.theme) return;
+  state.theme = b.dataset.id;
+  send({ t: 'theme', id: state.theme });
+  if (seedOf(state.theme) === undefined) setSeed(newSeed(), false);   // 还没有种子：给一个，桌面和预览从一开始就是同一张
+  showTheme();
+});
+
+/* ---------- 刷新：换一张（新的种子，按主题存进设置；桌面和预览用同一个种子） ---------- */
+const newSeed = () => Math.floor(Math.random() * 1e6);
+const seedOf = id => (state.params[id] || {}).seed;
+function setSeed(v, live) {
+  (state.params[state.theme] = state.params[state.theme] || {}).seed = v;
+  send({ t: 'set', theme: state.theme, key: 'seed', value: v });
+  if (live) toPreview({ t: 'settings', v: { seed: v } });
+}
+$('reseed').addEventListener('click', () => setSeed(newSeed(), true));
+
+/* ---------- 参数控件（按清单自动生成） ---------- */
+function renderControls() {
+  const theme = themeById(state.theme), vals = valuesOf(theme);
+  if (!theme.groups) { $('controls').innerHTML = '<div class="empty">' + t('noParams') + '</div>'; return; }
+  $('controls').innerHTML = theme.groups.map(g => `
+    <div class="group"><h3>${g.name}</h3>
+      ${g.params.map(p => `
+        <div class="param${vals[p.key] !== p.default ? ' changed' : ''}" id="p-${p.key}">
+          <div class="row"><span class="label">${p.label}${p.hint ? `<span class="hint">${p.hint}</span>` : ''}</span>
+            <span class="right">
+              <button class="undo" data-reset="${p.key}" title="${t('resetOne', { v: fmt(p, p.default) })}" aria-label="${t('resetOneAria', { label: p.label })}">↺</button>
+              <span class="value" id="v-${p.key}">${fmt(p, vals[p.key])}</span>
+            </span></div>
+          ${p.options ? `<div class="opts" data-key="${p.key}" role="radiogroup" aria-label="${p.label}">${p.options.map((o, i) =>
+            `<button data-opt="${i}" class="${vals[p.key] === i ? 'on' : ''}" role="radio" aria-checked="${vals[p.key] === i}">${o}</button>`).join('')}</div>` : `
+          <div class="track" title="${t('dblclickReset', { v: fmt(p, p.default) })}">
+            <input type="range" data-key="${p.key}" min="${p.min}" max="${p.max}" step="${p.step}" value="${vals[p.key]}" aria-label="${p.label}">
+          </div>`}
+        </div>`).join('')}
+      ${g.soon ? `<div class="soon">${t('comingSoon')}${g.soon.map(s => `<span class="chip">${s}</span>`).join('')}</div>` : ''}
+    </div>`).join('');
+  $('controls').querySelectorAll('input[type=range]').forEach(fill);
+}
+function fill(inp) { inp.style.setProperty('--p', ((inp.value - inp.min) / (inp.max - inp.min) * 100) + '%'); }
+const paramOf = key => themeById(state.theme).groups.flatMap(g => g.params).find(x => x.key === key);
+
+// 改一个参数：更新界面，并排队发给宿主和预览（拖动时每帧最多发一次）
+let pending = {}, scheduled = false;
+function setParam(key, v) {
+  if (key === 'adaptive') {
+    if (!themeById(state.theme).adaptive || (v !== 0 && v !== 1)) return;
+    $('adaptive').checked = v === 1;
+  } else {
+    const p = paramOf(key);
+    if (p.options) {
+      document.querySelectorAll(`.opts[data-key="${key}"] button`).forEach(b => { const on = +b.dataset.opt === v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    } else {
+      const inp = document.querySelector(`input[data-key="${key}"]`);
+      if (+inp.value !== v) inp.value = v;
+      fill(inp);
+    }
+    $('v-' + key).textContent = fmt(p, v);
+    $('p-' + key).classList.toggle('changed', v !== p.default);
+  }
+  (state.params[state.theme] = state.params[state.theme] || {})[key] = v;
+  pending[key] = v;
+  // 不用 requestAnimationFrame：窗口在后台或被遮住时它会暂停，消息就积压了
+  if (!scheduled) { scheduled = true; setTimeout(flush, 30); }
+}
+$('controls').addEventListener('input', e => { if (e.target.dataset.key) setParam(e.target.dataset.key, +e.target.value); });
+// 单项恢复默认：点 ↺，或双击滑块
+$('controls').addEventListener('click', e => {
+  const b = e.target.closest('[data-reset]');
+  if (b) setParam(b.dataset.reset, paramOf(b.dataset.reset).default);
+  const o = e.target.closest('[data-opt]');
+  if (o) setParam(o.closest('.opts').dataset.key, +o.dataset.opt);
+});
+$('controls').addEventListener('dblclick', e => {
+  const inp = e.target.closest('.track') && e.target.closest('.track').querySelector('input');
+  if (inp) setParam(inp.dataset.key, paramOf(inp.dataset.key).default);
+});
+function flush() {
+  scheduled = false;
+  const batch = pending; pending = {};
+  for (const k in batch) send({ t: 'set', theme: state.theme, key: k, value: batch[k] });
+  toPreview({ t: 'settings', v: batch });
+  flashSaved();
+}
+let savedT = 0;
+function flashSaved() {
+  clearTimeout(savedT);
+  savedT = setTimeout(() => {
+    $('saved').textContent = t('saved'); $('saved').classList.add('flash');
+    setTimeout(() => { $('saved').textContent = t('autosave'); $('saved').classList.remove('flash'); }, 1600);
+  }, 700);
+}
+
+$('autostart').addEventListener('change', e => send({ t: 'autostart', v: e.target.checked }));
+$('adaptive').addEventListener('change', e => setParam('adaptive', e.target.checked ? 1 : 0));
+$('autostartWarnOk').addEventListener('click', () => { state.autostartWarn = false; showAutostartWarn(); send({ t: 'autostartWarnSeen' }); });
+// 开机自启被拦的提醒：宿主只给安全软件的名字，句子按界面语言拼
+function showAutostartWarn() {
+  $('autostartWarnText').textContent = state.autostartSw ? t('autostartWarnSw', { sw: state.autostartSw }) : t('autostartWarnGeneric');
+  $('autostartWarn').hidden = !state.autostartWarn;
+}
+
+/* ---------- 程序更新：版本、阶段、进度和错误全部来自宿主 ---------- */
+function showUpdate() {
+  const status = state.updateStatus, checking = status === 'checking';
+  const busy = status === 'downloading' || status === 'installing';
+  const available = !!status;
+  $('updateNotice').hidden = !available;
+  if (!available) return;
+  const percent = state.updateProgress >= 0 && state.updateProgress <= 1 ? Math.round(state.updateProgress * 100) + '%' : '';
+  const errors = { canceled: 'updateCanceled', error_low_battery: 'updateLowBattery',
+    error_wifi_recommended: 'updateWifiRecommended', error_wifi_required: 'updateWifiRequired',
+    microsoft_package_required: 'updateStoreRequired' };
+  let detail = state.updateVersion ? t('updateVersion', { version: state.updateVersion }) : '';
+  if (checking) detail = t('updateChecking');
+  else if (busy) detail = t(status === 'installing' ? 'updateInstalling' : 'updateDownloading', { progress: percent });
+  else if (status === 'completed') detail = t('updateCompleted');
+  else if (status === 'error') {
+    const key = errors[state.updateError];
+    detail = key ? t(key) : connectionErrorText(state.updateError) || t('updateFailed');
+  }
+  const titleKey = status === 'completed' ? 'updateCompletedTitle' : checking ? 'updateCheckingTitle' :
+    status === 'error' ? (state.updateVersion ? 'updateFailedTitle' : 'updateCheckFailedTitle') : 'updateAvailable';
+  document.querySelector('.update-copy b').textContent = t(titleKey);
+  $('updateVersion').textContent = detail;
+  $('updateProgram').disabled = busy || checking || status === 'completed';
+  $('updateProgram').textContent = t(status === 'completed' ? 'updateDone' : busy || checking ? 'updateWorking' : status === 'error' ? 'updateRetry' : 'updateProgram');
+}
+$('updateProgram').addEventListener('click', () => {
+  if ($('updateProgram').disabled) return;
+  if (state.updateStatus === 'error' && !state.updateVersion) { send({ t: 'updateCheck' }); return; }
+  if (state.updateVersion) send({ t: 'updateProgram' });
+});
+
+/* ---------- 实时预览：iframe 按整块桌面的尺寸排版，再整体缩小 ---------- */
+const toPreview = m => { if (frame.contentWindow) frame.contentWindow.postMessage(JSON.stringify(m), '*'); };
+function screenCss() {
+  const k = window.devicePixelRatio || 1;
+  return { w: Math.round(state.screen.w / k), h: Math.round(state.screen.h / k) };
+}
+function layoutPreview() {
+  if (!state.screen) return;
+  const s = screenCss(), stage = $('stage').getBoundingClientRect();
+  // 小窗口给参数区留出空间，避免预览挤得连第一个滑块都看不到。
+  const maxHeight = Math.min(innerHeight * 0.42, Math.max(110, innerHeight - 520));
+  const k = Math.min(stage.width / s.w, maxHeight / s.h);
+  $('previewBox').style.width = Math.floor(s.w * k) + 'px';
+  $('previewBox').style.height = Math.floor(s.h * k) + 'px';
+  frame.style.width = s.w + 'px'; frame.style.height = s.h + 'px';
+  frame.style.transform = `scale(${k})`;
+}
+addEventListener('resize', layoutPreview);
+addEventListener('message', e => {
+  if (e.source !== frame.contentWindow) return;
+  const m = JSON.parse(e.data);
+  if (m.t === 'ready') {                 // 预览页面加载好了：先给设置，再给图标
+    toPreview({ t: 'settings', v: valuesOf(themeById(state.theme)) });
+    if (state.icons) toPreview(state.icons);
+  }
+});
+function updateFoot() {
+  $('previewFoot').textContent = t('livePreview');
+}
+
+function renderHead() {
+  const th = themeById(state.theme);
+  $('themeName').textContent = th.name;
+  $('adaptiveRow').hidden = !th.adaptive;
+  $('adaptive').checked = valuesOf(th).adaptive !== 0;
+  $('adaptive').setAttribute('aria-label', t('adaptive'));
+}
+function showTheme() {
+  renderHead();
+  renderThemes();
+  renderControls();
+  updateFoot();
+  layoutPreview();
+  frame.src = themeById(state.theme).page + '?preview=1';
+}
+
+/* ---------- 分享：宿主让壁纸页面画一张图 / 录一段动画（示例图标、名字是色块），保存、复制到剪贴板，再把预览发回来 ---------- */
+let shareState = null;
+function shareBusy(which) {                                  // which：null（空闲）/ 'image' / 'video'
+  shareState = which;
+  $('share').disabled = $('shareVideo').disabled = !!which;
+  $('shareText').textContent = t(which === 'image' ? 'generating' : 'shareImage');
+  $('shareVideoText').textContent = t(which === 'video' ? 'preparingRec' : 'shareVideo');
+}
+function shareProgress(p) { $('shareVideoText').textContent = p < 1 ? t('recording', { p: Math.round(p * 100) }) : t('savingVideo'); }
+function showShare(r) {
+  shareBusy(null);
+  if (!r.ok) { alert(t(r.kind === 'video' ? 'shareFailVideo' : 'shareFailImage', { msg: r.msg || t('unknownReason') })); return; }
+  const video = r.kind === 'video', inHost = !!host;
+  $('shareTitle').textContent = t(video ? 'shareReadyVideo' : 'shareReadyImage');
+  $('shareImg').hidden = video; $('shareVid').hidden = !video;
+  if (video) { $('shareVid').src = r.url; $('shareVid').poster = r.thumb || ''; } else { $('shareImg').src = r.thumb; $('shareVid').removeAttribute('src'); }
+  $('shareSub').textContent = t('sharePrivacy') +
+    (inHost ? t(video ? 'shareCopiedVideo' : 'shareCopiedImage') : t('shareBrowserHint', { btn: t(video ? 'saveVideo' : 'saveImage') }));
+  $('sharePath').textContent = r.path ? t('savedTo', { path: r.path }) : '';
+  $('shareOpen').textContent = t(video ? 'openVideo' : 'openImage');
+  $('shareReveal').hidden = $('shareOpen').hidden = !inHost;
+  $('shareDownload').hidden = inHost;
+  if (!inHost) {
+    $('shareDownload').href = r.full;
+    $('shareDownload').textContent = t(video ? 'saveVideo' : 'saveImage');
+    $('shareDownload').download = 'Deskland.' + (video ? (r.ext || 'mp4') : 'png');
+  }
+  $('shareModal').hidden = false;
+  $('shareClose').focus();
+}
+function closeShare() { $('shareModal').hidden = true; $('shareVid').pause(); }
+$('share').addEventListener('click', () => {
+  shareBusy('image');
+  if (host) { send({ t: 'share' }); return; }
+  setTimeout(() => {                                         // 没有宿主：直接让预览里的页面画一张（让按钮先显示"正在生成…"）
+    try {
+      const r = frame.contentWindow.desklandSnapshot();
+      showShare({ ok: true, thumb: r.thumb, full: r.canvas.toDataURL('image/png') });
+    } catch (e) { showShare({ ok: false, msg: e.message }); }
+  }, 30);
+});
+$('shareVideo').addEventListener('click', () => {
+  shareBusy('video');
+  if (host) { send({ t: 'shareVideo' }); return; }
+  frame.contentWindow.desklandRecord(shareProgress).then(r => {   // 没有宿主：让预览里的页面录一段
+    const url = URL.createObjectURL(r.blob);
+    showShare({ ok: true, kind: 'video', url, full: url, thumb: r.poster, ext: r.mime === 'video/webm' ? 'webm' : 'mp4' });
+  }, e => showShare({ ok: false, kind: 'video', msg: e.message }));
+});
+$('purchaseLater').addEventListener('click', closePurchase);
+$('purchaseModal').addEventListener('click', e => { if (e.target === $('purchaseModal')) closePurchase(); });
+$('purchaseWebsite').addEventListener('click', () => {
+  if (host) send({ t: 'openWebsite' });
+  else window.open('https://deskland.app/', '_blank', 'noopener');
+});
+$('shareClose').addEventListener('click', closeShare);
+$('shareModal').addEventListener('click', e => { if (e.target === $('shareModal')) closeShare(); });
+
+/* ---------- 使用帮助 ---------- */
+let helpReturnFocus = null;
+function openHelp() {
+  helpReturnFocus = document.activeElement;
+  $('helpModal').hidden = false;
+  $('helpCloseX').focus();
+}
+function closeHelp() {
+  if ($('helpModal').hidden) return;
+  $('helpModal').hidden = true;
+  if (helpReturnFocus) helpReturnFocus.focus();
+}
+$('helpOpen').addEventListener('click', openHelp);
+$('helpCloseX').addEventListener('click', closeHelp);
+$('helpDone').addEventListener('click', closeHelp);
+$('helpModal').addEventListener('click', e => { if (e.target === $('helpModal')) closeHelp(); });
+
+addEventListener('keydown', e => { if (e.key === 'Escape') { closeShare(); closeHelp(); closePurchase(); } });
+$('shareOpen').addEventListener('click', () => send({ t: 'openShare' }));
+$('shareReveal').addEventListener('click', () => send({ t: 'revealShare' }));
+
+/* ---------- 和宿主通信 ---------- */
+function onHost(m) {
+  if (m.t === 'init') {
+    state.langSetting = m.lang || 'auto';
+    state.langSys = m.langSys || 'zh-CN';
+    setLang(m.langEff || state.langSys).then(() => {        // 先按界面语言把文字表读进来，再画界面
+      state.theme = themeById(m.theme) && themeById(m.theme).status === 'ready' ? m.theme : 'beach';
+      state.params = m.params || {};
+      state.screen = m.screen;
+      $('autostart').checked = !!m.autostart;
+      state.autostartWarn = !!m.autostartWarn;
+      state.autostartSw = m.autostartSw || '';
+      showAutostartWarn();
+      showUpdate();
+      showTheme();
+      document.documentElement.classList.add('ready');
+    });
+  } else if (m.t === 'themeChanged') {
+    if (!themeById(m.id) || themeById(m.id).status !== 'ready') return;
+    state.theme = m.id;
+    showTheme();
+  } else if (m.t === 'updateState') {
+    state.updateVersion = String(m.version || '').trim();
+    state.updateStatus = m.status || (state.updateVersion ? 'available' : '');
+    state.updateProgress = typeof m.progress === 'number' ? m.progress : -1;
+    state.updateError = m.error || '';
+    showUpdate();
+  } else if (m.t === 'updateAvailable') {              // 兼容旧开发联调消息
+    onHost({ t: 'updateState', version: m.version, status: 'available', progress: -1 });
+  } else if (m.t === 'lang') {                                // 换了语言（宿主已经存好、换好托盘菜单）
+    state.langSetting = m.v;
+    state.langSys = m.sys || state.langSys;
+    setLang(m.eff).then(rerenderTexts);
+  } else if (m.t === 'icons') {
+    state.icons = m;
+    toPreview(m);
+    updateFoot();
+  } else if (m.t === 'autostart') {
+    $('autostart').checked = !!m.v;
+  } else if (m.t === 'recProgress') {
+    shareProgress(m.p);
+  } else if (m.t === 'shareResult') {
+    showShare(m);
+  }
+}
+
+// 单独在浏览器里打开时（没有宿主）：用模拟的桌面数据，方便调界面
+function mockHost() {
+  const k = window.devicePixelRatio || 1, W = 1707, H = 1067, r = [];
+  const cell = (c, row) => { const x = 4 + c * 76, y = 6 + row * 100; r.push([x * k, y * k, (x + 76) * k, (y + 92) * k]); };
+  for (let c = 0; c < 4; c++) for (let row = 0; row < 9; row++) cell(c, row);
+  for (const [c, row] of [[6, 0], [6, 1], [7, 3], [8, 3], [8, 4], [12, 1], [13, 1], [14, 1], [13, 2], [14, 2], [20, 0], [21, 0], [19, 5], [20, 5]]) cell(c, row);
+  const bl = browserLang();
+  onHost({ t: 'init', theme: 'beach', params: {}, screen: { w: W * k, h: H * k }, autostart: false, lang: 'auto', langEff: bl, langSys: bl });
+  onHost({ t: 'icons', vis: true, r });
+  if (new URLSearchParams(location.search).has('updateDemo')) onHost({ t: 'updateState', version: '0.2.0', status: 'available', progress: -1 });
+}
+
+fetch('themes.json').then(r => r.json()).then(reg => {
+  state.registry0 = state.registry = reg;
+  if (host) {
+    host.addEventListener('message', e => onHost(JSON.parse(e.data)));
+    send({ t: 'hello' });
+  } else mockHost();
+});
+</script>
+</body>
+</html>
