@@ -38,12 +38,12 @@ THEME_INFO = {
     "beach": {
         "name": "Пляж",
         "desc": "Песок, вода, пальмы, каяки и чайки.",
-        "thumb": "thumbs/beach.webp",
+        "thumb": "docs/theme-beach.gif",
     },
     "meadow": {
         "name": "Луг",
         "desc": "Облака, мальчик с воздушным змеем и чёрный котёнок.",
-        "thumb": "thumbs/meadow.webp",
+        "thumb": "docs/theme-meadow.gif",
     },
 }
 
@@ -160,6 +160,47 @@ def is_running():
     except Exception:
         return False
     return "themehost.py" in cmd
+
+
+class AnimatedThumb(Gtk.DrawingArea):
+    """Анимированный GIF-превью, вписанный в заданный размер."""
+
+    def __init__(self, path, width, height):
+        super().__init__()
+        self.width = width
+        self.height = height
+        self.anim = GdkPixbuf.PixbufAnimation.new_from_file(str(path))
+        self.iter = self.anim.get_iter(None)
+        self.scaled = None
+        self.timer = None
+        self.set_size_request(width, height)
+        self.connect("draw", self._on_draw)
+        self.connect("destroy", self._on_destroy)
+        self.timer = GLib.timeout_add(100, self._tick)
+
+    def _tick(self):
+        changed = self.iter.advance(None)
+        if not changed:
+            self.iter = self.anim.get_iter(None)
+            changed = True
+        if changed:
+            self.scaled = None
+            self.queue_draw()
+        return True
+
+    def _on_draw(self, _widget, cr):
+        if self.scaled is None:
+            pb = self.iter.get_pixbuf()
+            self.scaled = pb.scale_simple(self.width, self.height,
+                                          GdkPixbuf.InterpType.BILINEAR)
+        Gdk.cairo_set_source_pixbuf(cr, self.scaled, 0, 0)
+        cr.paint()
+        return False
+
+    def _on_destroy(self, _widget):
+        if self.timer is not None:
+            GLib.source_remove(self.timer)
+            self.timer = None
 
 
 def fmt_value(p, value, theme_id):
@@ -302,7 +343,9 @@ class Switcher(Gtk.Window):
         card.get_style_context().add_class("theme-card")
         card.set_tooltip_text(info.get("desc", ""))
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        box.pack_start(self._make_thumb(tid), False, False, 0)
+        thumb = self._make_thumb(tid)
+        thumb.set_halign(Gtk.Align.CENTER)
+        box.pack_start(thumb, True, False, 0)
         name = Gtk.Label(label=info.get("name", tid))
         name.set_xalign(0.5)
         box.pack_start(name, False, False, 0)
@@ -319,15 +362,21 @@ class Switcher(Gtk.Window):
 
     def _make_thumb(self, tid):
         info = THEME_INFO.get(tid, {})
-        path = PROTO / info.get("thumb", "thumbs/%s.webp" % tid)
+        width, height = 250, 141
+        path = HERE / info.get("thumb", "prototype/thumbs/%s.webp" % tid)
         try:
-            pb = GdkPixbuf.Pixbuf.new_from_file(str(path))
-            pb = pb.scale_simple(250, 143, GdkPixbuf.InterpType.BILINEAR)
-            img = Gtk.Image.new_from_pixbuf(pb)
+            return AnimatedThumb(path, width, height)
         except Exception:
-            img = Gtk.Image.new_from_icon_name("preferences-desktop-wallpaper",
-                                               Gtk.IconSize.DIALOG)
-        img.set_size_request(250, 143)
+            try:
+                # Запасной вариант — статичное превью из Deskland.
+                pb = GdkPixbuf.Pixbuf.new_from_file(
+                    str(PROTO / "thumbs" / ("%s.webp" % tid)))
+                pb = pb.scale_simple(width, height, GdkPixbuf.InterpType.BILINEAR)
+                img = Gtk.Image.new_from_pixbuf(pb)
+            except Exception:
+                img = Gtk.Image.new_from_icon_name(
+                    "preferences-desktop-wallpaper", Gtk.IconSize.DIALOG)
+        img.set_size_request(width, height)
         return img
 
     # ---------- выбор темы и параметры ----------

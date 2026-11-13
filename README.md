@@ -132,7 +132,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `start-layer.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
-| `docs/` | Анимированные превью тем и скриншот панели для README |
+| `docs/` | Анимированные превью тем (README и карточки приложения), скриншот панели |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
 | `NOTICE` | Атрибуция Deskland и trademark-оговорка |
@@ -155,7 +155,8 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 
 Запуск: ярлык **«Mintland — темы и настройки»** или `python3 switcher.py`.
 
-- карточки готовых тем из `prototype/themes.json` (сейчас Beach и Meadow);
+- карточки готовых тем из `prototype/themes.json` (Beach и Meadow) с
+  анимированными GIF-превью;
 - кнопки **Включить слой** / **Выключить слой**;
 - ползунки параметров выбранной темы: пальмы, каяки, чайки, облака, персонажи;
 - изменения сразу уходят работающему `themehost.py` через `run/control.json`;
