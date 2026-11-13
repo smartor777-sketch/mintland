@@ -132,6 +132,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `start-layer.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
+| `WAYLAND.md` | План порта на Wayland: layer-shell, риски, тесты, оценка |
 | `docs/` | Анимированные превью тем (README и карточки приложения), скриншот панели |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
@@ -204,7 +205,7 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 
 ## Известные ограничения
 
-- Работает только в X11-сессии (Wayland не поддерживается).
+- Сейчас работает в X11-сессии. План порта на Wayland — в [`WAYLAND.md`](WAYLAND.md).
 - Только основной монитор.
 - `nemo-desktop` должен быть запущен **до** слоя; иначе Nemo отказывается
   от роли рабочего стола («Desktop already managed by another application»).
