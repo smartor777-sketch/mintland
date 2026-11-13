@@ -413,6 +413,12 @@ prototype/night.html (2560x1440)
 `themes.json` `default: 1`, а в `P` — `true`. Страница молча игнорирует
 значение.
 
+**Масштаб рендера.** Ограничивайте его. `flat.html` делает
+`Math.min(devicePixelRatio, P.quality, 0.75)`, а `meadow.html` долгое время
+делал то же без последнего слагаемого — и рисовал в 7 раз больше пикселей при
+той же картинке (разбор в [`IMPROVEMENTS.md`](IMPROVEMENTS.md), §1). Сцена —
+размытый фон под иконками, детализация выше 0.75 не видна.
+
 **`devicePixelRatio`.** Хост присылает физические пиксели. Если забыть
 разделить на `devicePixelRatio`, при масштабе 150% ореолы уедут от иконок.
 На Wayland это место дополнительно усложняется — см. `WAYLAND.md`, §4.4.
@@ -570,3 +576,6 @@ wmctrl -k off                     # вернуть окна
 - `iconsource.py` — откуда берутся прямоугольники иконок.
 - `tools/capture-theme.py`, `tools/test-theme.py`, `tools/preview-frame.py`,
   `tools/bench-theme.py`.
+- [`WOLOLAND.md`](WOLOLAND.md) — разбор чужого проекта, из которого взяты
+  идеи кэширования и пресетов тем.
+- [`IMPROVEMENTS.md`](IMPROVEMENTS.md) — что ещё стоит поправить, с замерами.
