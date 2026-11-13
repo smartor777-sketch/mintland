@@ -2,9 +2,10 @@
 
 **План порта для Cinnamon 6.8+ / Muffin 6.7.5+**
 
-> Дата: 13.11.2026  
-> Статус: исследование + инженерный план. На текущей машине Wayland-путь **не тестировался**: здесь X11, Cinnamon 6.6.9 и Muffin 6.6.3, в которых ещё нет layer-shell.  
-> Короткий вывод: это не переписывание Mintland, а замена платформенного слоя. Сцены, `switcher.py`, `iconsource.py` и протокол `icons/pause/settings` переносятся. Основная работа — `themehost.py`, скрипты запуска и новая авто-пауза.
+> **Документ:** технический анализ и план работ.  
+> **Дата:** 13.11.2026.  
+> **Статус:** исследование завершено, живой Wayland-тест ещё впереди. На текущей машине X11, Cinnamon 6.6.9 и Muffin 6.6.3 — layer-shell здесь ещё нет.  
+> **Предмет:** перевод Mintland с X11 на Wayland для Cinnamon 6.8+ / Muffin 6.7.5+. Сцены, `switcher.py`, `iconsource.py` и протокол `icons/pause/settings` переносятся; меняется платформенный слой — `themehost.py`, скрипты запуска и авто-пауза.
 
 ## Содержание
 
@@ -18,7 +19,7 @@
 - [7. Оценка работ](#7-оценка-работ)
 - [8. Рекомендуемый порядок работ](#8-рекомендуемый-порядок-работ)
   - [8.1. KDE Plasma: отдельный этап](#81-kde-plasma-отдельный-этап-не-входит-в-cinnamon-mvp)
-- [9. Основные уточнения](#9-Основные-уточнения)
+- [9. Выводы](#9-выводы)
 - [10. Ссылки](#10-ссылки)
 
 ---
@@ -72,24 +73,6 @@ $ ls /usr/lib/x86_64-linux-gnu/girepository-1.0/ | grep -i layer
 | `cinnamon-list-windows` | Новый CLI в Muffin 6.7.5: список окон, позиции, размеры, HiDPI, backend; внутри — D-Bus `org.cinnamon.Muffin.Debug.ListWindows`, есть `--json` | [muffin/src/cinnamon-list-windows](https://github.com/linuxmint/muffin/blob/master/src/cinnamon-list-windows) |
 | Пакет GIR | В Debian/Ubuntu/Mint называется **`gir1.2-gtklayershell-0.1`**, а не `gir1.2-gtk-layer-shell-0` | `apt-cache search gtk-layer-shell` |
 | `wayland-info` | Содержится в пакете **`wayland-utils`** | `apt-cache policy wayland-utils` |
-
-### 1.3. Что поправить в ответе коллеги
-
-Ответ в целом верный, но есть нюансы, которые лучше зафиксировать до начала работ:
-
-1. **Пакет GIR называется иначе.** Для Python-GI нужен `gir1.2-gtklayershell-0.1`; `libgtk-layer-shell-dev` тянет его как зависимость, но в инструкции лучше писать правильное имя.
-2. **В сниппете смешаны два API.** `GtkLayerShell.set_keyboard_interactivity()` ожидает `KeyboardInteractivity`, а `GtkLayerShell.KeyboardMode.NONE` — это `KeyboardMode`. В Python-GI правильно:
-   ```python
-   GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.NONE)
-   ```
-3. **`nemo-desktop` — не «обычная поверхность», а `BOTTOM`-слой.** Это даже лучше: он гарантированно выше `BACKGROUND`, где будет Mintland. Но `deskwall -u` на Wayland не просто не нужен — он бессмысленен и может трогать XWayland-окна.
-4. **Порядок `csd-background` и Mintland в `BACKGROUND` — главный неизвестный.** Протокол прямо говорит: порядок внутри одного слоя не определён. В Muffin он зависит от реализации `meta_wayland_background_actor_sync_clones()`. Это не «визуально неважно»: если `csd-background` окажется выше, Mintland будет не виден.
-5. **Мультимонитор — не бесплатно.** Нужны отдельные поверхности/окна на каждый output, фильтрация иконок по монитору, согласование HiDPI. Это отдельный этап, а не побочный эффект.
-6. **`cinnamon-list-windows` — это Python-скрипт над D-Bus.** Для опроса раз в секунду лучше вызывать D-Bus напрямую, без spawn Python. И надо проверить, что сервис `org.cinnamon.Muffin.Debug` доступен в релизной сборке, а не только в debug.
-7. **XWayland-fallback ослепляет авто-паузу.** `xprop` внутри XWayland видит только X11-клиенты; нативное Wayland-окно на весь экран он не заметит, и сцена будет молотить CPU. Это допустимо как временный костыль, но не как решение.
-8. **`GDK_BACKEND=wayland` обычно не нужен.** На Wayland-сессии GTK3 и так выбирает Wayland; переменная нужна только для принудительного выбора. Для Mintland важнее `GtkLayerShell.is_supported()` и проверка, что `nemo-desktop` действительно Wayland-клиент.
-9. **`iconsource.py` жёстко ищет `~/Рабочий стол`.** На английской локали это `~/Desktop`; для переносимости лучше `xdg-user-dir DESKTOP` или `GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)`.
-10. **`start-layer.sh` требует `bin/deskwall`.** На Wayland этой зависимости быть не должно; проверку надо сделать условной.
 
 ---
 
@@ -576,15 +559,16 @@ cinnamon-list-windows --json | head
 
 ---
 
-## 9. Основные уточнения
+## 9. Выводы
 
-- На текущей машине Cinnamon 6.6.9/Muffin 6.6.3, layer-shell ещё нет; порт имеет смысл только для Cinnamon 6.8 / Muffin 6.7.5+.
-- Пакет для Python-GI — `gir1.2-gtklayershell-0.1`.
-- В сниппете нужен `GtkLayerShell.set_keyboard_mode(..., KeyboardMode.NONE)`, а не `set_keyboard_interactivity` с `KeyboardMode`.
-- `nemo-desktop` на Wayland — `BOTTOM`-слой, `csd-background` — `BACKGROUND`; это правильная схема, но порядок внутри `BACKGROUND` надо тестировать.
-- `cinnamon-list-windows` — отличная замена `xprop`, но лучше через D-Bus и с проверкой доступности `org.cinnamon.Muffin.Debug`.
-- Мультимонитор и HiDPI — отдельные этапы, не «почти даром».
-- На KDE/GNOME это не «тот же бэкенд»: layer-shell есть, но иконки, авто-пауза и порядок с системными обоями — другие. Для KDE нужен отдельный этап, для GNOME layer-shell нет.
+- **Cinnamon 6.8 / Muffin 6.7.5+ — целевая платформа.** Схема `BACKGROUND` (Mintland) → `BOTTOM` (`nemo-desktop`) архитектурно корректна: иконки остаются выше сцены и кликабельны.
+- **X11-путь сохраняется.** Wayland-бэкенд добавляется как отдельная ветка по `XDG_SESSION_TYPE`; существующие пользователи Mint 22.x ничего не теряют.
+- **Главный риск — порядок внутри `BACKGROUND`.** `csd-background` и Mintland делят один слой, а протокол не задаёт порядок. Это первый тест на живой Cinnamon 6.8; от него зависит, нужен ли plan B с расширением/десклетом.
+- **Авто-пауза — вторая зона риска.** `cinnamon-list-windows`/D-Bus `org.cinnamon.Muffin.Debug.ListWindows` должны быть доступны в релизной сборке; иначе понадобится Cinnamon-расширение.
+- **HiDPI и мультимонитор — отдельные этапы.** Это не «побочный эффект» layer-shell, а самостоятельная работа с координатами, масштабом и отдельными поверхностями на output.
+- **KDE Plasma требует отдельного бэкенда.** Layer-shell там есть, но иконки, авто-пауза и системные обои устроены иначе. Без этого на Kubuntu получится только анимированные обои.
+- **GNOME не поддерживает layer-shell.** Нативная схема там не заработает; остаётся XWayland-костыль без адаптации к иконкам.
+- **Оценка:** одноэкранный MVP — 3–7 дней; полный вариант с HiDPI и мультимонитором — 2–3 недели; KDE-бэкенд — ещё 2–3 недели.
 
 ---
 
