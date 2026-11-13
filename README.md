@@ -21,11 +21,14 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 ---
 ![Панель управления Mintland](docs/switcher.png)
 ---
-**Темы** — превью из репозитория Deskland:
+**Темы** — анимированные превью (GIF):
 
 | Пляж | Луг |
 |---|---|
-| ![Пляж](docs/theme-beach.png) | ![Луг](docs/theme-meadow.png) |
+| ![Пляж](docs/theme-beach.gif) | ![Луг](docs/theme-meadow.gif) |
+
+*Превью записаны из этих же сцен; на сайте Deskland верхний блок — живой
+WebGL-iframe, а не видеофайл.*
 
 ## Что работает
 
@@ -129,7 +132,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `start-layer.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
-| `docs/` | Превью тем и скриншот панели для README |
+| `docs/` | Анимированные превью тем и скриншот панели для README |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
 | `NOTICE` | Атрибуция Deskland и trademark-оговорка |
