@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mintland · Ночь</title>
+<!--
+  Mintland · тема «Ночь».
+
+  Полностью процедурная: ни одного файла-ассета. Небо, звёзды, луна,
+  полярное сияние, туман и ореолы вокруг иконок рисуются canvas 2D.
+
+  Контракт хоста (см. THEMES.md):
+    ?wallpaper=1  — режим обоев, страницу грузит themehost.py
+    ?preview=1    — предпросмотр, сообщения приходят через window.postMessage
+    ?freeze=1     — без requestAnimationFrame; кадр задаётся window.__renderAt(t)
+                    (нужно только для записи GIF-превью)
+
+  Входящие сообщения:
+    {t:'icons',    vis:bool, r:[[l,t,r,b],...]}  — прямоугольники иконок, физ. пиксели
+    {t:'settings', v:{...}}                      — параметры темы, частичное обновление
+    {t:'reset',    v:{...}}                      — сброс к значениям по умолчанию
+    {t:'pause',    v:bool}                       — сцена на паузе (окно на весь экран)
+  Исходящее: строка 'ready' через window.chrome.webview.postMessage.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #04060d; }
+  #art { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+</style>
+</head>
+<body>
+<canvas id="art"></canvas>
+<script>
+(function () {
+  'use strict';
+
+  var QS = new URLSearchParams(location.search);
+  var PREVIEW = QS.has('preview');
+  var FREEZE = QS.has('freeze');
+
+  /* Параметры темы. Ключи, типы и значения по умолчанию должны совпадать
+     с prototype/themes.json: страница принимает только значения того же
+     типа, что и здесь (иначе ползунок «не действует»). */
+  var P = {
+    halo: 96,      // радиус свечения вокруг иконки, px
+    mist: 0.5,     // плотность низкого тумана, 0..1
+    aurora: 0.7,   // яркость полярного сияния, 0..1
+    shoot: 2,      // сколько метеоров одновременно
+    moon: 1,       // 0/1 — показывать луну
+    cap30: true    // ограничение 30 fps
+  };
+  var DEFAULTS = Object.assign({}, P);
+  var SLIDERS = ['halo', 'mist', 'aurora', 'shoot'];
+  var DISPLAY_KEYS = ['moon'];
+
+  var cv = document.getElementById('art');
+  var ctx = cv.getContext('2d', { alpha: false });
+
+  var W = 1, H = 1, dpr = 1;
+  var icons = [];        // {x,y,w,h} в CSS-пикселях
+  var halos = [];        // предрасчёт для каждой иконки
+  var paused = false;
+
+  /* ---------- утилиты ---------- */
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var TAU = Math.PI * 2;
+
+  /* ---------- спрайты (один раз на размер окна) ---------- */
+
+  var fogSprite = null, haloSprite = null, mistBlobs = [];
+
+  function buildSprites() {
+    // Туман: мягкое облако из нескольких радиальных пятен.
+    var S = 256;
+    var c = document.createElement('canvas');
+    c.width = c.height = S;
+    var g = c.getContext('2d');
+    var rnd = mulberry32(80421);
+    for (var i = 0; i < 9; i++) {
+      var cx = S * (0.25 + rnd() * 0.5), cy = S * (0.35 + rnd() * 0.3);
+      var r = S * (0.18 + rnd() * 0.26);
+      var grd = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+      grd.addColorStop(0, 'rgba(196,224,255,0.55)');
+      grd.addColorStop(0.55, 'rgba(150,190,240,0.20)');
+      grd.addColorStop(1, 'rgba(120,160,220,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+    }
+    // Маска: гасим всё к краям квадрата, иначе при растягивании
+    // видны прямые границы спрайта.
+    g.globalCompositeOperation = 'destination-in';
+    var mask = g.createRadialGradient(S / 2, S / 2, S * 0.10, S / 2, S / 2, S / 2);
+    mask.addColorStop(0.00, 'rgba(0,0,0,1)');
+    mask.addColorStop(0.72, 'rgba(0,0,0,0.85)');
+    mask.addColorStop(1.00, 'rgba(0,0,0,0)');
+    g.fillStyle = mask;
+    g.fillRect(0, 0, S, S);
+    g.globalCompositeOperation = 'source-over';
+    fogSprite = c;
+
+    // Ореол иконки: ровный мягкий круг, чтобы не превращался в «облако».
+    var HS = 256;
+    var hc = document.createElement('canvas');
+    hc.width = hc.height = HS;
+    var hg2 = hc.getContext('2d');
+    var hgrad = hg2.createRadialGradient(HS / 2, HS / 2, 0, HS / 2, HS / 2, HS / 2);
+    hgrad.addColorStop(0.00, 'rgba(178,222,255,0.50)');
+    hgrad.addColorStop(0.30, 'rgba(150,205,255,0.30)');
+    hgrad.addColorStop(0.62, 'rgba(120,175,245,0.12)');
+    hgrad.addColorStop(1.00, 'rgba(100,150,225,0)');
+    hg2.fillStyle = hgrad;
+    hg2.fillRect(0, 0, HS, HS);
+    haloSprite = hc;
+
+    mistBlobs = [];
+    var r2 = mulberry32(9137);
+    for (var k = 0; k < 9; k++) {
+      mistBlobs.push({ x: r2(), y: r2(), w: r2(), a: r2(), s: r2() });
+    }
+  }
+
+  /* ---------- статичное небо ---------- */
+
+  var sky = null;
+  var stars = [], twinklers = [];
+
+  function buildSky() {
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(W * dpr));
+    c.height = Math.max(1, Math.round(H * dpr));
+    var g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    var grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0.00, '#04060d');
+    grad.addColorStop(0.42, '#071127');
+    grad.addColorStop(0.74, '#0d2140');
+    grad.addColorStop(1.00, '#173152');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+
+    // Млечный путь: вытянутое мягкое пятно по диагонали.
+    g.save();
+    g.translate(W * 0.34, H * 0.46);
+    g.rotate(-0.62);
+    g.scale(1, 0.22);
+    var mw = g.createRadialGradient(0, 0, 0, 0, 0, Math.max(W, H) * 0.55);
+    mw.addColorStop(0.00, 'rgba(150,180,235,0.16)');
+    mw.addColorStop(0.45, 'rgba(120,150,215,0.07)');
+    mw.addColorStop(1.00, 'rgba(100,130,200,0)');
+    g.fillStyle = mw;
+    g.beginPath(); g.arc(0, 0, Math.max(W, H) * 0.55, 0, TAU); g.fill();
+    g.restore();
+
+    // Звёзды: фиксированное зерно, чтобы рисунок неба не «прыгал» между запусками.
+    var rnd = mulberry32(20261113);
+    var count = Math.round(W * H / 5200);      // ~700 звёзд на 2560×1440
+    stars = []; twinklers = [];
+    for (var i = 0; i < count; i++) {
+      var x = rnd() * W;
+      var y = rnd() * H * 0.92;
+      // Ближе к горизонту звёзд меньше — их гасит дымка.
+      if (rnd() < (y / (H * 0.92)) * 0.55) continue;
+      var r = 0.35 + Math.pow(rnd(), 3) * 1.25;
+      var warm = rnd();
+      var col = warm < 0.12 ? '255,232,200' : warm < 0.30 ? '205,224,255' : '255,255,255';
+      var alpha = 0.18 + Math.pow(rnd(), 2) * 0.75;
+      var s = { x: x, y: y, r: r, col: col, a: alpha };
+      stars.push(s);
+      if (r > 1.05 && twinklers.length < 46) {
+        s.ph = rnd() * TAU;
+        s.sp = 0.0005 + rnd() * 0.0012;
+        twinklers.push(s);
+      }
+    }
+    for (var j = 0; j < stars.length; j++) {
+      var st = stars[j];
+      g.fillStyle = 'rgba(' + st.col + ',' + st.a.toFixed(3) + ')';
+      g.beginPath(); g.arc(st.x, st.y, st.r, 0, TAU); g.fill();
+    }
+
+    hills(g);
+
+    sky = c;
+  }
+
+  function drawMoon(t) {
+    if (!P.moon) return;
+    moon(ctx, t);
+  }
+
+  function moon(g, t) {
+    var mx = W * 0.815, my = H * 0.335;
+    var mr = Math.max(22, Math.min(W, H) * 0.038);
+
+    var pulse = 1 + 0.06 * Math.sin((t || 0) * 0.00022);
+    var glow = g.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 7 * pulse);
+    glow.addColorStop(0.00, 'rgba(214,232,255,0.20)');
+    glow.addColorStop(0.30, 'rgba(170,200,245,0.09)');
+    glow.addColorStop(1.00, 'rgba(140,175,235,0)');
+    g.fillStyle = glow;
+    g.beginPath(); g.arc(mx, my, mr * 7, 0, TAU); g.fill();
+
+    var disc = g.createRadialGradient(mx - mr * 0.35, my - mr * 0.4, mr * 0.15, mx, my, mr);
+    disc.addColorStop(0.00, '#fdfeff');
+    disc.addColorStop(0.70, '#e8eef8');
+    disc.addColorStop(1.00, '#c6d3e8');
+    g.fillStyle = disc;
+    g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
+
+    // Пара кратеров — чтобы луна не выглядела плоским кружком.
+    g.fillStyle = 'rgba(176,192,214,0.55)';
+    g.beginPath(); g.arc(mx - mr * 0.30, my + mr * 0.10, mr * 0.20, 0, TAU); g.fill();
+    g.beginPath(); g.arc(mx + mr * 0.26, my - mr * 0.28, mr * 0.13, 0, TAU); g.fill();
+    g.beginPath(); g.arc(mx + mr * 0.10, my + mr * 0.42, mr * 0.09, 0, TAU); g.fill();
+  }
+
+  function hills(g) {
+    var layers = [
+      { base: 0.855, amp: 0.042, top: '#0b1a2e', bot: '#081120', k: 1.7, ph: 1.2 },
+      { base: 0.935, amp: 0.030, top: '#070f1d', bot: '#04080f', k: 2.6, ph: 4.1 }
+    ];
+    var step = Math.max(4, W / 160);
+    for (var li = 0; li < layers.length; li++) {
+      var L = layers[li];
+      g.beginPath();
+      g.moveTo(0, H);
+      for (var x = 0; x <= W + step; x += step) {
+        var u = x / W;
+        var y = H * (L.base
+          + Math.sin(u * Math.PI * L.k + L.ph) * L.amp
+          + Math.sin(u * Math.PI * L.k * 2.3 + L.ph * 2.0) * L.amp * 0.45);
+        g.lineTo(Math.min(x, W), y);
+      }
+      g.lineTo(W, H);
+      g.closePath();
+      var lg2 = g.createLinearGradient(0, H * (L.base - L.amp * 1.6), 0, H);
+      lg2.addColorStop(0, L.top);
+      lg2.addColorStop(1, L.bot);
+      g.fillStyle = lg2;
+      g.fill();
+    }
+  }
+
+  /* ---------- иконки ---------- */
+
+  function commitIcons() {
+    halos = [];
+    for (var i = 0; i < icons.length; i++) {
+      var ic = icons[i];
+      halos.push({
+        cx: ic.x + ic.w / 2,
+        cy: ic.y + ic.h / 2,
+        ph: (i * 1.37) % TAU,
+        sp: 0.0004 + (i % 5) * 0.00010
+      });
+    }
+  }
+
+  /* ---------- отрисовка кадра ---------- */
+
+  // Сияние рисуется в маленький буфер и растягивается на экран: апскейл
+  // сам по себе даёт мягкое размытие, а стои́т это в 16 раз дешевле.
+  var auroraBuf = null, auroraBctx = null, AURORA_K = 4;
+  var auroraStamp = -1e9;                       // когда буфер рисовали в последний раз
+  // Сияние меняется медленно, поэтому буфер обновляется не каждый кадр:
+  // на 30 fps это ~7 обновлений в секунду, глазу не отличить, а CPU втрое ниже.
+  var AURORA_EVERY = 140;
+
+  // Гладкий шум по x: сумма нескольких синусов со случайными фазами.
+  // Нужен, чтобы лучи «дышали» не одинаково.
+  function wave1(x, a, b, c) {
+    return Math.sin(x * a) * 0.5 + Math.sin(x * b + 1.7) * 0.32 + Math.sin(x * c + 4.1) * 0.18;
+  }
+
+  function drawAurora(t) {
+    var strength = P.aurora;
+    if (strength <= 0.01) return;
+
+    var bw = Math.max(64, Math.round(W / AURORA_K));
+    var bh = Math.max(48, Math.round(H / AURORA_K));
+    if (!auroraBuf || auroraBuf.width !== bw || auroraBuf.height !== bh) {
+      auroraBuf = document.createElement('canvas');
+      auroraBuf.width = bw;
+      auroraBuf.height = bh;
+      auroraBctx = auroraBuf.getContext('2d');
+    }
+    var g = auroraBctx;
+    // Math.abs: время может прыгнуть назад (перерисовка кадра, тесты,
+    // запись превью) — тогда буфер надо обновить, а не показывать старый.
+    // В режиме записи превью (FREEZE) кэш не нужен: там важна плавность,
+    // а не цена кадра.
+    var reuse = !FREEZE && auroraBuf.width === bw && auroraBuf.height === bh &&
+                Math.abs(t - auroraStamp) < AURORA_EVERY;
+    if (reuse) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(auroraBuf, 0, 0, W, H);
+      ctx.restore();
+      return;
+    }
+    auroraStamp = t;
+
+    g.clearRect(0, 0, bw, bh);
+    g.globalCompositeOperation = 'lighter';
+
+    // Три слоя: ближний — яркий и низкий, дальние — выше и прозрачнее.
+    var BANDS = [
+      { base: 0.115, amp: 0.045, reach: 0.30, phase: 0.0, hue: [110, 255, 205], a: 0.72, rays: 190 },
+      { base: 0.165, amp: 0.060, reach: 0.26, phase: 2.1, hue: [85, 225, 245], a: 0.34, rays: 150 },
+      { base: 0.225, amp: 0.050, reach: 0.22, phase: 4.4, hue: [135, 170, 255], a: 0.15, rays: 120 }
+    ];
+
+    for (var b = 0; b < BANDS.length; b++) {
+      var B = BANDS[b];
+      var rgb = B.hue.join(',');
+      var rayW = (bw / B.rays) * 1.9;              // с нахлёстом — швов не видно
+      var step = bw / B.rays;
+
+      for (var i = 0; i < B.rays; i++) {
+        var u = i / B.rays;
+        var x = u * bw;
+
+        // Верхняя кромка: медленная волна по всей ширине.
+        var wob = wave1(u * 6.3 + t * 0.00013 + B.phase, 1.0, 2.4, 5.1);
+        var y0 = bh * (B.base + wob * B.amp);
+
+        // Длина луча: своя у каждой прожилки, медленно меняется во времени.
+        var breathe = wave1(u * 47 + t * 0.00035 + B.phase * 3.0, 1.0, 2.7, 6.3);
+        var len = bh * B.reach * (0.30 + 0.70 * (0.5 + 0.5 * breathe));
+        if (len < 0.8) continue;
+
+        // Яркость: соседние лучи заметно отличаются — это и даёт «шторы».
+        var lum = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * wave1(u * 61 + B.phase, 1.0, 3.3, 7.7), 1.6);
+        var a0 = B.a * strength * lum;
+
+        var grad = g.createLinearGradient(0, y0, 0, y0 + len);
+        grad.addColorStop(0.00, 'rgba(' + rgb + ',' + (a0 * 0.25).toFixed(3) + ')');
+        grad.addColorStop(0.14, 'rgba(' + rgb + ',' + a0.toFixed(3) + ')');
+        grad.addColorStop(0.45, 'rgba(' + rgb + ',' + (a0 * 0.42).toFixed(3) + ')');
+        grad.addColorStop(1.00, 'rgba(' + rgb + ',0)');
+        g.fillStyle = grad;
+
+        // Луч чуть расширяется книзу — как настоящая «штора».
+        g.beginPath();
+        g.moveTo(x - rayW * 0.35, y0 - bh * 0.02);
+        g.lineTo(x + rayW * 0.35, y0 - bh * 0.02);
+        g.lineTo(x + rayW * 0.55, y0 + len);
+        g.lineTo(x - rayW * 0.55, y0 + len);
+        g.closePath();
+        g.fill();
+      }
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.imageSmoothingEnabled = true;
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(auroraBuf, 0, 0, W, H);
+    ctx.restore();
+  }
+
+  function drawMist(t) {
+    var m = P.mist;
+    if (m <= 0.01) return;
+    ctx.save();
+    for (var i = 0; i < mistBlobs.length; i++) {
+      var b = mistBlobs[i];
+      var w = W * (0.34 + b.w * 0.46);
+      var h = w * 0.34;
+      var speed = 5 + b.s * 13;                       // px/с
+      var x = ((b.x * W + t * 0.001 * speed) % (W + w)) - w * 0.5;
+      var y = H * (0.60 + b.y * 0.40);
+      ctx.globalAlpha = m * (0.09 + b.a * 0.13);
+      ctx.drawImage(fogSprite, x, y - h / 2, w, h);
+    }
+    ctx.restore();
+  }
+
+  function drawHalos(t) {
+    if (P.halo <= 1 || halos.length === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < halos.length; i++) {
+      var h = halos[i];
+      var breathe = 1 + 0.05 * Math.sin(t * h.sp * 3 + h.ph);
+      var w = P.halo * 1.75 * breathe;
+      var hh = w * 1.0;
+      ctx.globalAlpha = 0.62 + 0.06 * Math.sin(t * 0.00035 + h.ph);
+      ctx.drawImage(haloSprite, h.cx - w / 2, h.cy - hh / 2, w, hh);
+    }
+    ctx.restore();
+  }
+
+  function drawShooting(t) {
+    var n = Math.round(P.shoot);
+    if (n <= 0) return;
+    var sec = t / 1000;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < n; i++) {
+      var period = 6.5 + i * 3.2;
+      var round = Math.floor((sec + i * 2.7) / period);
+      var local = (sec + i * 2.7) - round * period;
+      var life = 0.95;
+      if (local > life) continue;
+
+      var p = local / life;
+      // Положение и направление меняются от «раунда» к «раунду».
+      var jr = mulberry32(1000 + i * 97 + round * 7919);
+      var sx = W * (0.10 + jr() * 0.55);
+      var sy = H * (0.04 + jr() * 0.22);
+      var len = Math.min(W, H) * (0.28 + jr() * 0.18);
+      var dx = len * 0.86, dy = len * 0.40;
+
+      var hx = sx + p * dx, hy = sy + p * dy;
+      var tail = 0.22 + 0.30 * (1 - p);
+      var tx = hx - dx * tail, ty = hy - dy * tail;
+
+      var fade = Math.sin(Math.PI * p);           // мягко в начале и в конце
+      var lg = ctx.createLinearGradient(tx, ty, hx, hy);
+      lg.addColorStop(0, 'rgba(190,215,255,0)');
+      lg.addColorStop(0.75, 'rgba(220,235,255,' + (0.55 * fade).toFixed(3) + ')');
+      lg.addColorStop(1, 'rgba(255,255,255,' + (0.95 * fade).toFixed(3) + ')');
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = lg;
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawTwinkle(t) {
+    if (twinklers.length === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < twinklers.length; i++) {
+      var s = twinklers[i];
+      var k = 0.5 + 0.5 * Math.sin(t * s.sp * TAU + s.ph);
+      if (k < 0.35) continue;
+      ctx.globalAlpha = (k - 0.35) * 0.9;
+      ctx.fillStyle = 'rgba(' + s.col + ',1)';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r * (1 + k * 0.6), 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function render(t) {
+    if (!sky) buildSky();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(sky, 0, 0, W, H);
+    drawAurora(t);
+    drawMoon(t);
+    drawTwinkle(t);
+    drawMist(t);
+    drawHalos(t);
+    drawShooting(t);
+  }
+
+  /* ---------- цикл кадров ---------- */
+
+  var last = 0, raf = false;
+
+  function schedule() {
+    if (raf || FREEZE) return;
+    raf = true;
+    requestAnimationFrame(frame);
+  }
+
+  function frame(now) {
+    raf = false;
+    if (paused) { last = 0; return; }        // на паузе не планируем следующий кадр
+    schedule();
+    if (P.cap30 && now - last < 31) return;
+    last = now;
+    render(now);
+  }
+
+  /* ---------- размер окна ---------- */
+
+  function resize() {
+    // Сцена — размытый фон под иконками, поэтому рендерить её в физических
+    // пикселях смысла нет: на HiDPI это вчетверо дороже без видимой разницы.
+    // Beach делает то же самое через P.quality.
+    dpr = Math.min(window.devicePixelRatio || 1, 1);
+    W = Math.max(1, window.innerWidth);
+    H = Math.max(1, window.innerHeight);
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    cv.style.width = W + 'px';
+    cv.style.height = H + 'px';
+    buildSky();
+  }
+
+  addEventListener('resize', function () {
+    resize();
+    render(performance.now());
+  });
+
+  /* ---------- протокол ---------- */
+
+  function applySettings(v) {
+    var needSky = false;
+    for (var k in v) {
+      var known = SLIDERS.indexOf(k) >= 0 || DISPLAY_KEYS.indexOf(k) >= 0;
+      if (!known) continue;
+      if (typeof v[k] !== typeof P[k]) continue;
+      if (DISPLAY_KEYS.indexOf(k) >= 0 && v[k] !== 0 && v[k] !== 1) continue;
+      if (P[k] === v[k]) continue;
+      P[k] = v[k];
+      if (k === 'moon') needSky = true;
+    }
+    if (needSky && sky) buildSky();
+  }
+
+  function handle(m) {
+    if (!m || !m.t) return;
+    if (m.t === 'pause') {
+      paused = PREVIEW ? false : !!m.v;
+      if (!paused) schedule();
+      return;
+    }
+    if (m.t === 'settings') { applySettings(m.v || {}); return; }
+    if (m.t === 'reset') { applySettings(Object.assign({}, DEFAULTS, m.v || {})); return; }
+    if (m.t !== 'icons') return;
+
+    var k = window.devicePixelRatio || 1;      // физические пиксели → CSS-пиксели
+    var r = m.r || [];
+    icons = m.vis ? r.map(function (q) {
+      return { x: q[0] / k, y: q[1] / k, w: (q[2] - q[0]) / k, h: (q[3] - q[1]) / k };
+    }) : [];
+    commitIcons();
+    render(performance.now());
+  }
+
+  /* ---------- запуск ---------- */
+
+  buildSprites();
+  resize();
+
+  // Хуки для тестов и записи GIF-превью (на работу сцены не влияют).
+  window.__renderAt = function (t) { render(t); };
+  window.__inject = handle;
+
+  if (FREEZE) {
+    render(0);
+  } else {
+    render(performance.now());
+    schedule();
+  }
+
+  if (PREVIEW) {
+    addEventListener('message', function (ev) {
+      if (ev.source !== parent) return;
+      handle(typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data);
+    });
+  }
+
+  var host = window.chrome && window.chrome.webview;
+  if (host) {
+    host.addEventListener('message', function (ev) { handle(JSON.parse(ev.data)); });
+    host.postMessage('ready');
+  }
+})();
+</script>
+</body>
+</html>

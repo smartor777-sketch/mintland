@@ -45,11 +45,17 @@ THEME_INFO = {
         "desc": "Облака, мальчик с воздушным змеем и чёрный котёнок.",
         "thumb": "docs/theme-meadow.gif",
     },
+    "night": {
+        "name": "Ночь",
+        "desc": "Звёздное небо, полярное сияние и туман; иконки в мягком ореоле.",
+        "thumb": "docs/theme-night.gif",
+    },
 }
 
 GROUP_LABELS = {
     "beach": ["Берег", "Вода", "Элементы"],
     "meadow": ["Вокруг иконок", "Облака", "Персонажи"],
+    "night": ["Иконки", "Небо", "Туман"],
 }
 
 PARAM_LABELS = {
@@ -69,6 +75,13 @@ PARAM_LABELS = {
         "showBoy": "Мальчик с воздушным змеем",
         "showCat": "Чёрный котёнок",
     },
+    "night": {
+        "halo": "Свечение вокруг иконок",
+        "aurora": "Полярное сияние",
+        "shoot": "Метеоры",
+        "moon": "Луна",
+        "mist": "Плотность тумана",
+    },
 }
 
 # Наши подобранные значения по умолчанию (в themes.json у Beach 4 пальмы,
@@ -77,13 +90,14 @@ DEFAULT_OVERRIDES = {
     "beach": {"palms": 2, "kayaks": 1, "birds": 1},
 }
 
-THEME_ORDER = {"beach": 0, "meadow": 1}
+THEME_ORDER = {"beach": 0, "meadow": 1, "night": 2}
 
 # Единицы только латиницей/по-русски. Счётчики (пальмы, каяки, чайки)
 # показываем без единиц: число и так понятно.
 UNIT_LABELS = {
     "beach": {"sigma": "px", "shoal": "px", "shallow": "px"},
     "meadow": {"sigma": "px"},
+    "night": {"halo": "px", "shoot": "шт"},
 }
 
 
@@ -235,7 +249,7 @@ class Switcher(Gtk.Window):
         self._busy_until = 0.0
         self._updating = False
 
-        self.set_default_size(620, 680)
+        self.set_default_size(880, 700)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_border_width(12)
         self.set_icon_name("preferences-desktop-wallpaper")
@@ -299,10 +313,17 @@ class Switcher(Gtk.Window):
         theme_title.get_style_context().add_class("group-title")
         outer.pack_start(theme_title, False, False, 0)
 
-        self.theme_box = Gtk.Box(spacing=10, homogeneous=True)
-        outer.pack_start(self.theme_box, False, False, 0)
+        # Карточки в горизонтальном скроллере: тем может быть сколько угодно,
+        # а минимальная ширина окна остаётся разумной. Полоса прокрутки
+        # накладывается поверх, места у карточек не отнимает.
+        theme_scroll = Gtk.ScrolledWindow()
+        theme_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        theme_scroll.set_overlay_scrolling(True)
+        self.theme_box = Gtk.Box(spacing=10)
+        theme_scroll.add(self.theme_box)
+        outer.pack_start(theme_scroll, False, False, 0)
         for theme in self.themes:
-            self.theme_box.pack_start(self._make_theme_card(theme), True, True, 0)
+            self.theme_box.pack_start(self._make_theme_card(theme), False, False, 0)
 
         outer.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
@@ -342,6 +363,7 @@ class Switcher(Gtk.Window):
         card.set_relief(Gtk.ReliefStyle.NONE)
         card.get_style_context().add_class("theme-card")
         card.set_tooltip_text(info.get("desc", ""))
+        card.set_hexpand(True)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         thumb = self._make_thumb(tid)
         thumb.set_halign(Gtk.Align.CENTER)
@@ -362,7 +384,7 @@ class Switcher(Gtk.Window):
 
     def _make_thumb(self, tid):
         info = THEME_INFO.get(tid, {})
-        width, height = 250, 141
+        width, height = 208, 117
         path = HERE / info.get("thumb", "prototype/thumbs/%s.webp" % tid)
         try:
             return AnimatedThumb(path, width, height)

@@ -80,6 +80,84 @@
       ]
     },
     {
+      "id": "night",
+      "adaptive": true,
+      "name": "Ночь",
+      "desc": "Звёздное небо, полярное сияние и туман; вокруг иконок — мягкое свечение",
+      "page": "night.html",
+      "status": "ready",
+      "product": "free",
+      "thumb": "url(thumbs/night.webp) center / cover no-repeat, linear-gradient(180deg, #04060d 0%, #071127 42%, #0d2140 74%, #173152 100%)",
+      "thumbSource": "custom",
+      "groups": [
+        {
+          "name": "Иконки",
+          "params": [
+            {
+              "key": "halo",
+              "label": "Свечение вокруг иконок",
+              "hint": "мягкий ореол, чтобы иконки читались на тёмном небе",
+              "min": 40,
+              "max": 200,
+              "step": 1,
+              "default": 96,
+              "unit": "px"
+            }
+          ]
+        },
+        {
+          "name": "Небо",
+          "params": [
+            {
+              "key": "aurora",
+              "label": "Полярное сияние",
+              "hint": "яркость лент сияния над горизонтом",
+              "min": 0,
+              "max": 1,
+              "step": 0.01,
+              "default": 0.7,
+              "format": "percent"
+            },
+            {
+              "key": "shoot",
+              "label": "Метеоры",
+              "hint": "сколько падающих звёзд одновременно",
+              "min": 0,
+              "max": 6,
+              "step": 1,
+              "default": 2,
+              "unit": "шт"
+            },
+            {
+              "key": "moon",
+              "label": "Луна",
+              "hint": "диск луны с ореолом",
+              "options": [
+                "скрыть",
+                "показать"
+              ],
+              "default": 1
+            }
+          ]
+        },
+        {
+          "name": "Туман",
+          "params": [
+            {
+              "key": "mist",
+              "label": "Плотность тумана",
+              "hint": "низкие клочья тумана над холмами",
+              "min": 0,
+              "max": 1,
+              "step": 0.01,
+              "default": 0.5,
+              "format": "percent"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "beach",
       "name": "沙滩",
       "desc": "海岸线绕着你的文件弯曲，海浪一层层冲上沙滩",
