@@ -2,7 +2,7 @@
 
 Проект: порт Windows-программы [Deskland](https://github.com/BLEZZ0102/Deskland)
 (адаптивные обои, сцена реагирует на позиции иконок рабочего стола) под
-Linux Mint (Cinnamon / X11). Основан на анализе из `mintland-linux-port.md`.
+Linux Mint (Cinnamon / X11).
 
 **Статус:** рабочий прототип v0.2 (пляж под иконками, иконки кликабельны,
 вкл/выкл работают повторно, авто-пауза). Замерено на ноутбуке
@@ -21,7 +21,7 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
   (Компьютер, Корзина, тома) — сцена обтекает их.
 - Авто-пауза при развёрнутом/полноэкранном окне (EWMH) → <1% одного ядра:
   на паузе цикл `requestAnimationFrame` останавливается, а не просто пропускает кадры.
-- Трей/ярлыки: вкл / выкл / статус (notify-send).
+- Ярлыки на рабочем столе: вкл / выкл / статус (notify-send). Трея пока нет.
 - Апплет Dark Mode не затрагивается (никаких gsettings/dconf).
 
 ## Архитектура
@@ -40,17 +40,20 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
   уходит в слой рабочего стола ниже обычных окон; WebKit рисует сцену.
   После запуска `deskwall -u` поднимает окно `nemo-desktop`, поэтому иконки
   оказываются поверх сцены и остаются кликабельными. Протокол Mintland:
-  `{t:'icons', vis, r:[[l,t,r,b],...]}` / `ready` / `settings` / `reset` / `pause`.
-- `deskwall.c` → `bin/deskwall`: X11-утилита. Режимы: `-u` (поднять
-  `nemo-desktop` поверх слоя), `-r 0xWINID` (restack окна ниже nemo),
-  `--` (форк команды с подстановкой WID), `--create` (контейнер — оставлен
-  как экспериментальный режим, текущий хост его не использует).
+  хост отправляет `{t:'icons', vis, r:[[l,t,r,b],...]}` и `{t:'pause', v}`;
+  страница также понимает `settings`/`reset` (задел под `settings.html`).
+- `deskwall.c` → `bin/deskwall` (собирается локально): X11-утилита.
+  Сейчас используется только `-u` — поднять `nemo-desktop` поверх слоя.
+  Остальные режимы оставлены как экспериментальные: `-r 0xWINID` (restack
+  окна ниже nemo), `--` (форк команды с подстановкой WID), `--create`
+  (пустой DESKTOP-контейнер); текущий `themehost.py` их не использует.
 - `iconsource.py`: прямоугольники иконок из `gio metadata::nemo-icon-position`
   + виртуальные иконки из `~/.config/nemo/desktop-metadata`, сетка `desktop-grid-adjust`.
 - `experiment.sh`: запуск хоста (аппаратное ускорение WebKit).
-- `wall-on.sh` / `wall-off.sh` / `wall-status.sh`: обвязка с защитой от дубля
-  и очисткой осиротевших окон. `wall-off.sh` после снятия слоя перезапускает
-  `nemo-desktop`, чтобы иконки гарантированно вернулись.
+- `wall-on.sh` / `wall-off.sh` / `wall-status.sh`: обвязка ярлыков.
+  `wall-on.sh` завершает старый `themehost` перед запуском (дубля не остаётся)
+  и поднимает nemo после появления окна слоя; `wall-off.sh` снимает слой и
+  перезапускает `nemo-desktop`, чтобы иконки гарантированно вернулись.
 
 ## Производительность (точные замеры)
 
@@ -92,14 +95,19 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 
 | Файл | Назначение |
 |---|---|
-| `deskwall.c` | C-утилита: подъём nemo поверх слоя, restack, контейнер |
-| `bin/deskwall` | Собранный бинарник |
-| `iconsource.py` | Источник позиций иконок (gio + desktop-metadata) |
-| `themehost.py` | GTK3+WebKit2 хост темы |
-| `prototype/flat.html` (и др.) | Тема Mintland (HTML/canvas) — патченная: grain 0, palms 2, birds 1, kayaks 1, scale 0.75 |
-| `experiment.sh` | Запуск эксперимента (сейчас — тема flat.html) |
-| `wall-on.sh` / `wall-off.sh` / `wall-status.sh` | Обвязка ярлыков |
+| `deskwall.c` | C-утилита: `-u` поднимает nemo поверх слоя; `-r`, `--`, `--create` — экспериментальные режимы |
+| `iconsource.py` | Позиции иконок: `gio` + `desktop-metadata`, сетка `desktop-grid-adjust` |
+| `themehost.py` | GTK3+WebKit2 хост: окно DESKTOP, WebKit, протокол `icons`/`pause` |
+| `prototype/` | Темы и ассеты (из Deskland): `flat.html` (пляж), `meadow.html`, `settings.html`, `themes.json`, `assets/`, `i18n/`, `thumbs/` |
+| `experiment.sh` | Запуск хоста с темой `flat.html` |
+| `wall-on.sh` / `wall-off.sh` / `wall-status.sh` | Включение, выключение и статус; перезапуск nemo после снятия слоя |
+| `README.md` | Эта документация |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
+| `.gitignore` | Исключает `bin/`, `run/`, `__pycache__` |
+
+**Чего в репозитории нет:** `bin/deskwall` — это локально собранный бинарник
+(`bin/` в `.gitignore`); ярлыки `.desktop` и symlinks в `~/.local/bin` тоже
+создаются в системе. Инструкция по сборке — ниже.
 
 ## Ярлыки на рабочем столе
 
@@ -107,20 +115,30 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 - `Mintland-выкл.desktop` → `~/.local/bin/mintland-off.sh` → `wall-off.sh`
 - `Mintland-статус.desktop` → `~/.local/bin/mintland-status.sh` → `wall-status.sh`
 
+Ярлыки и symlinks создаются в системе; в репозитории их нет.
+
 ## Безопасность (Dark Mode)
 
 Апплет Dark Mode владеет ключами dconf (включая обои `picture-uri`).
 Скрипты эксперимента **никогда** не вызывают `gsettings`/`dconf`.
-Kill-политика: убиваются только собственные процессы (themehost + deskwall --create).
+Kill-политика: убиваются только собственные процессы (themehost и старые
+экспериментальные deskwall); `wall-off.sh` дополнительно намеренно
+перезапускает `nemo-desktop` после снятия слоя — это возвращает иконки и не
+затрагивает Dark Mode (позиции иконок хранятся в gvfs-метаданных).
 
 ## Сборка
 
 ```bash
-# deskwall
-cd mintland && cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
+# 1. Собрать deskwall (bin/ в .gitignore, бинарник в репозиторий не входит)
+mkdir -p bin
+cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 
-# Python-зависимости: python3, gi (Gtk 3.0, WebKit2 4.1), iconsource
-# Системные: x11-utils (xprop/xwininfo), xrandr; mpv/xwinwrap не используются
+# 2. Зависимости (Debian/Ubuntu/Mint):
+#    sudo apt install python3-gi python3-cairo gir1.2-gtk-3.0 \
+#         gir1.2-webkit2-4.1 libglib2.0-bin libnotify-bin \
+#         x11-utils x11-xserver-utils
+#    Для сборки: gcc libx11-dev libxext-dev
+#    mpv/xwinwrap не используются.
 ```
 
 ## Дорожная карта
@@ -128,7 +146,7 @@ cd mintland && cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 - [x] Шаг 1: слой под иконками (deskwall) — проверено
 - [x] Шаг 2: позиции иконок из gio → JSON
 - [x] Шаг 3: Electron/WebKit-скелет с flat.html
-- [x] Шаг 4: пауза (EWMH) — проверено, CPU ~0 при развёрнутом окне
+- [x] Шаг 4: пауза (EWMH) — проверено, <1% одного ядра при развёрнутом окне
 - [x] Шаг 5: иконки поверх сцены и кликабельны; цикл вкл/выкл/вкл — проверено
 - [ ] Шаг 6: settings.html, themes.json, сохранение параметров
 - [ ] Шаг 7: трей, автозапуск, .deb/AppImage
