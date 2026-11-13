@@ -4,8 +4,9 @@
 (адаптивные обои, сцена реагирует на позиции иконок рабочего стола) под
 Linux Mint (Cinnamon / X11).
 
-**Статус:** рабочий прототип v0.2 (пляж под иконками, иконки кликабельны,
-вкл/выкл работают повторно, авто-пауза). Замерено на ноутбуке
+**Статус:** рабочий прототип v0.3 (пляж и луг под иконками, иконки кликабельны,
+вкл/выкл работают повторно, авто-пауза, графический переключатель тем).
+Замерено на ноутбуке
 ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 2560×1440): активная сцена — **~65% одного ядра, то есть ~3.2% общей
 загрузки CPU**; пауза — **~0.5% одного ядра, то есть ~0.02% общей**.
@@ -21,8 +22,10 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
   (Компьютер, Корзина, тома) — сцена обтекает их.
 - Авто-пауза при развёрнутом/полноэкранном окне (EWMH) → <1% одного ядра:
   на паузе цикл `requestAnimationFrame` останавливается, а не просто пропускает кадры.
-- Ярлыки на рабочем столе: вкл / выкл (notify-send). Трея и отдельного
-  ярлыка статуса нет — состояние видно по сцене и в `run/wall.log`.
+- Графический переключатель `switcher.py`: темы Beach/Meadow, включение и
+  выключение слоя, ползунки параметров анимации — изменения применяются на лету.
+- Ярлыки на рабочем столе: вкл / выкл / настройки (notify-send). Трея нет —
+  состояние видно по сцене и в `run/wall.log`.
 - Апплет Dark Mode не затрагивается (никаких gsettings/dconf).
 
 ## Архитектура
@@ -51,6 +54,9 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 - `iconsource.py`: прямоугольники иконок из `gio metadata::nemo-icon-position`
   + виртуальные иконки из `~/.config/nemo/desktop-metadata`, сетка `desktop-grid-adjust`.
 - `experiment.sh`: запуск хоста (аппаратное ускорение WebKit).
+- `switcher.py`: GTK3-переключатель. Хранит выбор в
+  `~/.config/mintland/settings.json` и пишет `run/control.json`; `themehost.py`
+  читает control-файл, переключает HTML-тему и отправляет странице `settings`.
 - `wall-on.sh` / `wall-off.sh`: обвязка ярлыков.
   `wall-on.sh` завершает старый `themehost` перед запуском (дубля не остаётся)
   и поднимает nemo после появления окна слоя; `wall-off.sh` снимает слой и
@@ -98,9 +104,10 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 |---|---|
 | `deskwall.c` | C-утилита: `-u` поднимает nemo поверх слоя; `-r`, `--`, `--create` — экспериментальные режимы |
 | `iconsource.py` | Позиции иконок: `gio` + `desktop-metadata`, сетка `desktop-grid-adjust` |
-| `themehost.py` | GTK3+WebKit2 хост: окно DESKTOP, WebKit, протокол `icons`/`pause` |
+| `themehost.py` | GTK3+WebKit2 хост: окно DESKTOP, WebKit, протокол `icons`/`pause`/`settings` |
+| `switcher.py` | GTK3-переключатель тем и параметров, вкл/выкл слоя |
 | `prototype/` | Темы и ассеты (из Deskland): `flat.html` (пляж), `meadow.html`, `settings.html`, `themes.json`, `assets/`, `i18n/`, `thumbs/` |
-| `experiment.sh` | Запуск хоста с темой `flat.html` |
+| `experiment.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Включение и выключение; перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
@@ -110,14 +117,30 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 
 **Чего в репозитории нет:** `bin/deskwall` — это локально собранный бинарник
 (`bin/` в `.gitignore`); ярлыки `.desktop` и symlinks в `~/.local/bin` тоже
-создаются в системе. Инструкция по сборке — ниже.
+создаются в системе. `run/control.json` и `~/.config/mintland/settings.json` —
+рабочие файлы переключателя, они не коммитятся. Инструкция по сборке — ниже.
 
 ## Ярлыки на рабочем столе
 
 - `Mintland-вкл.desktop` → `~/.local/bin/mintland-on.sh` → `wall-on.sh`
 - `Mintland-выкл.desktop` → `~/.local/bin/mintland-off.sh` → `wall-off.sh`
+- `Mintland-настройки.desktop` → `~/.local/bin/mintland-settings.sh` → `switcher.py`
 
 Ярлыки и symlinks создаются в системе; в репозитории их нет.
+
+## Переключатель тем
+
+Запуск: ярлык **«Mintland — темы и настройки»** или `python3 switcher.py`.
+
+- карточки готовых тем из `prototype/themes.json` (сейчас Beach и Meadow);
+- кнопки **Включить слой** / **Выключить слой**;
+- ползунки параметров выбранной темы: пальмы, каяки, чайки, облака, персонажи;
+- изменения сразу уходят работающему `themehost.py` через `run/control.json`;
+- выбор и параметры сохраняются в `~/.config/mintland/settings.json`;
+- если слой выключен, выбранная тема применится при следующем включении.
+
+Темы со статусом `locked` в `themes.json` (Мальдивы, Лес, Город и т.д.) в этой
+сборке недоступны — для них нет HTML-страниц.
 
 ## Безопасность (Dark Mode)
 
@@ -138,7 +161,7 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 # 2. Зависимости (Debian/Ubuntu/Mint):
 #    sudo apt install python3-gi python3-cairo gir1.2-gtk-3.0 \
 #         gir1.2-webkit2-4.1 libglib2.0-bin libnotify-bin \
-#         x11-utils x11-xserver-utils
+#         x11-utils x11-xserver-utils webp-pixbuf-loader
 #    Для сборки: gcc libx11-dev libxext-dev
 #    mpv/xwinwrap не используются.
 ```
@@ -150,8 +173,8 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 - [x] Шаг 3: Electron/WebKit-скелет с flat.html
 - [x] Шаг 4: пауза (EWMH) — проверено, <1% одного ядра при развёрнутом окне
 - [x] Шаг 5: иконки поверх сцены и кликабельны; цикл вкл/выкл/вкл — проверено
-- [ ] Шаг 6: settings.html, themes.json, сохранение параметров
-- [ ] Шаг 7: трей, автозапуск, .deb/AppImage
+- [x] Шаг 6: графический переключатель тем (Beach/Meadow), вкл/выкл и параметры — MVP
+- [ ] Шаг 7: расширенный редактор (settings.html), пресеты, автозапуск, трей, .deb/AppImage
 - [ ] Шаг 8: передний кликопрозрачный слой (бонус над иконками)
 
 ## Известные ограничения
@@ -169,6 +192,10 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
   это ~3% общей загрузки CPU, а не 65% всего процессора. Для ноутбука от
   батареи имеет смысл держать окно развёрнутым — сработает авто-пауза
   (~0.5% одного ядра, ~0.02% общей).
+- `switcher.py` показывает только темы со статусом `ready` и существующей
+  HTML-страницей; `locked`-темы из Deskland в этой сборке недоступны.
+- Для превью тем нужен WebP-загрузчик GdkPixbuf (`webp-pixbuf-loader`);
+  без него карточки покажут запасную иконку, но переключение работает.
 
 ## Лицензия
 

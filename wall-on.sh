@@ -41,7 +41,7 @@ fi
 
 # 3. Запуск эксперимента
 : > "$LOG"
-if ! bash "$DIR/experiment.sh" >"$LOG" 2>&1; then
+if ! bash "$DIR/experiment.sh" >>"$LOG" 2>&1; then
     say "experiment.sh завершился с ошибкой — см. run/wall.log"
     exit 1
 fi

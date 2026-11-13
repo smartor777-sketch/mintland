@@ -30,6 +30,8 @@
 
 - не убивают и не перезапускают `cinnamon`, `muffin`, `csd-*`;
 - не трогают чужие окна и процессы;
+- `switcher.py` не вызывает `gsettings`/`dconf`: только свои файлы
+  `~/.config/mintland/settings.json` и `run/control.json`;
 - убивают только собственные процессы: группу, записанную в `run/wall.pid`
   (`setsid`), плюс фолбэк по уникальному пути `mintland/themehost.py`
   и по `deskwall --create`;
@@ -44,6 +46,7 @@
 |---|---|
 | `Mintland-вкл.desktop` | `wall-on.sh` — запустить текущий эксперимент (`experiment.sh`) |
 | `Mintland-выкл.desktop` | `wall-off.sh` — остановить, проверить чистоту |
+| `Mintland-настройки.desktop` | `switcher.py` — темы, параметры, вкл/выкл |
 
 ## Итоги Шага 1 (12.11.2026) — слой под иконками работает
 
@@ -85,7 +88,9 @@ application, skipping desktop setup` и не рисует иконки. Поэт
 
 ```
 experiment.sh   — сам эксперимент (меняем его, ярлыки не трогаем)
+switcher.py     — GTK3: темы, параметры, вкл/выкл; пишет settings/control
 wall-on.sh      — обвязка запуска: проверки окружения, PID-файл, deskwall -u
 wall-off.sh     — обвязка остановки: kill группы, перезапуск nemo-desktop
-run/            — wall.pid, wall.log (gitignore)
+run/            — wall.pid, wall.log, control.json (gitignore)
+~/.config/mintland/settings.json — сохранённые тема и параметры
 ```

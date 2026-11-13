@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # themehost.py — хост темы Mintland на Linux Mint (Cinnamon/X11).
 #
-# Слой: окно типа DESKTOP + keep_below; WebKit рисует тему flat.html.
-# nemo-desktop стартует ДО слоя и рисует иконки поверх (Muffin кладёт
-# DESKTOP-окно с BELOW-состоянием ниже nemo в том же слое).
+# Слой: окно типа DESKTOP + keep_below; WebKit рисует выбранную тему
+# (flat.html / meadow.html). Тема и параметры читаются из run/control.json,
+# который пишет switcher.py. nemo-desktop стартует ДО слоя и рисует иконки
+# поверх (Muffin кладёт DESKTOP-окно с BELOW-состоянием ниже nemo).
 
 import argparse
 import atexit
@@ -60,15 +61,38 @@ def cairo_empty_region():
 
 
 class ThemeHost:
-    def __init__(self, html_path: Path):
+    def __init__(self, html_path: Path, control_path: Path = None):
         self.html_path = html_path
+        self.control_path = control_path or (HERE / "run" / "control.json")
+        self.theme_id = None
+        self.params = {}
+        self.control_seq = None
         self.win = None
         self.view = None
         self.xid = None
         self.last_icons = None
         self.paused = False
         self.scale = 1
+        self._read_initial_control()
         atexit.register(self._cleanup)
+
+    def _read_initial_control(self):
+        """До создания окна: выбрать тему/параметры из run/control.json."""
+        try:
+            data = json.loads(self.control_path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        html = data.get("html")
+        if html:
+            p = Path(html)
+            if p.is_file():
+                self.html_path = p
+        self.theme_id = data.get("theme")
+        params = data.get("params")
+        if isinstance(params, dict):
+            self.params = params
+        self.control_seq = data.get("seq")
+        self._log("control init: theme=%s html=%s" % (self.theme_id, self.html_path.name))
 
     def build_window(self):
         self.win = Gtk.Window(title=MARKER)
@@ -132,6 +156,7 @@ class ThemeHost:
         # Пауза проверяется раз в секунду, без лишних подпроцессов xprop.
         GLib.timeout_add(2000, self.poll_icons)
         GLib.timeout_add(1000, self.poll_pause)
+        GLib.timeout_add(500, self.poll_control)
 
     @staticmethod
     def _detect_scale(logical_w: int) -> int:
@@ -165,6 +190,9 @@ class ThemeHost:
         ucm.register_script_message_handler("mintland")
         ucm.connect("script-message-received::mintland", self.on_page_message)
 
+        self._load_uri()
+
+    def _load_uri(self):
         uri = "file://" + str(self.html_path) + "?wallpaper=1"
         self._log("loading " + uri)
         self.view.load_uri(uri)
@@ -180,9 +208,14 @@ class ThemeHost:
         text = (text or "").strip()
         self._log("page-msg: " + text[:60])
         if text == "ready":
+            self.send_settings()
             self.last_icons = None
             self.poll_icons()
             self.poll_pause()
+            # После map/reload Muffin может положить наш DESKTOP-слой выше
+            # nemo. Поднимаем nemo дважды: сразу и с запасом по времени.
+            GLib.timeout_add(300, self._raise_nemo)
+            GLib.timeout_add(1200, self._raise_nemo)
 
     def poll_icons(self):
         try:
@@ -199,6 +232,50 @@ class ThemeHost:
             self.last_icons = payload
             self.send(payload)
         return True
+
+    def poll_control(self):
+        """Живое применение темы/параметров из run/control.json."""
+        try:
+            data = json.loads(self.control_path.read_text(encoding="utf-8"))
+        except Exception:
+            return True
+        seq = data.get("seq")
+        if seq == self.control_seq:
+            return True
+        self.control_seq = seq
+        self.theme_id = data.get("theme", self.theme_id)
+        params = data.get("params")
+        if isinstance(params, dict):
+            self.params = params
+
+        html = data.get("html")
+        if html:
+            p = Path(html)
+            if p.is_file() and p.resolve() != self.html_path.resolve():
+                self.html_path = p
+                self.last_icons = None
+                self._log("control: switch theme=%s html=%s" % (self.theme_id, p.name))
+                self._load_uri()
+                return True
+
+        self._log("control: apply settings theme=%s" % self.theme_id)
+        self.send_settings()
+        return True
+
+    def send_settings(self):
+        if not self.params:
+            return
+        self.send(json.dumps({"t": "settings", "v": self.params}, separators=(",", ":")))
+
+    def _raise_nemo(self):
+        """Поставить nemo-desktop выше нашего слоя (иконки поверх сцены)."""
+        try:
+            subprocess.run([str(HERE / "bin" / "deskwall"), "-u"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=3)
+        except Exception:
+            pass
+        return False
 
     def poll_pause(self):
         should = self._should_pause()
@@ -259,10 +336,12 @@ def main():
     global _HOST
     ap = argparse.ArgumentParser()
     ap.add_argument("--html", default=str(HERE / "prototype" / "flat.html"))
+    ap.add_argument("--control", default=str(HERE / "run" / "control.json"),
+                    help="JSON с выбранной темой и параметрами")
     ap.add_argument("--marker", default=MARKER, help="маркер для pgrep (ярлыки)")
     args = ap.parse_args()
 
-    _HOST = ThemeHost(Path(args.html))
+    _HOST = ThemeHost(Path(args.html), Path(args.control))
     signal.signal(signal.SIGTERM, _term)
     signal.signal(signal.SIGINT, _term)
     _HOST.build_window()
