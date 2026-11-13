@@ -56,8 +56,17 @@ fi
 echo "$PID" > "$PIDF"
 echo "== $(date '+%F %T') started, pid $PID ==" >> "$LOG"
 
-# поднять nemo-desktop поверх нашего слоя (иначе иконки перекрываются)
-sleep 1
-"$DIR/bin/deskwall" -u 2>/dev/null || true
+# поднять nemo-desktop поверх нашего слоя (иначе иконки перекрываются).
+# Ждём, пока окно слоя реально появится: если поднять nemo раньше, Muffin
+# успевает положить новое DESKTOP-окно выше него — иконки пропадают.
+for _ in $(seq 1 20); do
+    xwininfo -root -tree 2>/dev/null | grep -q '"mintland-poc-wall"' && break
+    sleep 0.5
+done
+# нескольких попыток достаточно, если Muffin переставит окна после map
+for _ in 1 2 3; do
+    "$DIR/bin/deskwall" -u 2>/dev/null || true
+    sleep 0.5
+done
 
 say "Слой включён (PID $PID)."

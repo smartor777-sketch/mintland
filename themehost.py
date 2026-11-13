@@ -128,8 +128,10 @@ class ThemeHost:
                 self._log("xid err: %s" % e)
                 self.xid = None
 
-        GLib.timeout_add(1000, self.poll_icons)
-        GLib.timeout_add(500, self.poll_pause)
+        # Позиции иконок меняются только при перетаскивании — 2 с достаточно.
+        # Пауза проверяется раз в секунду, без лишних подпроцессов xprop.
+        GLib.timeout_add(2000, self.poll_icons)
+        GLib.timeout_add(1000, self.poll_pause)
 
     @staticmethod
     def _detect_scale(logical_w: int) -> int:
@@ -218,17 +220,16 @@ class ThemeHost:
                 return False
             if self.xid and m.lower() == hex(self.xid).lower():
                 return False
-            t = subprocess.run(["xprop", "-id", m, "_NET_WM_WINDOW_TYPE"],
-                               capture_output=True, text=True, timeout=3).stdout.lower()
-            if any(k in t for k in ("desktop", "dock", "notification", "tooltip", "menu")):
+            # один вызов xprop вместо двух: тип и состояние окна
+            props = subprocess.run(["xprop", "-id", m, "_NET_WM_WINDOW_TYPE", "_NET_WM_STATE"],
+                                   capture_output=True, text=True, timeout=3).stdout.lower()
+            if any(k in props for k in ("desktop", "dock", "notification", "tooltip", "menu")):
                 return False
-            s = subprocess.run(["xprop", "-id", m, "_NET_WM_STATE"],
-                               capture_output=True, text=True, timeout=3).stdout.lower()
-            maximized = ("_net_wm_state_maximized_horz" in s and "_net_wm_state_maximized_vert" in s)
-            fullscreen = "_net_wm_state_fullscreen" in s
+            maximized = ("_net_wm_state_maximized_horz" in props and "_net_wm_state_maximized_vert" in props)
+            fullscreen = "_net_wm_state_fullscreen" in props
             if not (maximized or fullscreen):
                 return False
-            if "_net_wm_state_hidden" in s:
+            if "_net_wm_state_hidden" in props:
                 return False
             return True
         except Exception:

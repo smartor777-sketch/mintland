@@ -1040,9 +1040,16 @@ let lastT = 0, fpsEMA = 0, frameN = 0, frameMs = 0;
 const ripBuf = new Float32Array(24), kayBuf = new Float32Array(16), birdBuf = new Float32Array(32);
 const px = new Uint8Array(4);
 let paused = false;                              // 宿主通知：前台窗口最大化 / 全屏 → 暂停
-function frame(now) {
+let rafScheduled = false;
+function scheduleFrame() {
+  if (rafScheduled) return;
+  rafScheduled = true;
   requestAnimationFrame(frame);
-  if (paused) { lastT = 0; return; }
+}
+function frame(now) {
+  rafScheduled = false;
+  if (paused) { lastT = 0; return; }             // на паузе не планируем следующий кадр
+  scheduleFrame();
   if (P.cap30 && now - lastT < 31) return;
   const dt = lastT ? Math.min((now - lastT) / 1000, 0.1) : 0.03;
   if (lastT) fpsEMA = fpsEMA ? fpsEMA * 0.9 + (1 / dt) * 0.1 : 1 / dt;
@@ -1206,7 +1213,7 @@ resize();
 buildNoiseTex();
 if (WALL || PREVIEW) startHostedMode();
 else { applyLayout('mine'); syncPanel(); }
-requestAnimationFrame(frame);
+scheduleFrame();
 
 /* ======================================================================
    托管模式：画面由外部驱动
@@ -1252,7 +1259,12 @@ function startHostedMode() {
     draw(performance.now());
   };
   const handle = m => {
-    if (m.t === 'pause') { paused = PREVIEW ? false : m.v; settlePaused(); return; }
+    if (m.t === 'pause') {
+      paused = PREVIEW ? false : m.v;
+      settlePaused();
+      if (!paused) scheduleFrame();               // возобновляем цикл после паузы
+      return;
+    }
     if (m.t === 'settings') { applySettings(m.v || {}); return; }
     if (m.t === 'reset') { applySettings(Object.assign({}, DEFAULTS, m.v || {})); return; }
     if (m.t !== 'icons') return;
