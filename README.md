@@ -4,7 +4,8 @@
 (адаптивные обои, сцена реагирует на позиции иконок рабочего стола) под
 Linux Mint (Cinnamon / X11). Основан на анализе из `mintland-linux-port.md`.
 
-**Статус:** рабочий прототип v0.1 (пляж под иконками, ~12–20% CPU, авто-пауза).
+**Статус:** рабочий прототип v0.2 (пляж под иконками, иконки кликабельны,
+вкл/выкл работают повторно, ~12–20% CPU, авто-пауза).
 
 ---
 
@@ -23,31 +24,34 @@ Linux Mint (Cinnamon / X11). Основан на анализе из `mintland-l
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ root window (X11)                                           │
-│  ├─ csd-background: обои                                   │
-│  ├─ deskwall (контейнер): DESKTOP, пониженный при создании  │
-│  │     └─ WebKit (themehost.py): flat.html?wallpaper=1      │
-│  └─ nemo-desktop: иконки (ВСЕГДА выше)                      │
+│  ├─ csd-background: системные обои                          │
+│  ├─ themehost.py: окно DESKTOP + keep_below                 │
+│  │     └─ WebKit: flat.html?wallpaper=1 (сцена)             │
+│  └─ nemo-desktop: иконки (поднят поверх слоя через -u)      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- `deskwall.c` → `bin/deskwall`: создаёт окно-контейнер (тип DESKTOP, XLowerWindow
-  в той же пачке, что и XMapWindow — Muffin ставит его ниже nemo-desktop).
-  Режимы: `--` (форк команды с подстановкой WID), `--create` (создать контейнер
-  и ждать stdin), `-r 0xWINID` (restack окна ниже nemo).
-- `themehost.py`: GTK3 + WebKit2 4.1. WebKit-виджет reparent-ится в контейнер
-  deskwall. Протокол Mintland: `{t:'icons', vis, r:[[l,t,r,b],...]}` / `ready` /
-  `settings` / `reset` / `pause`.
+- `themehost.py`: GTK3 + WebKit2 4.1. Окно с типом `DESKTOP` и `keep_below`
+  уходит в слой рабочего стола ниже обычных окон; WebKit рисует сцену.
+  После запуска `deskwall -u` поднимает окно `nemo-desktop`, поэтому иконки
+  оказываются поверх сцены и остаются кликабельными. Протокол Mintland:
+  `{t:'icons', vis, r:[[l,t,r,b],...]}` / `ready` / `settings` / `reset` / `pause`.
+- `deskwall.c` → `bin/deskwall`: X11-утилита. Режимы: `-u` (поднять
+  `nemo-desktop` поверх слоя), `-r 0xWINID` (restack окна ниже nemo),
+  `--` (форк команды с подстановкой WID), `--create` (контейнер — оставлен
+  как экспериментальный режим, текущий хост его не использует).
 - `iconsource.py`: прямоугольники иконок из `gio metadata::nemo-icon-position`
   + виртуальные иконки из `~/.config/nemo/desktop-metadata`, сетка `desktop-grid-adjust`.
-- `experiment.sh`: запуск хоста (софтверный GL для стабильности WebGL2).
+- `experiment.sh`: запуск хоста (аппаратное ускорение WebKit).
 - `wall-on.sh` / `wall-off.sh` / `wall-status.sh`: обвязка с защитой от дубля
-  и очисткой осиротевших окон.
+  и очисткой осиротевших окон. `wall-off.sh` после снятия слоя перезапускает
+  `nemo-desktop`, чтобы иконки гарантированно вернулись.
 
 ## Файлы
 
 | Файл | Назначение |
 |---|---|
-| `deskwall.c` | C-утилита: создание пониженного DESKTOP-окна, restack |
+| `deskwall.c` | C-утилита: подъём nemo поверх слоя, restack, контейнер |
 | `bin/deskwall` | Собранный бинарник |
 | `iconsource.py` | Источник позиций иконок (gio + desktop-metadata) |
 | `themehost.py` | GTK3+WebKit2 хост темы |
@@ -75,25 +79,31 @@ Kill-политика: убиваются только собственные п
 cd mintland && cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 
 # Python-зависимости: python3, gi (Gtk 3.0, WebKit2 4.1), iconsource
-# Системные: mpv, xwinwrap (не используется в финальной версии), x11-utils
+# Системные: x11-utils (xprop/xwininfo), xrandr; mpv/xwinwrap не используются
 ```
 
 ## Дорожная карта
 
-- [x] Шаг 1: слой под иконками (deskwall + mpv) — проверено
+- [x] Шаг 1: слой под иконками (deskwall) — проверено
 - [x] Шаг 2: позиции иконок из gio → JSON
 - [x] Шаг 3: Electron/WebKit-скелет с flat.html
-- [ ] Шаг 4: settings.html, themes.json, сохранение параметров
-- [ ] Шаг 5: пауза (EWMH) — реализовано, нужно тестирование
-- [ ] Шаг 6: трей, автозапуск, .deb/AppImage
-- [ ] Шаг 7: передний кликопрозрачный слой (бонус над иконками)
+- [x] Шаг 4: пауза (EWMH) — проверено, CPU ~0 при развёрнутом окне
+- [x] Шаг 5: иконки поверх сцены и кликабельны; цикл вкл/выкл/вкл — проверено
+- [ ] Шаг 6: settings.html, themes.json, сохранение параметров
+- [ ] Шаг 7: трей, автозапуск, .deb/AppImage
+- [ ] Шаг 8: передний кликопрозрачный слой (бонус над иконками)
 
 ## Известные ограничения
 
 - Работает только в X11-сессии (Wayland не поддерживается).
 - Только основной монитор.
-- WebKit использует софтверный GL (стабильность WebGL2) → CPU ~20%.
-- nemo-desktop должен быть запущен (иконки).
+- `nemo-desktop` должен быть запущен **до** слоя; иначе Nemo отказывается
+  от роли рабочего стола («Desktop already managed by another application»).
+- После выключения слоя `wall-off.sh` перезапускает `nemo-desktop` — это
+  возвращает иконки и готовит чистый старт для следующего включения.
+- WebKit работает через аппаратное ускорение Mesa (WebGL2); на слабых GPU
+  можно включить софтверный рендер переменными `WEBKIT_DISABLE_COMPOSITING_MODE=1`,
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1`, `LIBGL_ALWAYS_SOFTWARE=1`.
 
 ## Лицензия
 

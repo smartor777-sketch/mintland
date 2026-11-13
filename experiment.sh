@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# experiment.sh — ТЕКУЩИЙ эксперимент Deskland PoC.
+# experiment.sh — ТЕКУЩИЙ эксперимент Mintland PoC.
 # ЭТАП 2: тема flat.html (пляж) через GTK+WebKit-хост themehost.py + иконки из gio.
 # Меняется по мере продвижения; wall-on.sh / ярлыки не трогаем.
 #
@@ -8,7 +8,7 @@
 set -u
 
 notify_err() {
-    notify-send -u critical -a Deskland "Deskland: не запущено" "$1" 2>/dev/null || true
+    notify-send -u critical -a Mintland "Mintland: не запущено" "$1" 2>/dev/null || true
     exit 1
 }
 
@@ -23,9 +23,9 @@ command -v mpv >/dev/null || true
 HTML="${DESKLAND_HTML:-$DIR/prototype/flat.html}"
 [ -f "$HTML" ] || notify_err "Тема не найдена: $HTML"
 
-# хост: управляемое окно type=DESKTOP под иконками + WebKit + watchdog restack
-# Софтверный рендер (WebGL в WebKitGTK стабильнее с ним; нагрузка ~20% при 0.75×)
-export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"
-export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
-export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
-exec setsid python3 "$DIR/themehost.py" --html "$HTML" --marker mintland-poc-wall
+# хост: окно типа DESKTOP + keep_below, WebKit рисует сцену под иконками.
+# Используется аппаратное ускорение (WebGL2 через Mesa); софтверный рендер
+# оставлен как аварийный вариант через переменные окружения WebKit.
+setsid python3 "$DIR/themehost.py" --html "$HTML" --marker mintland-poc-wall &
+disown 2>/dev/null || true
+exit 0

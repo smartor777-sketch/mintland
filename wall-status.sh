@@ -20,5 +20,5 @@ if [ -s "$LOG" ]; then
 fi
 
 msg="$(printf '%s\n' "${lines[@]}")"
-notify-send -a Deskland -t 10000 "Deskland: статус" "$msg" 2>/dev/null \
+notify-send -a Mintland -t 10000 "Mintland: статус" "$msg" 2>/dev/null \
     || printf '%s\n' "$msg"

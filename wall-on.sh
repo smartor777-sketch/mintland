@@ -12,8 +12,20 @@ LOG="$RUN/wall.log"
 say() { notify-send -a Mintland "Mintland" "$1" 2>/dev/null || true; }
 
 # 0. Очистка возможного зависшего состояния (осиротевшие окна от предыдущего запуска)
-for p in $(pgrep -f 'mintland/themehost\.py'); do kill "$p" 2>/dev/null; done
-for p in $(pgrep -x deskwall); do kill "$p" 2>/dev/null; done
+#    Исключаем текущий процесс, чтобы не убить самого себя при тестировании из терминала.
+for pid in /proc/[0-9]*; do
+  p=$(basename "$pid")
+  [ "$p" = "$$" ] && continue
+  [ "$p" = "$PPID" ] && continue
+  cmd=$(tr '\0' ' ' < "$pid/cmdline" 2>/dev/null)
+  case "$cmd" in
+    *"mintland/themehost.py"*) kill "$p" 2>/dev/null ;;
+  esac
+done
+for p in $(pgrep -x deskwall); do
+  [ "$p" = "$$" ] && continue
+  kill "$p" 2>/dev/null
+done
 sleep 0.5
 rm -f "$PIDF"
 
@@ -44,4 +56,8 @@ fi
 echo "$PID" > "$PIDF"
 echo "== $(date '+%F %T') started, pid $PID ==" >> "$LOG"
 
-say "Слой под иконками включён (PID $PID). Иконки должны быть видны и кликабельны."
+# поднять nemo-desktop поверх нашего слоя (иначе иконки перекрываются)
+sleep 1
+"$DIR/bin/deskwall" -u 2>/dev/null || true
+
+say "Слой включён (PID $PID)."

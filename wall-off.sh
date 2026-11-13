@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# wall-off.sh — выключить эксперимент живых обоев (Deskland PoC).
-# Контракт — SAFETY.md: убиваем ТОЛЬКО свою группу; nemo-desktop не трогаем,
-# если он жив; чужие gsettings не трогаем никогда.
+# wall-off.sh — выключить эксперимент живых обоев (Mintland PoC).
+# Контракт — SAFETY.md: убиваем ТОЛЬКО свою группу; nemo-desktop перезапускаем
+# после снятия слоя (иначе он не вернёт роль рабочего стола); gsettings/dconf
+# не трогаем никогда.
 
 set -u
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -10,7 +11,7 @@ mkdir -p "$RUN"
 PIDF="$RUN/wall.pid"
 LOG="$RUN/wall.log"
 
-say() { notify-send -a Deskland "Deskland" "$1" 2>/dev/null || true; }
+say() { notify-send -a Mintland "Mintland" "$1" 2>/dev/null || true; }
 
 STOPPED=0
 
@@ -47,19 +48,18 @@ if [ -n "$LEFT" ]; then
     say "Внимание: остались процессы ($LEFT) — посмотрите run/wall.log"
 fi
 
-# 4. Здоровье рабочего стола: если nemo-desktop умер сам — поднимаем
-if ! pgrep -x nemo-desktop >/dev/null; then
-    setsid nohup nemo-desktop >/dev/null 2>&1 &
-    sleep 2
-    if pgrep -x nemo-desktop >/dev/null; then
-        say "Слой остановлен. nemo-desktop был мёртв — перезапущен (иконки вернулись)."
-    else
-        say "Слой остановлен. nemo-desktop не поднялся — запустите вручную: nemo-desktop"
-    fi
-else
+# 4. Всегда перезапускаем nemo-desktop после остановки: наш DESKTOP-слой
+#    заставляет nemo отказаться от роли рабочего стола, и без перезапуска
+#    иконки не вернутся (и следующий запуск будет без иконок).
+pkill -x nemo-desktop 2>/dev/null
+sleep 1
+setsid nohup nemo-desktop >/dev/null 2>&1 < /dev/null &
+sleep 2
+if pgrep -x nemo-desktop >/dev/null; then
     [ "$STOPPED" = 1 ] && say "Слой остановлен, иконки на месте." \
-                         || say "Ничего не запущено — выключать нечего."
+                         || say "Рабочий стол перезапущен."
+else
+    say "Слой остановлен, но nemo-desktop не поднялся — запустите: nemo-desktop"
 fi
-
 echo "== $(date '+%F %T') stopped ==" >> "$LOG"
 exit 0

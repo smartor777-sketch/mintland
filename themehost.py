@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-# themehost.py — хост темы Deskland на Linux Mint (GTK3 + WebKit2).
+# themehost.py — хост темы Mintland на Linux Mint (Cinnamon/X11).
 #
-# Окно рендеринга: WebKit-виджет reparent-ится в контейнер deskwall
-# (DESKTOP, пониженный при создании — ниже nemo-desktop). Muffin
-# композитит контейнер (ниже nemo), WebKit рисует внутрь него.
-# Иконки Nemo остаются поверх (nemo-desktop выше контейнера).
+# Слой: окно типа DESKTOP + keep_below; WebKit рисует тему flat.html.
+# nemo-desktop стартует ДО слоя и рисует иконки поверх (Muffin кладёт
+# DESKTOP-окно с BELOW-состоянием ниже nemo в том же слое).
 
 import argparse
 import atexit
@@ -20,26 +19,10 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 from gi.repository import Gtk, Gdk, GLib, WebKit2
 
-import ctypes
-import ctypes.util
-_libX11 = ctypes.CDLL(ctypes.util.find_library("X11") or "libX11.so.6")
-_libX11.XOpenDisplay.restype = ctypes.c_void_p
-_libX11.XReparentWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_int, ctypes.c_int]
-_libX11.XMapWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
-_libX11.XLowerWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
-_libX11.XFlush.argtypes = [ctypes.c_void_p]
-_libX11.XShapeCombineRectangles = None
-try:
-    _libXext = ctypes.CDLL(ctypes.util.find_library("Xext") or "libXext.so.6")
-    _libXext.XShapeCombineRectangles.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
-except Exception:
-    _libXext = None
-
 import iconsource
 
 HERE = Path(__file__).resolve().parent
 MARKER = "mintland-poc-wall"
-_DISPLAY = _libX11.XOpenDisplay(None)
 
 SHIM_JS = """
 (function () {
@@ -65,10 +48,15 @@ def _term(signum, frame):
     global _HOST
     if _HOST is not None:
         try:
-            _HOST._cleanup_container()
+            _HOST._cleanup()
         except Exception:
             pass
     sys.exit(0)
+
+
+def cairo_empty_region():
+    import cairo
+    return cairo.Region()
 
 
 class ThemeHost:
@@ -76,21 +64,27 @@ class ThemeHost:
         self.html_path = html_path
         self.win = None
         self.view = None
-        self.xid = None          # WebKit view's X window
-        self.container_proc = None
-        self.container_xid = None
+        self.xid = None
         self.last_icons = None
         self.paused = False
         self.scale = 1
-        atexit.register(self._cleanup_container)
+        atexit.register(self._cleanup)
 
     def build_window(self):
-        # GTK window (hidden, only for WebKit's widget hierarchy)
         self.win = Gtk.Window(title=MARKER)
-        self.win.set_default_size(1, 1)
-        self.win.set_decorated(False)
+        self.win.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
+        self.win.set_accept_focus(False)
+        self.win.set_focus_on_map(False)
         self.win.set_skip_taskbar_hint(True)
         self.win.set_skip_pager_hint(True)
+        self.win.set_decorated(False)
+        self.win.set_keep_below(True)
+
+        screen = Gdk.Screen.get_default()
+        rgba_visual = screen.get_rgba_visual() if screen else None
+        if rgba_visual is not None:
+            self.win.set_visual(rgba_visual)
+            self.win.set_app_paintable(True)
 
         self.view = WebKit2.WebView()
         self.view.set_hexpand(True)
@@ -104,81 +98,38 @@ class ThemeHost:
         self.view.connect("load-changed", self._on_load_changed)
         self.win.add(self.view)
 
-        # realize (creates Gdk windows) but don't show
-        self.win.realize()
-        self.view.realize()
-        while Gtk.events_pending():
-            Gtk.main_iteration()
-
-        gdkwin = self.view.get_window()
-        if gdkwin is not None:
-            try:
-                self.xid = gdkwin.get_xid()
-                self._log("view xid=0x%x" % self.xid)
-            except Exception as e:
-                self._log("xid err: %s" % e)
-
-        # контейнер deskwall (DESKTOP, пониженный)
-        self._create_container()
-
-        # reparent WebKit view into container
-        if self.xid and self.container_xid and _DISPLAY:
-            try:
-                _libX11.XReparentWindow(_DISPLAY, self.xid, self.container_xid, 0, 0)
-                _libX11.XMapWindow(_DISPLAY, self.xid)
-                _libX11.XFlush(_DISPLAY)
-                self._log("reparented view into container")
-            except Exception as e:
-                self._log("reparent err: %s" % e)
-
-        # клик-сквозность контейнера (пустая input-форма) — через XShape
-        if self.container_xid and _libXext is not None:
-            try:
-                _libXext.XShapeCombineRectangles(_DISPLAY, self.container_xid, 2, 0, 0, None, 0, 0, 0)
-                _libX11.XFlush(_DISPLAY)
-            except Exception:
-                pass
-
-        # geometry from monitor
         display = Gdk.Display.get_default()
         monitor = display.get_primary_monitor() or display.get_monitor(0)
         geom = monitor.get_geometry()
+        self.win.set_default_size(geom.width, geom.height)
+        self.win.move(geom.x, geom.y)
+
         self.scale = self._detect_scale(geom.width)
+
+        self.win.show_all()
+
+        gdkwin = self.win.get_window()
+        if gdkwin is not None:
+            try:
+                gdkwin.lower()
+            except Exception:
+                pass
+
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+
+        if gdkwin is not None:
+            region = cairo_empty_region()
+            gdkwin.input_shape_combine_region(region, 0, 0)
+            try:
+                self.xid = gdkwin.get_xid()
+                self._log("xid=0x%x" % self.xid)
+            except Exception as e:
+                self._log("xid err: %s" % e)
+                self.xid = None
 
         GLib.timeout_add(1000, self.poll_icons)
         GLib.timeout_add(500, self.poll_pause)
-
-    def _create_container(self):
-        try:
-            proc = subprocess.Popen(
-                [str(HERE / "bin/deskwall"), "--create"],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-            line = proc.stdout.readline().strip()
-            if not line.startswith("0x"):
-                self._log("container bad wid: " + line)
-                proc.terminate()
-                return
-            self.container_xid = int(line, 16)
-            self.container_proc = proc
-            self._log("container=0x%x" % self.container_xid)
-        except Exception as e:
-            self._log("container err: %s" % e)
-
-    def _cleanup_container(self):
-        if self.container_proc is not None:
-            try:
-                self.container_proc.stdin.close()
-            except Exception:
-                pass
-            try:
-                self.container_proc.terminate()
-                self.container_proc.wait(timeout=3)
-            except Exception:
-                try:
-                    self.container_proc.kill()
-                except Exception:
-                    pass
-            self.container_proc = None
 
     @staticmethod
     def _detect_scale(logical_w: int) -> int:
@@ -196,6 +147,9 @@ class ThemeHost:
         except Exception:
             pass
         return 1
+
+    def _cleanup(self):
+        pass
 
     def start(self):
         ucm = self.view.get_user_content_manager()
@@ -232,7 +186,7 @@ class ThemeHost:
         try:
             rects = iconsource.collect()
         except Exception:
-            rects = self.last_icons or []
+            rects = []
         payload = json.dumps({
             "t": "icons",
             "vis": True,
@@ -318,4 +272,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-PY

@@ -88,6 +88,19 @@ int main(int argc, char **argv) {
         XCloseDisplay(d);
         return 0;
     }
+    if (argc >= 2 && strcmp(argv[1], "-u") == 0) {
+        /* поднять nemo-desktop наверх (иконки поверх слоя) */
+        Display *d = XOpenDisplay(NULL);
+        if (!d) return 1;
+        XSetErrorHandler(ignore_xerrors);
+        Window nemo = find_nemo(d, DefaultRootWindow(d));
+        if (nemo) {
+            XRaiseWindow(d, nemo);
+            XSync(d, False);
+        }
+        XCloseDisplay(d);
+        return 0;
+    }
     if (argc >= 3 && strcmp(argv[1], "-r") == 0) {
         /* режим разового restack: deskwall -r 0xWINID — поставить окно ниже nemo */
         Display *d = XOpenDisplay(NULL);
