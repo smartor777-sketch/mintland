@@ -111,6 +111,13 @@ class ThemeHost:
             self.win.set_app_paintable(True)
 
         self.view = WebKit2.WebView()
+        # Тема грузится с file:// и подтягивает PNG-ассеты (пальмы, мальчик,
+        # котёнок). Без этого WebKit может запретить доступ к соседним файлам.
+        try:
+            ws = self.view.get_settings()
+            ws.set_allow_file_access_from_file_urls(True)
+        except Exception:
+            pass
         self.view.set_hexpand(True)
         self.view.set_vexpand(True)
         rgba = Gdk.RGBA(0, 0, 0, 0)

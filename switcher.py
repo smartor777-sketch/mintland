@@ -79,6 +79,13 @@ DEFAULT_OVERRIDES = {
 
 THEME_ORDER = {"beach": 0, "meadow": 1}
 
+# Единицы только латиницей/по-русски. Счётчики (пальмы, каяки, чайки)
+# показываем без единиц: число и так понятно.
+UNIT_LABELS = {
+    "beach": {"sigma": "px", "shoal": "px", "shallow": "px"},
+    "meadow": {"sigma": "px"},
+}
+
 
 def load_registry():
     data = json.loads(THEMES_JSON.read_text(encoding="utf-8"))
@@ -155,7 +162,7 @@ def is_running():
     return "themehost.py" in cmd
 
 
-def fmt_value(p, value):
+def fmt_value(p, value, theme_id):
     fmt = p.get("format")
     if fmt == "percent":
         return "%d%%" % round(float(value) * 100)
@@ -166,7 +173,11 @@ def fmt_value(p, value):
         text = str(int(round(float(value))))
     else:
         text = "%.2f" % float(value)
-    unit = p.get("unit")
+    unit = UNIT_LABELS.get(theme_id, {}).get(p["key"])
+    if unit is None:
+        unit = p.get("unit") or ""
+        if any("\u4e00" <= ch <= "\u9fff" for ch in unit):
+            unit = ""
     return (text + " " + unit) if unit else text
 
 
@@ -289,10 +300,10 @@ class Switcher(Gtk.Window):
         card = Gtk.Button()
         card.set_relief(Gtk.ReliefStyle.NONE)
         card.get_style_context().add_class("theme-card")
-        card.set_tooltip_text(info.get("desc", theme.get("desc", "")))
+        card.set_tooltip_text(info.get("desc", ""))
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.pack_start(self._make_thumb(tid), False, False, 0)
-        name = Gtk.Label(label=info.get("name", theme.get("name", tid)))
+        name = Gtk.Label(label=info.get("name", tid))
         name.set_xalign(0.5)
         box.pack_start(name, False, False, 0)
         desc = Gtk.Label(label=info.get("desc", ""))
@@ -349,7 +360,7 @@ class Switcher(Gtk.Window):
             theme = self.theme_by_id[self.theme_id]
             group_labels = GROUP_LABELS.get(self.theme_id, [])
             for gi, group in enumerate(theme.get("groups", [])):
-                title = Gtk.Label(label=group_labels[gi] if gi < len(group_labels) else group.get("name", ""))
+                title = Gtk.Label(label=group_labels[gi] if gi < len(group_labels) else "Параметры")
                 title.set_xalign(0)
                 title.get_style_context().add_class("group-title")
                 self.settings_box.pack_start(title, False, False, 0)
@@ -363,7 +374,7 @@ class Switcher(Gtk.Window):
 
     def _param_label(self, p):
         labels = PARAM_LABELS.get(self.theme_id, {})
-        return labels.get(p["key"], p.get("label", p["key"]))
+        return labels.get(p["key"], p["key"])
 
     def _make_param_row(self, p):
         key = p["key"]
@@ -375,8 +386,6 @@ class Switcher(Gtk.Window):
         label.set_size_request(220, -1)
         label.set_line_wrap(True)
         label.get_style_context().add_class("param-label")
-        if p.get("hint"):
-            label.set_tooltip_text(p["hint"])
         row.pack_start(label, False, False, 0)
 
         options = p.get("options")
@@ -405,7 +414,7 @@ class Switcher(Gtk.Window):
         scale.set_value(float(value))
         scale.set_draw_value(False)
         scale.set_hexpand(True)
-        val_label = Gtk.Label(label=fmt_value(p, value))
+        val_label = Gtk.Label(label=fmt_value(p, value, self.theme_id))
         val_label.set_xalign(1)
         val_label.set_size_request(74, -1)
         val_label.get_style_context().add_class("value-label")
@@ -425,7 +434,7 @@ class Switcher(Gtk.Window):
         self.state["params"][tid][key] = value
         label = self.value_labels.get(key)
         if label is not None:
-            label.set_text(fmt_value(p, value))
+            label.set_text(fmt_value(p, value, tid))
         self._schedule_persist()
 
     def _on_switch(self, _switch, state, tid, key):
