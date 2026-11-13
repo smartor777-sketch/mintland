@@ -1,11 +1,12 @@
-# Mintland на Linux Mint (Cinnamon/X11) — рабочий прототип
+# Mintland на Linux Mint (Cinnamon/X11)
 
 Проект: порт Windows-программы [Deskland](https://github.com/BLEZZ0102/Deskland)
 (адаптивные обои, сцена реагирует на позиции иконок рабочего стола) под
 Linux Mint (Cinnamon / X11).
 
-**Статус:** рабочий прототип v0.3 (пляж и луг под иконками, иконки кликабельны,
-вкл/выкл работают повторно, авто-пауза, графический переключатель тем).
+**Статус:** функциональная версия v0.3 (пляж и луг под иконками, иконки
+кликабельны, вкл/выкл работают повторно, авто-пауза, графический переключатель
+тем).
 Замерено на ноутбуке
 ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 2560×1440): активная сцена — **~65% одного ядра, то есть ~3.2% общей
@@ -70,7 +71,7 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
   (пустой DESKTOP-контейнер); текущий `themehost.py` их не использует.
 - `iconsource.py`: прямоугольники иконок из `gio metadata::nemo-icon-position`
   + виртуальные иконки из `~/.config/nemo/desktop-metadata`, сетка `desktop-grid-adjust`.
-- `experiment.sh`: запуск хоста (аппаратное ускорение WebKit).
+- `start-layer.sh`: запуск хоста (аппаратное ускорение WebKit).
 - `switcher.py`: GTK3-переключатель. Хранит выбор в
   `~/.config/mintland/settings.json` и пишет `run/control.json`; `themehost.py`
   читает control-файл, переключает HTML-тему и отправляет странице `settings`.
@@ -125,7 +126,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `themehost.py` | GTK3+WebKit2 хост: окно DESKTOP, WebKit, протокол `icons`/`pause`/`settings` |
 | `switcher.py` | GTK3-переключатель тем и параметров, вкл/выкл слоя |
 | `prototype/` | Темы и ассеты (из Deskland): `flat.html` (пляж), `meadow.html`, `settings.html`, `themes.json`, `assets/`, `i18n/`, `thumbs/` |
-| `experiment.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
+| `start-layer.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
 | `docs/` | Превью тем и скриншот панели для README |
@@ -165,9 +166,9 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 ## Безопасность (Dark Mode)
 
 Апплет Dark Mode владеет ключами dconf (включая обои `picture-uri`).
-Скрипты эксперимента **никогда** не вызывают `gsettings`/`dconf`.
+Скрипты Mintland **никогда** не вызывают `gsettings`/`dconf`.
 Kill-политика: убиваются только собственные процессы (themehost и старые
-экспериментальные deskwall); `wall-off.sh` дополнительно намеренно
+процессы deskwall); `wall-off.sh` дополнительно намеренно
 перезапускает `nemo-desktop` после снятия слоя — это возвращает иконки и не
 затрагивает Dark Mode (позиции иконок хранятся в gvfs-метаданных).
 

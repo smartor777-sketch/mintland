@@ -23,7 +23,7 @@ from gi.repository import Gtk, Gdk, GLib, WebKit2
 import iconsource
 
 HERE = Path(__file__).resolve().parent
-MARKER = "mintland-poc-wall"
+MARKER = "mintland-wall"
 
 SHIM_JS = """
 (function () {

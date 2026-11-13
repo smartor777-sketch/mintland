@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# experiment.sh — ТЕКУЩИЙ эксперимент Mintland PoC.
-# ЭТАП 2: тема flat.html (пляж) через GTK+WebKit-хост themehost.py + иконки из gio.
-# Меняется по мере продвижения; wall-on.sh / ярлыки не трогаем.
+# start-layer.sh — запуск слоя Mintland.
+# Тема по умолчанию — flat.html (пляж); выбор темы делает switcher.py.
+# Скрипт вызывается из wall-on.sh.
 #
 # ВАЖНО (см. SAFETY.md): никаких gsettings/dconf, никаких kill чужих процессов.
 
@@ -26,6 +26,6 @@ HTML="${DESKLAND_HTML:-$DIR/prototype/flat.html}"
 # хост: окно типа DESKTOP + keep_below, WebKit рисует сцену под иконками.
 # Используется аппаратное ускорение (WebGL2 через Mesa); софтверный рендер
 # оставлен как аварийный вариант через переменные окружения WebKit.
-setsid python3 "$DIR/themehost.py" --html "$HTML" --marker mintland-poc-wall &
+setsid python3 "$DIR/themehost.py" --html "$HTML" --marker mintland-wall &
 disown 2>/dev/null || true
 exit 0

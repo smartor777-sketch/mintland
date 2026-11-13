@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wall-off.sh — выключить эксперимент живых обоев (Mintland PoC).
+# wall-off.sh — выключить слой живых обоев Mintland.
 # Контракт — SAFETY.md: убиваем ТОЛЬКО свою группу; nemo-desktop перезапускаем
 # после снятия слоя (иначе он не вернёт роль рабочего стола); gsettings/dconf
 # не трогаем никогда.
@@ -15,7 +15,7 @@ say() { notify-send -a Mintland "Mintland" "$1" 2>/dev/null || true; }
 
 STOPPED=0
 
-# 1. Основной путь: kill всей группы (experiment.sh запускается через setsid)
+# 1. Основной путь: kill всей группы (start-layer.sh запускается через setsid)
 if [ -f "$PIDF" ]; then
     PID="$(cat "$PIDF" 2>/dev/null)"
     if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then

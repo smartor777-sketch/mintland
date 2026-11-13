@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wall-on.sh — включить эксперимент живых обоев (Mintland PoC).
+# wall-on.sh — включить слой живых обоев Mintland.
 # Контракт — SAFETY.md: без gsettings/dconf, только свои процессы.
 
 set -u
@@ -31,7 +31,7 @@ rm -f "$PIDF"
 
 # 2. Окружение: X11 и живой nemo-desktop — обязательны (см. SAFETY.md)
 if [ "${XDG_SESSION_TYPE:-}" != "x11" ]; then
-    say "Сессия не X11 (${XDG_SESSION_TYPE:-?}) — эксперимент требует X11."
+    say "Сессия не X11 (${XDG_SESSION_TYPE:-?}) — слой требует X11."
     exit 1
 fi
 if ! pgrep -x nemo-desktop >/dev/null; then
@@ -39,14 +39,14 @@ if ! pgrep -x nemo-desktop >/dev/null; then
     exit 1
 fi
 
-# 3. Запуск эксперимента
+# 3. Запуск слоя
 : > "$LOG"
-if ! bash "$DIR/experiment.sh" >>"$LOG" 2>&1; then
-    say "experiment.sh завершился с ошибкой — см. run/wall.log"
+if ! bash "$DIR/start-layer.sh" >>"$LOG" 2>&1; then
+    say "Скрипт запуска завершился с ошибкой — см. run/wall.log"
     exit 1
 fi
 
-# 4. Зафиксировать PID группы (experiment.sh делает setsid)
+# 4. Зафиксировать PID группы (start-layer.sh делает setsid)
 sleep 1
 PID="$(pgrep -f 'mintland/themehost\.py' | head -1)"
 if [ -z "$PID" ]; then
@@ -60,7 +60,7 @@ echo "== $(date '+%F %T') started, pid $PID ==" >> "$LOG"
 # Ждём, пока окно слоя реально появится: если поднять nemo раньше, Muffin
 # успевает положить новое DESKTOP-окно выше него — иконки пропадают.
 for _ in $(seq 1 20); do
-    xwininfo -root -tree 2>/dev/null | grep -q '"mintland-poc-wall"' && break
+    xwininfo -root -tree 2>/dev/null | grep -q '"mintland-wall"' && break
     sleep 0.5
 done
 # нескольких попыток достаточно, если Muffin переставит окна после map
