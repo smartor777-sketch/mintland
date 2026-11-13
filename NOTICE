@@ -1,0 +1,20 @@
+Mintland
+=======
+
+Mintland is an independent Linux port of the adaptive-wallpaper idea from
+Deskland. It is not affiliated with, sponsored by, or endorsed by the
+Deskland authors.
+
+This repository includes code and theme assets derived from Deskland:
+
+    https://github.com/BLEZZ0102/Deskland
+
+Deskland is licensed under the GNU General Public License, version 3.
+The `prototype/` directory in this repository is a modified/adapted copy of
+Deskland's theme code and assets and remains under GPL-3.0. Because the
+project is distributed as a combined work, Mintland as a whole is licensed
+under GPL-3.0 as well. See `LICENSE` for the full license text.
+
+The Deskland name, logo and application icon are trademarks of their
+respective owners and are not licensed under the GPL. Mintland uses its own
+name and does not claim to be an official Deskland release.

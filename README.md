@@ -103,6 +103,8 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `wall-on.sh` / `wall-off.sh` / `wall-status.sh` | Включение, выключение и статус; перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
+| `LICENSE` | Полный текст GNU GPL v3.0 |
+| `NOTICE` | Атрибуция Deskland и trademark-оговорка |
 | `.gitignore` | Исключает `bin/`, `run/`, `__pycache__` |
 
 **Чего в репозитории нет:** `bin/deskwall` — это локально собранный бинарник
@@ -170,5 +172,10 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 
 ## Лицензия
 
-Код Deskland (оригинал) — GPL-3.0. Форк с их `prototype/` = производная работа → GPL-3.0.
-Имя «Deskland» и иконка оригинала не лицензированы — наш проект использует имя «Mintland».
+Mintland распространяется под **GNU GPL v3.0**; полный текст — в [`LICENSE`](LICENSE).
+Код и ассеты Deskland (оригинал) — GPL-3.0; каталог `prototype/` — производная
+работа, поэтому проект в целом остаётся GPL-3.0. Атрибуция и trademark-оговорка —
+в [`NOTICE`](NOTICE).
+
+Имя «Deskland» и иконка оригинала не лицензированы как trademark — проект
+использует своё имя «Mintland».
