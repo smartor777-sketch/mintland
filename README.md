@@ -14,6 +14,18 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 
 ---
 
+## Как это выглядит
+
+**Панель управления** — ярлык «Mintland — темы и настройки»:
+
+![Панель управления Mintland](docs/switcher.png)
+
+**Темы** — превью из репозитория Deskland:
+
+| Пляж | Луг |
+|---|---|
+| ![Пляж](docs/theme-beach.png) | ![Луг](docs/theme-meadow.png) |
+
 ## Что работает
 
 - Сцена `flat.html` (пляж) рисуется **под иконками** рабочего стола Nemo.
@@ -116,6 +128,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `experiment.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
+| `docs/` | Превью тем и скриншот панели для README |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
 | `NOTICE` | Атрибуция Deskland и trademark-оговорка |
