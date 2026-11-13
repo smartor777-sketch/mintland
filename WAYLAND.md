@@ -17,6 +17,7 @@
 - [6. План тестов на Cinnamon 6.8](#6-план-тестов-на-cinnamon-68)
 - [7. Оценка работ](#7-оценка-работ)
 - [8. Рекомендуемый порядок работ](#8-рекомендуемый-порядок-работ)
+  - [8.1. KDE Plasma: отдельный этап](#81-kde-plasma-отдельный-этап-не-входит-в-cinnamon-mvp)
 - [9. Что сказать коллеге](#9-что-сказать-коллеге)
 - [10. Ссылки](#10-ссылки)
 
@@ -29,6 +30,7 @@
 - **`xprop` и `xwininfo` на Wayland не работают** для нативных окон. Авто-паузу надо переводить на `cinnamon-list-windows --json` или прямой D-Bus-вызов `org.cinnamon.Muffin.Debug.ListWindows`.
 - **Главный риск — не код, а порядок внутри `BACKGROUND`.** Там же лежит `csd-background` (системные обои). Протокол не определяет порядок внутри одного слоя. Если `csd-background` окажется выше Mintland, сцену не будет видно. Это надо проверить первым делом.
 - **Мультимонитор — не «почти даром».** Layer-shell даёт поверхность на output, но нужен отдельный `GtkWindow`/WebView на монитор, фильтрация иконок по монитору и учёт масштаба. Это отдельный этап.
+- **KDE/GNOME — не целевые платформы.** На Kubuntu/KDE окно со сценой, вероятно, запустится (KWin поддерживает layer-shell), но без `nemo-desktop`, `iconsource` и `cinnamon-list-windows` это будут просто анимированные обои. Для GNOME layer-shell нет. Полноценный KDE-бэкенд — отдельный этап (см. §8.1).
 - **Оценка:** 3–7 дней на одноэкранный MVP, если порядок слоёв сложится; 2–3 недели с HiDPI, мультимонитором и тестами. Если порядок `BACKGROUND` не сложится — plan B через Cinnamon-расширение/десклет, это ещё 1–2 недели.
 
 ---
@@ -143,6 +145,8 @@ flowchart BT
 | `switcher.py` | GTK3, GIF-превью | Работает; можно показать backend | 0.5 дня |
 | Мультимонитор | Только основной | Отдельная поверхность на output | 2–5 дней |
 | Тесты | X11 | Нужна машина с Cinnamon 6.8 | 3–5 дней |
+
+> Таблица — для Cinnamon. Для KDE Plasma и GNOME состав компонентов другой: layer-shell есть не везде, а иконки, авто-пауза и системные обои устроены иначе. См. §5.9 и §8.1.
 
 ---
 
@@ -418,9 +422,27 @@ cinnamon-list-windows --json | head
 
 Как временный костыль — сойдёт; как решение — хуже нативного layer-shell.
 
-### 5.9. Другие композиторы
+### 5.9. Другие композиторы и дистрибутивы: Cinnamon vs KDE vs GNOME
 
-Layer-shell есть в Cinnamon, KDE Plasma, wlroots (Sway, Hyprland, Wayfire, labwc), но **адаптация под иконки Nemo** — Cinnamon-специфична. На KDE/wlroots сцена сможет рисоваться, но `nemo-desktop` и `iconsource` могут быть не нужны/не работать. Под GNOME/Mutter layer-shell нет — схема не заработает.
+Layer-shell — общий протокол, но Mintland — не только layer-shell. Вот что реально переносится:
+
+| Компонент | Cinnamon 6.8 / Mint | KDE Plasma 5.27+ / Kubuntu | GNOME / Ubuntu |
+|---|---|---|---|
+| `gtk-layer-shell` + `BACKGROUND` | ✅ | ✅ KWin поддерживает `wlr-layer-shell`; в Plasma 5.27 есть `layer-shell-qt` | ❌ layer-shell нет |
+| Сцена WebGL поверх обоев | ✅ | ⚠️ окно запустится, но порядок с Plasma-обоями надо тестировать | ❌ только XWayland-костыль |
+| Иконки рабочего стола | `nemo-desktop` в `BOTTOM` | `plasmashell`; Nemo не используется | `nautilus` / `gnome-shell`; Nemo не используется |
+| Позиции иконок | gvfs + `desktop-metadata` | `plasma-org.kde.plasma.desktop-appletsrc` (`positions=`, `ItemGeometries-*`) — другой формат, нестабильный API | другой формат/API |
+| Авто-пауза | `cinnamon-list-windows` / D-Bus `org.cinnamon.Muffin.Debug` | KWin scripting/D-Bus; `org_kde_plasma_window_management` — привилегированный интерфейс с объявлением в `.desktop` | GNOME Shell/D-Bus или портал; ограничено |
+| Мультимонитор | отдельные поверхности на output | отдельные поверхности на output; Plasma-специфика | ограничено |
+
+Вывод:
+
+- **Cinnamon 6.8 / Mint 23** — целевая платформа, схема из этого документа рассчитана на неё.
+- **Kubuntu/KDE Plasma** — сцена, скорее всего, запустится, но это будет **не Mintland, а анимированные обои**: нет адаптации под иконки Plasma, нет авто-паузы, порядок с системными обоями не гарантирован. Для полноценной работы нужен отдельный KDE-бэкенд (см. §8.1).
+- **Ubuntu/GNOME** — layer-shell нет; нативно схема не заработает, только XWayland-костыль без адаптации к иконкам.
+- **KDE/X11** — X11-часть технически запустится, но `nemo-desktop`/`csd-background` там нет; это тоже не Mintland.
+
+То есть универсальной «одной кнопкой» это не станет. Сначала Cinnamon-путь, потом — если понадобится — отдельный KDE-бэкенд.
 
 ### 5.10. Lock screen, suspend/resume, смена темы
 
@@ -520,6 +542,7 @@ cinnamon-list-windows --json | head
 | **Итого MVP (1 монитор, 100%)** | **3–4 дня** | **5–7 дней** | Если порядок `BACKGROUND` сложится |
 | **С мультимонитором и HiDPI** | **7–10 дней** | **2–3 недели** | Без plan B |
 | **Plan B: Cinnamon-расширение/десклет** | **+1 неделя** | **+2 недели** | Если `BACKGROUND` не даёт нужный порядок |
+| **KDE Plasma backend** | **1–2 недели** | **2–3 недели** | Иконки Plasma + авто-пауза KWin + порядок с обоями; отдельный этап |
 
 ---
 
@@ -533,6 +556,24 @@ cinnamon-list-windows --json | head
 6. **Только после этого** — мультимонитор и полировка.
 7. **XWayland-fallback** оставить как аварийный режим, но не рекламировать как полноценный.
 
+### 8.1. KDE Plasma: отдельный этап, не входит в Cinnamon MVP
+
+Если после Cinnamon-пути понадобится Kubuntu/KDE, это не «включить тот же бэкенд», а отдельная интеграция. Порядок работ:
+
+1. **Проверить layer-shell и порядок слоёв.** `wayland-info | grep zwlr_layer_shell_v1` (KWin поддерживает протокол; в Plasma 5.27 есть `layer-shell-qt`). Запустить минимальный layer-shell-прототип и посмотреть, кто выше — Mintland или Plasma-обои.
+2. **Бэкенд иконок Plasma.** `iconsource.py` для Nemo здесь не работает. Варианты:
+   - Plasma scripting API (`desktops()`, `widgets()`) — не отдаёт геометрию иконок напрямую;
+   - чтение `~/.config/plasma-org.kde.plasma.desktop-appletsrc` (`positions=`, `ItemGeometries-*`) — нестабильный формат, `plasmashell` перезаписывает файл при выходе;
+   - собственный Plasma-плагин/апплет, который отдаёт прямоугольники иконок через D-Bus. Это самый надёжный, но и самый дорогой путь.
+3. **Бэкенд авто-паузы KWin.** KWin scripting/D-Bus или `org_kde_plasma_window_management`. Второй — привилегированный интерфейс: процесс должен объявить его в установленном `.desktop` (`X-KDE-Wayland-Interfaces=...`), иначе KWin не даст список окон.
+4. **Порядок с системными обоями.** Если Plasma-обои перекрывают Mintland в `BACKGROUND`, plan B — не отдельное окно, а Plasma wallpaper plugin. Это уже другая архитектура: WebKit/WebGL надо встраивать в плагин обоев, а не в `GtkWindow`.
+5. **Мультимонитор и HiDPI** — по той же схеме, что и для Cinnamon, но с учётом Plasma-модели экранов.
+6. **Тесты:** иконки Plasma, fullscreen-видео, панели, виджеты, смена обоев, мультимонитор.
+
+Оценка: **+2–3 недели** после Cinnamon MVP, если порядок слоёв с Plasma сложится. Если нет — Plasma-плагин обоев, это ещё больше и с потерей части текущей архитектуры.
+
+Важно: пока KDE-бэкенда нет, на Kubuntu можно запустить только «анимированные обои» — сцену без адаптации к иконкам и без нормальной авто-паузы. Это не полноценный Mintland.
+
 ---
 
 ## 9. Что сказать коллеге
@@ -545,6 +586,7 @@ cinnamon-list-windows --json | head
 - `nemo-desktop` на Wayland — `BOTTOM`-слой, `csd-background` — `BACKGROUND`; это правильная схема, но порядок внутри `BACKGROUND` надо тестировать.
 - `cinnamon-list-windows` — отличная замена `xprop`, но лучше через D-Bus и с проверкой доступности `org.cinnamon.Muffin.Debug`.
 - Мультимонитор и HiDPI — отдельные этапы, не «почти даром».
+- На KDE/GNOME это не «тот же бэкенд»: layer-shell есть, но иконки, авто-пауза и порядок с системными обоями — другие. Для KDE нужен отдельный этап, для GNOME layer-shell нет.
 
 ---
 
@@ -560,6 +602,9 @@ cinnamon-list-windows --json | head
 - [gtk-layer-shell reference](https://wmww.github.io/gtk-layer-shell/)
 - [Linux Mint Blog, June 2026](https://blog.linuxmint.com/?p=5046)
 - [Phoronix: Wayland no longer experimental for Cinnamon](https://www.phoronix.com/news/LinuxMint-Cinnamon-Wayland-Good)
+- [KWin layer-shell integration](https://lxr.kde.org/source/plasma/kwin/src/layershellv1integration.cpp?v=stable-kf6-qt6)
+- [Plasma scripting API](https://develop.kde.org/docs/plasma/scripting/api/)
+- [Plasma desktop icon positions](https://askubuntu.com/questions/1387893/where-does-kde-plasma-store-the-user-specified-arrangement-of-desktop-icons)
 
 ---
 
