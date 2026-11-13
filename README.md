@@ -21,7 +21,8 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
   (Компьютер, Корзина, тома) — сцена обтекает их.
 - Авто-пауза при развёрнутом/полноэкранном окне (EWMH) → <1% одного ядра:
   на паузе цикл `requestAnimationFrame` останавливается, а не просто пропускает кадры.
-- Ярлыки на рабочем столе: вкл / выкл / статус (notify-send). Трея пока нет.
+- Ярлыки на рабочем столе: вкл / выкл (notify-send). Трея и отдельного
+  ярлыка статуса нет — состояние видно по сцене и в `run/wall.log`.
 - Апплет Dark Mode не затрагивается (никаких gsettings/dconf).
 
 ## Архитектура
@@ -50,7 +51,7 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 - `iconsource.py`: прямоугольники иконок из `gio metadata::nemo-icon-position`
   + виртуальные иконки из `~/.config/nemo/desktop-metadata`, сетка `desktop-grid-adjust`.
 - `experiment.sh`: запуск хоста (аппаратное ускорение WebKit).
-- `wall-on.sh` / `wall-off.sh` / `wall-status.sh`: обвязка ярлыков.
+- `wall-on.sh` / `wall-off.sh`: обвязка ярлыков.
   `wall-on.sh` завершает старый `themehost` перед запуском (дубля не остаётся)
   и поднимает nemo после появления окна слоя; `wall-off.sh` снимает слой и
   перезапускает `nemo-desktop`, чтобы иконки гарантированно вернулись.
@@ -100,7 +101,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `themehost.py` | GTK3+WebKit2 хост: окно DESKTOP, WebKit, протокол `icons`/`pause` |
 | `prototype/` | Темы и ассеты (из Deskland): `flat.html` (пляж), `meadow.html`, `settings.html`, `themes.json`, `assets/`, `i18n/`, `thumbs/` |
 | `experiment.sh` | Запуск хоста с темой `flat.html` |
-| `wall-on.sh` / `wall-off.sh` / `wall-status.sh` | Включение, выключение и статус; перезапуск nemo после снятия слоя |
+| `wall-on.sh` / `wall-off.sh` | Включение и выключение; перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация |
 | `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
@@ -115,7 +116,6 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 
 - `Mintland-вкл.desktop` → `~/.local/bin/mintland-on.sh` → `wall-on.sh`
 - `Mintland-выкл.desktop` → `~/.local/bin/mintland-off.sh` → `wall-off.sh`
-- `Mintland-статус.desktop` → `~/.local/bin/mintland-status.sh` → `wall-status.sh`
 
 Ярлыки и symlinks создаются в системе; в репозитории их нет.
 

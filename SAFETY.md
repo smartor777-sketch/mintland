@@ -44,7 +44,6 @@
 |---|---|
 | `Mintland-вкл.desktop` | `wall-on.sh` — запустить текущий эксперимент (`experiment.sh`) |
 | `Mintland-выкл.desktop` | `wall-off.sh` — остановить, проверить чистоту |
-| `Mintland-статус.desktop` | `wall-status.sh` — что сейчас работает |
 
 ## Итоги Шага 1 (12.11.2026) — слой под иконками работает
 
@@ -88,6 +87,5 @@ application, skipping desktop setup` и не рисует иконки. Поэт
 experiment.sh   — сам эксперимент (меняем его, ярлыки не трогаем)
 wall-on.sh      — обвязка запуска: проверки окружения, PID-файл, deskwall -u
 wall-off.sh     — обвязка остановки: kill группы, перезапуск nemo-desktop
-wall-status.sh  — текущее состояние
 run/            — wall.pid, wall.log (gitignore)
 ```
