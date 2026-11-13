@@ -8,7 +8,7 @@
   - сохранение в ~/.config/mintland/settings.json;
   - передача изменений работающему themehost.py через run/control.json.
 
-Никаких gsettings/dconf — только свои файлы и скрипты (см. SAFETY.md).
+Никаких gsettings/dconf — только свои файлы и скрипты (см. docs/SAFETY.md).
 """
 
 import json

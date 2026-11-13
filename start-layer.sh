@@ -3,7 +3,7 @@
 # Тема по умолчанию — flat.html (пляж); выбор темы делает switcher.py.
 # Скрипт вызывается из wall-on.sh.
 #
-# ВАЖНО (см. SAFETY.md): никаких gsettings/dconf, никаких kill чужих процессов.
+# ВАЖНО (см. docs/SAFETY.md): никаких gsettings/dconf, никаких kill чужих процессов.
 
 set -u
 

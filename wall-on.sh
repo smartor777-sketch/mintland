@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # wall-on.sh — включить слой живых обоев Mintland.
-# Контракт — SAFETY.md: без gsettings/dconf, только свои процессы.
+# Контракт — docs/SAFETY.md: без gsettings/dconf, только свои процессы.
 
 set -u
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -29,7 +29,7 @@ done
 sleep 0.5
 rm -f "$PIDF"
 
-# 2. Окружение: X11 и живой nemo-desktop — обязательны (см. SAFETY.md)
+# 2. Окружение: X11 и живой nemo-desktop — обязательны (см. docs/SAFETY.md)
 if [ "${XDG_SESSION_TYPE:-}" != "x11" ]; then
     say "Сессия не X11 (${XDG_SESSION_TYPE:-?}) — слой требует X11."
     exit 1

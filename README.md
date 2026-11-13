@@ -15,7 +15,7 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 
 **Wayland:** пока не поддерживается. Инженерный план порта (layer-shell,
 `nemo-desktop` в `BOTTOM`, авто-пауза через `cinnamon-list-windows`, риски и
-тесты) — в [`WAYLAND.md`](WAYLAND.md).
+тесты) — в [`WAYLAND.md`](docs/WAYLAND.md).
 
 ---
 
@@ -138,15 +138,15 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `prototype/` | Темы и ассеты: `flat.html` (пляж), `meadow.html` (луг), `night.html` (ночь, без ассетов), `themes.json`, `assets/`, `i18n/`, `thumbs/` |
 | `start-layer.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
-| `README.md` | Эта документация |
-| `THEMES.md` | Контракт темы и инструкция по добавлению новой |
-| `WAYLAND.md` | План порта на Wayland: layer-shell, риски, тесты, оценка |
-| `WOLOLAND.md` | Разбор чужого проекта (Wololand): что перенять и что нет |
-| `IMPROVEMENTS.md` | Конкретные улучшения по результатам разбора, с замерами и порядком работ |
-| `PAPER.md` | Замысел объектных тем («карта на бумаге»): движок, арт, этапы |
+| `README.md` | Эта документация (единственный `.md` в корне) |
 | `tools/` | Запись GIF-превью, проверка контракта темы, кадр с сеткой иконок |
-| `docs/` | Анимированные превью тем (README и карточки приложения), скриншот панели |
-| `SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
+| `docs/` | Вся остальная документация, анимированные превью и скриншот панели |
+| `docs/THEMES.md` | Контракт темы и инструкция по добавлению новой |
+| `docs/WAYLAND.md` | План порта на Wayland: layer-shell, риски, тесты, оценка |
+| `docs/WOLOLAND.md` | Разбор чужого проекта (Wololand): что перенять и что нет |
+| `docs/IMPROVEMENTS.md` | Конкретные улучшения по результатам разбора, с замерами и порядком работ |
+| `docs/PAPER.md` | Замысел объектных тем («карта на бумаге»): движок, арт, этапы |
+| `docs/SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
 | `NOTICE` | Атрибуция Deskland и trademark-оговорка |
 | `.gitignore` | Исключает `bin/`, `run/`, `__pycache__` |
@@ -182,8 +182,8 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 Темы со статусом `locked` в `themes.json` (Мальдивы, Лес, Город и т.д.) в этой
 сборке недоступны — для них нет HTML-страниц.
 
-Как добавить свою тему — в [`THEMES.md`](THEMES.md). Что можно улучшить и в
-каком порядке — в [`IMPROVEMENTS.md`](IMPROVEMENTS.md).
+Как добавить свою тему — в [`THEMES.md`](docs/THEMES.md). Что можно улучшить и в
+каком порядке — в [`IMPROVEMENTS.md`](docs/IMPROVEMENTS.md).
 
 ## Безопасность (Dark Mode)
 
@@ -223,7 +223,7 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 
 ## Известные ограничения
 
-- Сейчас работает в X11-сессии. План порта на Wayland — в [`WAYLAND.md`](WAYLAND.md).
+- Сейчас работает в X11-сессии. План порта на Wayland — в [`WAYLAND.md`](docs/WAYLAND.md).
 - Только основной монитор.
 - `nemo-desktop` должен быть запущен **до** слоя; иначе Nemo отказывается
   от роли рабочего стола («Desktop already managed by another application»).

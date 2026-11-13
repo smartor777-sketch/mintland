@@ -8,7 +8,7 @@
 #
 # Выдача: список прямоугольников [left, top, right, bottom] в ЛОГИЧЕСКИХ
 # пикселях (физические: умножить на scale, это делает themehost).
-# Никаких вызовов gsettings/dconf (см. SAFETY.md).
+# Никаких вызовов gsettings/dconf (см. docs/SAFETY.md).
 
 import configparser
 import os
