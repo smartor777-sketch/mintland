@@ -47,8 +47,12 @@ if ! bash "$DIR/start-layer.sh" >>"$LOG" 2>&1; then
 fi
 
 # 4. Зафиксировать PID группы (start-layer.sh делает setsid)
-sleep 1
-PID="$(pgrep -f 'mintland/themehost\.py' | head -1)"
+PID=""
+for _ in $(seq 1 40); do
+    PID="$(pgrep -f 'mintland/themehost\.py' | head -1)"
+    [ -n "$PID" ] && break
+    sleep 0.25
+done
 if [ -z "$PID" ]; then
     say "Слой не поднялся — см. run/wall.log"
     exit 1
@@ -56,17 +60,46 @@ fi
 echo "$PID" > "$PIDF"
 echo "== $(date '+%F %T') started, pid $PID ==" >> "$LOG"
 
-# поднять nemo-desktop поверх нашего слоя (иначе иконки перекрываются).
-# Ждём, пока окно слоя реально появится: если поднять nemo раньше, Muffin
-# успевает положить новое DESKTOP-окно выше него — иконки пропадают.
-for _ in $(seq 1 20); do
-    xwininfo -root -tree 2>/dev/null | grep -q '"mintland-wall"' && break
-    sleep 0.5
+# 5. Поднять nemo-desktop поверх нашего слоя.
+#    Ждём появления окна слоя (а не фиксированные секунды): если поднять nemo
+#    раньше, Muffin успевает положить новое DESKTOP-окно выше него.
+LAYER_OK=0
+for _ in $(seq 1 40); do
+    if wmctrl -l 2>/dev/null | grep -q "mintland-wall"; then
+        LAYER_OK=1
+        break
+    fi
+    sleep 0.25
 done
-# нескольких попыток достаточно, если Muffin переставит окна после map
-for _ in 1 2 3; do
+
+# Позиция окна в _NET_CLIENT_LIST_STACKING (список идёт снизу вверх).
+stack_pos() {
+    xprop -root _NET_CLIENT_LIST_STACKING 2>/dev/null \
+        | tr ',' '\n' | grep -n -i "$1" | cut -d: -f1
+}
+
+# Несколько попыток: Muffin может переставить окна после map.
+# Между попытками проверяем, что окно рабочего стола действительно оказалось
+# выше нашего слоя — иначе иконки будут скрыты.
+for _ in 1 2 3 4; do
     "$DIR/bin/deskwall" -u 2>/dev/null || true
-    sleep 0.5
+    sleep 0.25
+    LW=$(wmctrl -l 2>/dev/null | grep "mintland-wall" | awk '{print $1}')
+    DW=$(wmctrl -l 2>/dev/null | grep "Рабочий стол" | awk '{print $1}')
+    if [ -z "$LW" ] || [ -z "$DW" ]; then
+        continue
+    fi
+    POS_L=$(stack_pos "$LW")
+    POS_D=$(stack_pos "$DW")
+    # Рабочий стол выше слоя — иконки видны, можно остановиться.
+    if [ -n "$POS_L" ] && [ -n "$POS_D" ] && [ "$POS_D" -gt "$POS_L" ]; then
+        break
+    fi
 done
+
+if [ "$LAYER_OK" != 1 ]; then
+    say "Окно слоя не появилось — см. run/wall.log"
+    exit 1
+fi
 
 say "Слой включён (PID $PID)."

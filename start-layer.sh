@@ -26,6 +26,17 @@ HTML="${DESKLAND_HTML:-$DIR/prototype/flat.html}"
 # хост: окно типа DESKTOP + keep_below, WebKit рисует сцену под иконками.
 # Используется аппаратное ускорение (WebGL2 через Mesa); софтверный рендер
 # оставлен как аварийный вариант через переменные окружения WebKit.
-setsid python3 "$DIR/themehost.py" --html "$HTML" --marker mintland-wall &
+#
+# Приоритет снижен: обои не должны конкурировать с приложениями пользователя.
+# nice -n 10 понижает приоритет CPU (для обычного пользователя это разрешено —
+# понижать можно всегда), ionice -c3 переводит ввод-вывод в класс idle.
+# Порядок важен: ionice запускает nice, а не наоборот, иначе класс I/O
+# теряется.
+NICE="nice -n 10"
+if command -v ionice >/dev/null 2>&1; then
+    NICE="ionice -c3 nice -n 10"
+fi
+
+setsid $NICE python3 "$DIR/themehost.py" --html "$HTML" --marker mintland-wall &
 disown 2>/dev/null || true
 exit 0

@@ -551,7 +551,10 @@ class Switcher(Gtk.Window):
 
     def _on_start(self, _btn):
         self._persist_now()
-        self._busy_until = time.monotonic() + 7
+        # wall-on.sh теперь ждёт фактической готовности (обычно 2-3 с),
+        # а не спит фиксированные паузы. Держим кнопки заблокированными
+        # чуть дольше, чтобы не поймать промежуточное состояние.
+        self._busy_until = time.monotonic() + 5
         self.status_label.set_text("Запуск слоя…")
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(False)
@@ -560,7 +563,7 @@ class Switcher(Gtk.Window):
                          start_new_session=True)
 
     def _on_stop(self, _btn):
-        self._busy_until = time.monotonic() + 5
+        self._busy_until = time.monotonic() + 4
         self.status_label.set_text("Остановка слоя…")
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(False)

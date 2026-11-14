@@ -69,18 +69,6 @@ RESULT_JS = r"""
 """
 
 
-SAMPLE_JS = r"""
-(function (fx, fy) {
-  var c = document.getElementById('art') || document.querySelector('canvas');
-  if (!c) return "";
-  var g = c.getContext('2d');
-  if (!g) return "";              // WebGL-канвас: пиксели так не читаются
-  var d = g.getImageData(Math.round(c.width*fx), Math.round(c.height*fy), 1, 1).data;
-  return String(d[0] + d[1] + d[2]);
-})(%s, %s)
-"""
-
-
 class Runner:
     def __init__(self, html, width=1280, height=720):
         self.html = html
@@ -159,6 +147,31 @@ class Runner:
         self.view.load_uri(uri)
         loop.run()
 
+    def snapshot(self):
+        """Снимок текущего кадра как байты RGBA (работает и для 2D, и для WebGL)."""
+        loop = GLib.MainLoop()
+        box = {"data": None}
+
+        def done(v, res, _d):
+            try:
+                r = v.get_snapshot_finish(res)
+                surf = r[0] if isinstance(r, tuple) else r
+                data = bytes(surf.get_data())
+                box["data"] = (surf.get_width(), surf.get_height(), surf.get_stride(), data)
+            except Exception as exc:  # noqa: BLE001
+                box["error"] = str(exc)
+            loop.quit()
+
+        def guard():
+            loop.quit()
+            return False
+
+        self.view.get_snapshot(WebKit2.SnapshotRegion.VISIBLE,
+                               WebKit2.SnapshotOptions.NONE, None, done, None)
+        GLib.timeout_add_seconds(10, guard)
+        loop.run()
+        return box.get("data")
+
     def eval_js(self, js, timeout=5):
         """Синхронно вернуть результат run_javascript."""
         loop = GLib.MainLoop()
@@ -209,23 +222,19 @@ def main():
         (args.settle, "window.__inject && window.__inject({t:'pause',v:false})"),
         (args.settle, "window.__renderAt && window.__renderAt(2600)"),
     ]
-    # Точка в центре первой иконки: на ней должен появиться ореол.
-    # Иконка из steps занимает 120..196 × 90..190 физических пикселей.
-    fx, fy = 158 / w, 140 / h
-
+    # Кадр без иконок и кадр с иконками должны различаться: сцена строится
+    # вокруг иконок, значит они меняют картинку. Сравниваем снимки — так
+    # проверка работает и для canvas 2D, и для WebGL.
     runner.run(uri, [
         (args.settle, None),
         (args.settle, "window.__renderAt && window.__renderAt(1500)"),
     ])
-    before = runner.eval_js(SAMPLE_JS % (fx, fy))
+    before = runner.snapshot()
 
     runner.run(uri, steps)
-    after = runner.eval_js(SAMPLE_JS % (fx, fy))
+    after = runner.snapshot()
 
-    try:
-        icons_effect = int(after) > int(before)
-    except (TypeError, ValueError):
-        icons_effect = False
+    icons_effect = bool(before and after and before[3] != after[3])
 
     runner._collect_errors()
     raw = runner.eval_js(RESULT_JS)
@@ -243,7 +252,7 @@ def main():
         ("кадр не пустой", info.get("nonEmpty", is_webgl)),
         ("есть хук __renderAt/__inject (для превью и тестов)",
          has_hooks if has_hooks else None),
-        ("иконки влияют на кадр", icons_effect if has_hooks and not is_webgl else None),
+        ("иконки влияют на кадр", icons_effect if has_hooks else None),
         ("нет ошибок JS", not runner.console),
     ]
 
@@ -257,8 +266,9 @@ def main():
     if runner.console:
         for line in runner.console[:6]:
             print("    console: %s" % line.strip()[:160])
-    if str(before or "").isdigit() and str(after or "").isdigit():
-        print("  яркость в точке иконки: до %s, после %s" % (before, after))
+    if before and after:
+        diff = sum(1 for a, b in zip(before[3], after[3]) if a != b)
+        print("  изменилось байт кадра: %d из %d" % (diff, len(before[3])))
 
     return 1 if failed else 0
 

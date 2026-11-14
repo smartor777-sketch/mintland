@@ -12,6 +12,7 @@ import json
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import gi
@@ -60,7 +61,25 @@ def cairo_empty_region():
     return cairo.Region()
 
 
+def _int_prop(text, key):
+    """Число из строки вывода xwininfo вида '  Absolute upper-left X:  0'."""
+    for line in text.splitlines():
+        if line.strip().startswith(key):
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                try:
+                    return int(parts[1].strip())
+                except ValueError:
+                    return None
+    return None
+
+
 class ThemeHost:
+    # Сколько ждать после последнего изменения раскладки, прежде чем слать
+    # её сцене. 700 мс — как у Wololand: достаточно, чтобы отсечь
+    # промежуточные кадры перетаскивания, и незаметно при обычных правках.
+    ICONS_DEBOUNCE_MS = 700
+
     def __init__(self, html_path: Path, control_path: Path = None):
         self.html_path = html_path
         self.control_path = control_path or (HERE / "run" / "control.json")
@@ -71,6 +90,11 @@ class ThemeHost:
         self.view = None
         self.xid = None
         self.last_icons = None
+        self._icons_timer = None
+        self._monitor_rect = None
+        self._nemo_alive = True
+        self._nemo_notified = False
+        self.started_at = time.time()
         self.paused = False
         self.scale = 1
         self._read_initial_control()
@@ -164,6 +188,8 @@ class ThemeHost:
         GLib.timeout_add(2000, self.poll_icons)
         GLib.timeout_add(1000, self.poll_pause)
         GLib.timeout_add(500, self.poll_control)
+        GLib.timeout_add_seconds(600, self._health)
+        GLib.timeout_add_seconds(5, self._check_nemo)
 
     @staticmethod
     def _detect_scale(logical_w: int) -> int:
@@ -218,6 +244,9 @@ class ThemeHost:
             self.send_settings()
             self.last_icons = None
             self.poll_icons()
+            # Первая раскладка нужна сразу: сцена стартует с пустым полем
+            # и дорисовывает берег только через морфинг.
+            self.send_icons_now()
             self.poll_pause()
             # После map/reload Muffin может положить наш DESKTOP-слой выше
             # nemo. Поднимаем nemo дважды: сразу и с запасом по времени.
@@ -235,10 +264,31 @@ class ThemeHost:
             "r": [[round(l * self.scale), round(t * self.scale),
                    round(r * self.scale), round(b * self.scale)] for l, t, r, b in rects],
         }, separators=(",", ":"))
-        if payload != self.last_icons:
-            self.last_icons = payload
-            self.send(payload)
+        if payload == self.last_icons:
+            return True
+        self.last_icons = payload
+        # Дебаунс: при перетаскивании иконки раскладка меняется десятки раз
+        # подряд, а пересчёт поля в сцене стоит ~30 мс. Ждём, пока движение
+        # прекратится, и отправляем один итоговый набор.
+        if self._icons_timer is not None:
+            GLib.source_remove(self._icons_timer)
+        self._icons_timer = GLib.timeout_add(self.ICONS_DEBOUNCE_MS,
+                                              self._flush_icons)
         return True
+
+    def _flush_icons(self):
+        self._icons_timer = None
+        if self.last_icons:
+            self.send(self.last_icons)
+        return False
+
+    def send_icons_now(self):
+        """Отправить раскладку немедленно — без дебаунса."""
+        if self._icons_timer is not None:
+            GLib.source_remove(self._icons_timer)
+            self._icons_timer = None
+        if self.last_icons:
+            self.send(self.last_icons)
 
     def poll_control(self):
         """Живое применение темы/параметров из run/control.json."""
@@ -309,15 +359,111 @@ class ThemeHost:
                                    capture_output=True, text=True, timeout=3).stdout.lower()
             if any(k in props for k in ("desktop", "dock", "notification", "tooltip", "menu")):
                 return False
-            maximized = ("_net_wm_state_maximized_horz" in props and "_net_wm_state_maximized_vert" in props)
-            fullscreen = "_net_wm_state_fullscreen" in props
-            if not (maximized or fullscreen):
-                return False
             if "_net_wm_state_hidden" in props:
                 return False
-            return True
+            maximized = ("_net_wm_state_maximized_horz" in props and "_net_wm_state_maximized_vert" in props)
+            fullscreen = "_net_wm_state_fullscreen" in props
+            if maximized or fullscreen:
+                return True
+            # Окно может закрыть рабочий стол и без maximized/fullscreen —
+            # просто растянуто почти на весь экран. Считаем площадь
+            # перекрытия: 92% (как у Wololand) оставляет запас на панель,
+            # док и тени рамки.
+            return self._covers_desktop(m)
         except Exception:
             return False
+
+    def _covers_desktop(self, win_id: str) -> bool:
+        """Закрывает ли окно рабочий стол хотя бы на 92%."""
+        try:
+            info = subprocess.run(["xwininfo", "-id", win_id],
+                                  capture_output=True, text=True, timeout=3).stdout
+            gx = _int_prop(info, "Absolute upper-left X")
+            gy = _int_prop(info, "Absolute upper-left Y")
+            gw = _int_prop(info, "Width")
+            gh = _int_prop(info, "Height")
+            if None in (gx, gy, gw, gh) or gw <= 0 or gh <= 0:
+                return False
+            mon = self.monitor_rect()
+            if mon is None:
+                return False
+            mx, my, mw, mh = mon
+            # Перекрытие окна с монитором.
+            ox = max(0, min(gx + gw, mx + mw) - max(gx, mx))
+            oy = max(0, min(gy + gh, my + mh) - max(gy, my))
+            area = float(mw * mh)
+            if area <= 0:
+                return False
+            return (ox * oy) * 100 >= area * 92
+        except Exception:
+            return False
+
+    def monitor_rect(self):
+        """Прямоугольник основного монитора в физических пикселях."""
+        if self._monitor_rect is not None:
+            return self._monitor_rect
+        try:
+            out = subprocess.run(["xrandr", "--listmonitors"],
+                                 capture_output=True, text=True, timeout=5).stdout
+            for line in out.splitlines()[1:]:
+                if "*" not in line:
+                    continue
+                # Формат: " 0: +*eDP-1 2560/344x1440/193+0+0  eDP-1"
+                for tok in line.split():
+                    # Геометрия в xrandr: "2560/344x1440/193+0+0", где
+                    # 2560 — ширина в пикселях, 1440 — высота, дальше
+                    # миллиметры и смещение.
+                    if tok.count("/") < 2 or tok.count("+") < 2:
+                        continue
+                    parts = tok.split("+")
+                    segs = parts[0].split("/")
+                    try:
+                        w = int(segs[0])
+                        h = int(segs[1].split("x")[1])
+                        ox, oy = int(parts[1]), int(parts[2])
+                    except (IndexError, ValueError):
+                        continue
+                    self._monitor_rect = (ox, oy, w, h)
+                    return self._monitor_rect
+        except Exception:
+            pass
+        return None
+
+    def _check_nemo(self):
+        """Следить за живостью nemo-desktop.
+
+        Если он упадёт при работающем слое, сцена останется, а иконок
+        не будет — пользователь увидит обои без ярлыков и не поймёт
+        причину. Сообщаем один раз.
+        """
+        try:
+            alive = subprocess.run(["pgrep", "-x", "nemo-desktop"],
+                                   capture_output=True, timeout=3).returncode == 0
+        except Exception:
+            return True
+        if alive == self._nemo_alive:
+            return True
+        self._nemo_alive = alive
+        if alive:
+            self._log("nemo-desktop снова работает")
+        else:
+            self._log("ВНИМАНИЕ: nemo-desktop пропал — иконки не рисуются")
+            self._notify_once()
+        return True
+
+    def _notify_once(self):
+        if self._nemo_notified:
+            return
+        self._nemo_notified = True
+        try:
+            subprocess.run(
+                ["notify-send", "-a", "Mintland",
+                 "Mintland: иконки рабочего стола недоступны",
+                 "Процесс nemo-desktop не запущен. Перезапустите его "
+                 "или выключите и включите слой."],
+                capture_output=True, timeout=5)
+        except Exception:
+            pass
 
     def send(self, json_str: str):
         try:
@@ -326,11 +472,34 @@ class ThemeHost:
             pass
 
     def _log(self, msg):
+        path = HERE / "run/wall.log"
         try:
-            with open(str(HERE / "run/wall.log"), "a", encoding="utf-8") as f:
+            # Лог не должен расти без предела: при долгой работе он
+            # занимает место и мешает читать свежие сообщения.
+            if path.exists() and path.stat().st_size > 256 * 1024:
+                path.unlink()
+        except Exception:
+            pass
+        try:
+            with open(str(path), "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
         except Exception:
             print(msg, file=sys.stderr)
+
+    def _health(self):
+        """Раз в 10 минут: сколько памяти занято и как долго работает слой."""
+        rss_mb = 0.0
+        try:
+            with open("/proc/self/status", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        rss_mb = int(line.split()[1]) / 1024.0
+                        break
+        except Exception:
+            pass
+        uptime = int(time.time() - self.started_at)
+        self._log("health: rss %.0f МБ, аптайм %d:%02d" % (
+            rss_mb, uptime // 60, uptime % 60))
 
     def _on_load_failed(self, webview, event, uri, error):
         self._log("load-failed: %s %s" % (uri, error))
