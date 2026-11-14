@@ -120,13 +120,30 @@ class ThemeHost:
 
     def build_window(self):
         self.win = Gtk.Window(title=MARKER)
+        # Тип DESKTOP кладёт окно в META_LAYER_BOTTOM — поверх системных
+        # обоев, но под иконками. Другие типы (NORMAL, UTILITY) уходят ниже
+        # обоев, и сцены не видно.
+        #
+        # Побочный эффект: nemo-desktop при СТАРТЕ ищет любое окно с типом
+        # DESKTOP и, найдя, отказывается вести рабочий стол
+        # («Desktop already managed by another application»). Поэтому Nemo
+        # обязан быть запущен и уже владеть рабочим столом ДО нашего слоя.
+        # Это обеспечивают wall-on.sh и wall-off.sh — см. docs/SAFETY.md.
         self.win.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
         self.win.set_accept_focus(False)
         self.win.set_focus_on_map(False)
         self.win.set_skip_taskbar_hint(True)
         self.win.set_skip_pager_hint(True)
         self.win.set_decorated(False)
-        self.win.set_keep_below(True)
+        # ВАЖНО: keep_below НЕ ставим.
+        #
+        # set_keep_below(True) выставляет _NET_WM_STATE_BELOW, а Muffin
+        # раскладывает окна по слоям так (src/meta/common.h):
+        #     META_LAYER_DESKTOP = 0   ← сюда попадает тип DESKTOP (иконки Nemo)
+        #     META_LAYER_BOTTOM  = 1   ← сюда попадает флаг BELOW (наша сцена)
+        # То есть с BELOW сцена оказывается ВЫШЕ иконок и закрывает их.
+        # Без флага окно типа DESKTOP попадает в тот же слой, что и Nemo,
+        # и порядок внутри слоя Muffin выставляет сам — иконки сверху.
 
         screen = Gdk.Screen.get_default()
         rgba_visual = screen.get_rgba_visual() if screen else None
@@ -183,6 +200,11 @@ class ThemeHost:
                 self._log("xid err: %s" % e)
                 self.xid = None
 
+        # Порядок слоёв исправляется не здесь, а в on_page_message (по
+        # сообщению 'ready'): к этому моменту Nemo уже владеет рабочим
+        # столом, а наша сцена готова к показу. Если сделать это раньше,
+        # Muffin ещё ничего не разложил и пересчёт ничего не даст.
+
         # Позиции иконок меняются только при перетаскивании — 2 с достаточно.
         # Пауза проверяется раз в секунду, без лишних подпроцессов xprop.
         GLib.timeout_add(2000, self.poll_icons)
@@ -207,6 +229,65 @@ class ThemeHost:
         except Exception:
             pass
         return 1
+
+    def _restack_layer(self):
+        """Поставить окно nemo-desktop выше нашей сцены.
+
+        Почему не через XRaiseWindow / deskwall -u: XQueryTree и EWMH-стек
+        показывают правильный порядок, но Muffin держит собственный стек
+        окон (MetaStack) и внутри META_LAYER_DESKTOP раскладывает их
+        по-своему. Оба окна — DESKTOP-типа, и наш слой может оказаться выше.
+
+        Что реально работает (проверено замерами, 4 из 4 попыток):
+        короткий unmap/map окна Nemo. Muffin считает это новым появлением
+        окна и кладёт его выше нашего слоя. Сцена и иконки видны
+        одновременно.
+
+        Делается через libX11: из GTK чужое окно не remap-нуть.
+        """
+        self._remap_nemo()
+        return False
+
+    def _remap_nemo(self):
+        """Коротко скрыть и показать окно рабочего стола Nemo.
+
+        Делается через libX11 (ctypes), без внешних утилит: xdotool в
+        системе может быть не установлен, а libX11 есть всегда — на нём
+        работает сам GTK.
+        """
+        try:
+            import ctypes
+            import ctypes.util
+
+            out = subprocess.run(
+                ["xwininfo", "-root", "-tree"],
+                capture_output=True, text=True, timeout=3).stdout
+            wid = None
+            for line in out.splitlines():
+                if "Рабочий стол" in line:
+                    wid = line.split()[0]
+                    break
+            if not wid:
+                return False
+
+            lib = ctypes.CDLL(ctypes.util.find_library("X11"))
+            lib.XOpenDisplay.restype = ctypes.c_void_p
+            lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+            display = lib.XOpenDisplay(None)
+            if not display:
+                return False
+            try:
+                xid = ctypes.c_ulong(int(wid, 16))
+                lib.XUnmapWindow(ctypes.c_void_p(display), xid)
+                lib.XSync(ctypes.c_void_p(display), 0)
+                time.sleep(0.35)
+                lib.XMapWindow(ctypes.c_void_p(display), xid)
+                lib.XSync(ctypes.c_void_p(display), 0)
+            finally:
+                lib.XCloseDisplay(ctypes.c_void_p(display))
+        except Exception:
+            pass
+        return False
 
     def _cleanup(self):
         pass
@@ -249,9 +330,14 @@ class ThemeHost:
             self.send_icons_now()
             self.poll_pause()
             # После map/reload Muffin может положить наш DESKTOP-слой выше
-            # nemo. Поднимаем nemo дважды: сразу и с запасом по времени.
-            GLib.timeout_add(300, self._raise_nemo)
-            GLib.timeout_add(1200, self._raise_nemo)
+            # nemo. Исправляем это переустановкой типа окна (_restack_layer),
+            # а НЕ подъёмом nemo: XRaiseWindow сбрасывает правильный порядок,
+            # который Muffin выставил сам, и иконки снова уходят под сцену.
+            # Первый remap — как только страница отрисовалась. Дальше
+            # повторяем: Muffin может переставить окна ещё раз.
+            self._restack_layer()
+            for delay in (700, 1500, 3000):
+                GLib.timeout_add(delay, self._remap_nemo)
 
     def poll_icons(self):
         try:
@@ -323,16 +409,6 @@ class ThemeHost:
         if not self.params:
             return
         self.send(json.dumps({"t": "settings", "v": self.params}, separators=(",", ":")))
-
-    def _raise_nemo(self):
-        """Поставить nemo-desktop выше нашего слоя (иконки поверх сцены)."""
-        try:
-            subprocess.run([str(HERE / "bin" / "deskwall"), "-u"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=3)
-        except Exception:
-            pass
-        return False
 
     def poll_pause(self):
         should = self._should_pause()
