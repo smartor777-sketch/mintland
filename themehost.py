@@ -329,15 +329,11 @@ class ThemeHost:
             # и дорисовывает берег только через морфинг.
             self.send_icons_now()
             self.poll_pause()
-            # После map/reload Muffin может положить наш DESKTOP-слой выше
-            # nemo. Исправляем это переустановкой типа окна (_restack_layer),
-            # а НЕ подъёмом nemo: XRaiseWindow сбрасывает правильный порядок,
-            # который Muffin выставил сам, и иконки снова уходят под сцену.
-            # Первый remap — как только страница отрисовалась. Дальше
-            # повторяем: Muffin может переставить окна ещё раз.
+            # После map Muffin может положить наш DESKTOP-слой выше nemo.
+            # Один короткий remap окна Nemo ставит его на место (см.
+            # _restack_layer). Больше одного раза не нужно: каждый remap
+            # заставляет иконки мигнуть, а один — незаметен.
             self._restack_layer()
-            for delay in (700, 1500, 3000):
-                GLib.timeout_add(delay, self._remap_nemo)
 
     def poll_icons(self):
         try:
