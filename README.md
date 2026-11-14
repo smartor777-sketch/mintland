@@ -146,6 +146,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `docs/WOLOLAND.md` | Разбор чужого проекта (Wololand): что перенять и что нет |
 | `docs/IMPROVEMENTS.md` | Конкретные улучшения по результатам разбора, с замерами и порядком работ |
 | `docs/PAPER.md` | Замысел объектных тем («карта на бумаге»): движок, арт, этапы |
+| `docs/OCCLUSION.md` | Как Cinnamon и Muffin раскладывают окна: слои, порядок, почему иконки уходят под сцену |
 | `docs/SAFETY.md` | Контракт безопасности (Dark Mode, kill-политика) |
 | `LICENSE` | Полный текст GNU GPL v3.0 |
 | `NOTICE` | Атрибуция Deskland и trademark-оговорка |
