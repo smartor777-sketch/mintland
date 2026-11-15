@@ -1,4 +1,5 @@
-// 草地上的小黑猫：贴图只上传一次，位置随种子更换，始终为男孩的整轮路线留空。
+// Чёрный котёнок на лугу: текстура загружается один раз, позиция зависит
+// от сида и всегда оставляет свободным весь маршрут мальчика.
 let meadowCatScene=null;
 function meadowCatSegmentDistance(p,a,b) {
   const dx=b.x-a.x,dy=b.y-a.y;
@@ -15,10 +16,11 @@ function meadowCatRunLanes(state,width,height,taskbar) {
       add(from,to);from=to;if(to.exit)break;
     }
   };
-  // 包含正在进行的那一段，以及之后一直跑出上边缘的各段。
+  // Учитываем текущий отрезок и все следующие, уходящие за верхний край.
   const current=state.routeTarget?add(state.position,state.routeTarget):state.position;
   finish(current);
-  // 下方返回后每轮走同一条路线，预留整轮，而非只避开男孩当前的位置。
+  // Внизу мальчик возвращается и проходит тот же маршрут каждый круг,
+  // поэтому резервируем круг целиком, а не только текущую точку.
   const bottom={x:Math.max(96*scale+12,Math.min(width*.70,width-612*scale-12)),y:height+116*scale+24};
   const y=(height-taskbar)*.70;
   const entry={x:Math.max(96*scale+12,bottom.x-(bottom.y-y)*.65),y};
@@ -59,7 +61,8 @@ function meadowCatTailAngle(time,sceneSeed) {
   const period=10+Math.abs(sceneSeed%4),age=(time+Math.abs(sceneSeed%1300)/1000)%period-3;
   if(age<0||age>=1.6)return 0;
   const t=age/1.6;
-  // 大部分时间安静躺着，偶尔柔和地来回摆两下，起止都回到原姿势。
+  // Большую часть времени лежит спокойно, изредка мягко качается
+  // туда-обратно и возвращается в исходную позу.
   return Math.sin(t*Math.PI*4)*Math.pow(Math.sin(t*Math.PI),2)*.34;
 }
 function prepareMeadowCat(boy,now=0) {
@@ -81,7 +84,7 @@ function createMeadowCatScene() {
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);ready=true;
   };
-  image.onerror=()=>console.warn('草地小猫素材加载失败');
+  image.onerror=()=>console.warn('не удалось загрузить спрайт котёнка для Луга');
   image.src='assets/meadow-black-kitten.png';
   return {prepare(boy,now){
     if(previousTime!==null)time+=Math.max(0,Math.min(.05,(now-previousTime)/1000));

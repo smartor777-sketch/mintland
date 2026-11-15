@@ -1,4 +1,5 @@
-// 沙滩的五款椰子树，树根更靠沙地内侧；素材和投影仅在初始化时合成。
+// Пять видов кокосовых пальм для Пляжа; корень ставим ближе к внутренней
+// стороне песка. Спрайты и тени собираются один раз при инициализации.
 const BEACH_PALM_STYLES = [
   {file: 'beach-coconut-palm-v2.png', foot: [.454, .98], crown: [9, -84], radius: 80},
   {file: 'beach-coconut-palm-curved.png', foot: [.470, .98], crown: [18, -80], radius: 84, faceSea: true},
@@ -35,7 +36,7 @@ void main() {
   vec4 tree = texture(uPalmAtlas, palmUV);
   if (tree.a < .002) discard;
   vec2 p = vec2(gl_FragCoord.x, uRes.y * uScale - gl_FragCoord.y) / uScale;
-  // 飞鸟始终从树冠上方经过。
+  // Чайки всегда проходят выше кроны.
   for (int i = 0; i < 8; i++) {
     if (float(i) >= uBirdN) break;
     vec4 b = uBird[i];vec2 q = rot(-b.z) * (p - b.xy);
@@ -52,7 +53,8 @@ function makeMaldivesPalmAtlas() {
     const image = beachPalmImages[variant], style = BEACH_PALM_STYLES[variant];
     const width = style.width || 168, height = style.height || 156;
     const footX = style.foot[0] * width, footY = style.foot[1] * height;
-    // 每种轮廓分别投影；树根位置不随素材的透明留白变化。
+    // У каждого силуэта своя тень; положение корня не зависит от
+    // прозрачных полей вокруг спрайта.
     const shadow = document.createElement('canvas');shadow.width = 448;shadow.height = 512;
     const shadowCtx = shadow.getContext('2d');shadowCtx.scale(2, 2);
     shadowCtx.translate(112, 162);shadowCtx.transform(.85, .08, 0, -.50, 0, 0);
@@ -66,7 +68,8 @@ function makeMaldivesPalmAtlas() {
     ctx.save();ctx.translate(112, 162);ctx.filter = 'saturate(.94) brightness(.98)';
     ctx.drawImage(image, -footX, -footY, width, height);ctx.restore();ctx.restore();
   }
-  // 一次性压低黄色与饱和度，保持偏灰的深绿色；不增加每帧的调色开销。
+  // Один раз приглушаем жёлтый и насыщенность, чтобы зелень осталась
+  // серовато-тёмной. В кадре перекрашивать не нужно — экономим время.
   const pixels = ctx.getImageData(0, 0, atlas.width, atlas.height), rgba = pixels.data;
   for (let i = 0; i < rgba.length; i += 4) {
     if (!rgba[i + 3]) continue;
@@ -109,10 +112,13 @@ function chooseMaldivesPalms() {
   for (let i = order.length - 1; i > 0; i--) {const j = Math.floor(random() * (i + 1));[order[i], order[j]] = [order[j], order[i]];}
   const styleRandom = mulberry32((seed ^ 0x6ac309) >>> 0);
   while (order.length < 10) order.push(Math.floor(styleRandom() * BEACH_PALM_STYLES.length));
-  // 在整片合适的沙地中均匀抽选，不偏向同一条等距岸线；固定种子避免每帧跳动。
+  // Выбираем равномерно по всей подходящей полосе песка, а не вдоль
+  // одной линии равного удаления от берега. Сид фиксирован, иначе
+  // пальмы прыгали бы между кадрами.
   for (const variant of order) {
     const style = BEACH_PALM_STYLES[variant], spacing = 60 + random() * 35;let selected = null;
-    // 只尝试正常尺寸；沙地或图标间距不足时省略这棵树，不缩成迷你树。
+    // Пробуем только обычный размер: если песка или места между
+    // иконками не хватает, пальму пропускаем, а не уменьшаем.
     for (const baseScale of [.62]) {
       const scale = baseScale * .80 * (style.size || 1);
       const radius = style.radius * scale, offsetX = random() * 13, offsetY = random() * 13;let best = null;
@@ -120,7 +126,8 @@ function chooseMaldivesPalms() {
         const shore = sampleArr(FB.s, x, y);
         if (shore > -25 || shore < -58) continue;
         if (chosen.some(q => Math.hypot(q.x - x, q.y - y) < spacing)) continue;
-        // 弯干款以根部为轴翻转，弯曲方向跟随岸线朝向海水；不旋转树的竖直视角。
+        // Изогнутую пальму отражаем вокруг корня: изгиб смотрит в сторону
+        // моря. Вертикальный ракурс дерева не поворачиваем.
         const seaX = style.faceSea ? sampleArr(FB.s, x + 8, y) - sampleArr(FB.s, x - 8, y) : 0;
         const mirror = style.faceSea && seaX * style.crown[0] < 0 ? -1 : 1;
         const crown = {x: x + style.crown[0] * scale * mirror, y: y + style.crown[1] * scale};

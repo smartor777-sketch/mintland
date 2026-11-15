@@ -547,6 +547,44 @@
           "unit": ""
         }
       }
+    },
+    "night": {
+      "name": "Night",
+      "desc": "A starry sky with aurora and mist; your icons sit in a soft halo",
+      "groups": [
+        "Icons",
+        "Sky",
+        "Mist"
+      ],
+      "params": {
+        "halo": {
+          "label": "Halo around icons",
+          "hint": "a soft glow so icons read against the dark sky",
+          "unit": "px"
+        },
+        "aurora": {
+          "label": "Aurora",
+          "hint": "brightness of the aurora ribbons above the horizon"
+        },
+        "shoot": {
+          "label": "Shooting stars",
+          "hint": "how many meteors at once",
+          "unit": ""
+        },
+        "moon": {
+          "label": "Moon",
+          "hint": "the moon disc and its halo",
+          "options": [
+            "hide",
+            "show"
+          ],
+          "unit": ""
+        },
+        "mist": {
+          "label": "Mist density",
+          "hint": "low wisps of mist over the hills"
+        }
+      }
     }
   }
 }

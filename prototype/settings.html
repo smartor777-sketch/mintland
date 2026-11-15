@@ -1,20 +1,28 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Deskland Preview</title>
+<title>Mintland — настройки</title>
 <!--
-  Deskland 设置窗口
-  - 由桌面宿主（host/Deskland.exe）在 WebView2 里打开；单独用浏览器打开时使用模拟数据，方便调界面
-  - 主题与参数来自 themes.json，控件按清单自动生成
-  - 实时预览：iframe 加载主题页面的 ?preview=1 模式，用你桌面上真实的图标位置
-  - 和宿主的消息（JSON 字符串）：
-      发出：hello / set {theme,key,value} / reset {theme} / theme {id} / autostart {v} / share / shareVideo / openShare / revealShare / updateProgram
-      收到：init {theme,params,screen,autostart,autostartWarn} / icons {vis,r} / autostart {v} / recProgress {p}
-            / shareResult {ok,kind?,thumb,path,url?,msg}（kind = 'video' 时 url 是能直接播放的视频地址）
-            / updateState {version,status,progress,error}（商店版下载安装进度由宿主提供）
-      autostartWarn：开机自启这次没跑起来（被安全软件拦了）时的提醒文字，空字符串 = 没问题；点"知道了"发 autostartWarnSeen
+  Окно настроек Mintland
+  - Открывается из списка тем и из лотка; при открытии в обычном браузере
+    используются тестовые данные, чтобы удобно было править интерфейс
+  - Темы и параметры берутся из themes.json, элементы управления строятся
+    по этому списку автоматически
+  - Живой предпросмотр: iframe загружает страницу темы с ?preview=1 и
+    использует настоящие позиции иконок вашего рабочего стола
+  - Сообщения с процессами программы (строки JSON):
+      отправляются: hello / set {theme,key,value} / reset {theme} / theme {id}
+        / autostart {v} / share / shareVideo / openShare / revealShare / updateProgram
+      принимаются: init {theme,params,screen,autostart,autostartWarn}
+        / icons {vis,r} / autostart {v} / recProgress {p}
+        / shareResult {ok,kind?,thumb,path,url?,msg}
+          (при kind = 'video' в url лежит адрес видео, которое можно открыть)
+        / updateState {version,status,progress,error}
+      autostartWarn: текст предупреждения, если автозапуск в этот раз не
+      сработал; пустая строка — всё в порядке. По нажатию «Понятно»
+      отправляется autostartWarnSeen.
 -->
 <style>
   :root {
@@ -37,12 +45,12 @@
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg); color: var(--text); overflow: hidden;
-    font: 13px/1.5 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
-    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); user-select: none;   /* 顶栏 / 左右两栏 / 底栏 */
+    font: 13px/1.5 "Cantarell", "Ubuntu", "Noto Sans", "DejaVu Sans", system-ui, sans-serif;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); user-select: none;   /* верхняя строка / две колонки / нижняя строка */
   }
   h1, h2, h3, p { margin: 0; }
 
-  /* ---------- 顶栏：左边"主题"，右边开机自启 ---------- */
+  /* ---------- Верхняя строка: слева «Темы», справа автозапуск ---------- */
   .top { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 32px 24px; }
   .brand { font-size: 25px; line-height: 1; font-weight: 750; letter-spacing: -1.2px; }
   .top .section-title { margin: 0; color: var(--text); font-size: 13px; letter-spacing: 0; padding: 5px 0; border-bottom: 2px solid var(--text); }
@@ -53,7 +61,9 @@
   .lang-row select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
     width: 170px; flex: none; padding: 7px 9px; cursor: pointer; }
   .lang-row select:hover, .lang-row select:focus-visible { border-color: var(--accent); outline: none; }
-  html:not(.ready) body { visibility: hidden; }   /* 按界面语言填好文字再显示，免得先闪一下中文 */
+  /* Показываем страницу только после подстановки текстов: иначе на миг
+     мелькал бы чужой язык. */
+  html:not(.ready) body { visibility: hidden; }
 
   .switch-row { position: relative; display: flex; align-items: center; gap: 9px; color: var(--muted); cursor: pointer; white-space: nowrap; }
   .switch-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -67,7 +77,7 @@
   .switch-row.is-disabled .switch { background: var(--track); }
   button:focus-visible, a:focus-visible { outline: 2px solid var(--muted); outline-offset: 3px; }
 
-  /* ---------- 提醒（开机自启被拦） ---------- */
+  /* ---------- Предупреждение (автозапуск заблокирован) ---------- */
   .warn { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
     background: rgba(240, 160, 40, .12); border: 1px solid rgba(220, 140, 30, .35); color: var(--text); }
   .warn[hidden] { display: none; }
@@ -76,7 +86,8 @@
   .warn button { flex: none; font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
     border: 1px solid var(--line); background: var(--panel); color: var(--text); }
 
-  /* 有更新时才出现；版本信息由宿主统一提供，不在页面里猜下载地址。 */
+  /* Появляется только при наличии обновления. Версию и адрес загрузки
+     сообщает программа — страница их не угадывает. */
   .update-notice { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; padding: 14px 16px;
     border: 1px solid var(--line); border-radius: 14px; background: #f5f5f3; }
   .update-notice[hidden] { display: none; }
@@ -90,17 +101,18 @@
   .update-action:hover { border-color: #000; background: #000; }
   .update-action:disabled { opacity: .65; cursor: default; }
 
-  /* ---------- 左右两栏：左边主题，右边预览 + 参数 ---------- */
+  /* ---------- Две колонки: слева темы, справа предпросмотр и параметры ---------- */
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 28px; padding: 0 32px; min-height: 0; }
   .side { display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 22px; background: var(--panel); border-radius: 24px; }
 
-  /* ---------- 主题 ---------- */
+  /* ---------- Темы ---------- */
   .themes { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   .collection-head { flex: none; padding: 2px 4px 22px; }
   .collection-head h1 { font-size: clamp(26px, 2.8vw, 36px); font-weight: 650; letter-spacing: -.05em; line-height: 1.25; }
   .collection-head p { color: var(--muted); font-size: 12px; margin-top: 8px; }
   .section-title { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .04em; margin-bottom: 10px; }
-  /* 按宽度自动排几列，主题多了就往下滚（以后会有很多辑、上百个主题） */
+  /* Число колонок подстраивается под ширину окна, а при большом числе тем
+     список прокручивается вниз. */
   .theme-list { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
     align-content: start; gap: 16px; padding: 4px 8px 18px 4px; margin-left: -4px; margin-right: -8px; }
   .theme-list::-webkit-scrollbar { width: 8px; }
@@ -113,7 +125,8 @@
   .theme:hover:not(:disabled) { transform: translateY(-2px); background: var(--panel-2); }
   .theme.on { border-color: rgba(128, 128, 128, .5); box-shadow: var(--selection-shadow); }
   .theme:disabled { cursor: default; }
-  /* 缩略图使用 prototype/thumbs/ 中的自定义图片（见 themes.json 的 thumb），渐变作为图片未加载时的底色 */
+  /* Превью берётся из prototype/thumbs/ (поле thumb в themes.json), а
+     градиент служит подложкой, пока картинка не загрузилась. */
   .theme-copy { flex: 1; padding: 16px 16px 14px; }
   .theme-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .theme-arrow { flex: none; width: 17px; height: 17px; color: var(--muted); }
@@ -140,9 +153,9 @@
   .theme.on .badge::before { content: ""; width: 4px; height: 4px; background: currentColor; border-radius: 50%; }
   .theme .name { margin-top: 12px; font-weight: 650; font-size: 22px; line-height: 1.2; letter-spacing: -.035em; }
   .theme .desc { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.5; min-height: 3em;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }   /* 两行摘要，完整说明在右侧 */
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }   /* две строки описания, полностью — справа */
 
-  /* ---------- 预览 + 参数 ---------- */
+  /* ---------- Предпросмотр и параметры ---------- */
   .card { min-height: 0; }
   .preview-card { flex: none; }
   .preview-head { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -167,14 +180,15 @@
   .param .value { color: var(--text); font-variant-numeric: tabular-nums; font-size: 11px; min-width: 44px; text-align: right; white-space: nowrap; }
   .param.changed .value { color: var(--accent); font-weight: 600; }
   .param .right { display: flex; align-items: center; gap: 4px; }
-  /* 单项恢复默认：只有改过才出现 */
+  /* Сброс одного параметра: кнопка видна, только если значение изменено */
   .undo {
     width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
-    font: 13px/20px "Segoe UI Symbol", "Segoe UI", sans-serif; cursor: pointer; visibility: hidden;
+    font: 13px/20px "Noto Sans Symbols", "DejaVu Sans", sans-serif; cursor: pointer; visibility: hidden;
   }
   .param.changed .undo { visibility: visible; }
   .undo:hover { background: var(--accent-soft); color: var(--accent); }
-  /* 选项（分段按钮）：比如时段 白天 / 傍晚 / 晚上 */
+  /* Варианты (сегментированные кнопки), например время суток:
+     день / вечер / ночь */
   .opts { display: flex; gap: 3px; margin: 8px 0 2px; padding: 3px; background: var(--panel-2); border-radius: 10px; }
   .opts button { flex: 1; min-width: 0; padding: 6px 3px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
   .opts button:hover { background: var(--accent-soft); }
@@ -196,7 +210,7 @@
   .chip { padding: 2px 9px; border-radius: 10px; border: 1px dashed var(--line); background: var(--panel-2); color: var(--muted); }
   .empty { padding: 40px 10px; text-align: center; color: var(--muted); }
 
-  /* ---------- 一键分享 ---------- */
+  /* ---------- Поделиться одним нажатием ---------- */
   .preview-actions { display: grid; grid-template-columns: minmax(0, .8fr) repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
   .preview-actions .share { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 5px; padding: 9px 5px; font-size: 11px; white-space: nowrap; }
   #share { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -204,7 +218,8 @@
   .modal video { display: block; width: 100%; border-radius: 8px; background: #000; box-shadow: inset 0 0 0 1px var(--line), var(--shadow); }
   .modal video[hidden], .modal img[hidden] { display: none; }
   .preview-actions .share svg { width: 14px; height: 14px; flex: none; }
-  .preview-actions .share span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* 别的语言字长，放不下用省略号（按钮有完整的提示） */
+  .preview-actions .share span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* В других языках текст длиннее — обрезаем многоточием, полный текст
+     остаётся во всплывающей подсказке. */
   :is(:lang(ru), :lang(es), :lang(pt), :lang(fr), :lang(de), :lang(ja), :lang(ko)) .preview-actions .share span { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
   :lang(ja) body { font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif; }
   :lang(ko) body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; word-break: keep-all; }
@@ -242,7 +257,7 @@
   .ghost-btn.feedback-button { display: inline-flex; align-items: center; gap: 6px; }
   .feedback-button svg { display: block; flex: none; width: 14px; height: 14px; }
 
-  /* ---------- 底栏 ---------- */
+  /* ---------- Нижняя строка ---------- */
   .bottom { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 32px 20px; color: var(--faint); font-size: 11px; }
   .saved { transition: color .2s; }
   .saved.flash { color: var(--text); }
@@ -274,16 +289,16 @@
 <body>
 <header class="top">
   <div class="top-left">
-    <div class="brand">Deskland Preview</div>
-    <div class="section-title" data-i18n="themes">主题</div>
+    <div class="brand">Mintland</div>
+    <div class="section-title" data-i18n="themes">Темы</div>
   </div>
   <div class="top-right">
     <label class="lang-row">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg>
       <select id="lang" data-i18n-title="language" aria-label="Language"></select>
     </label>
-    <label class="switch-row" data-i18n-title="autostartTitle" title="开机后自动运行 Deskland">
-      <span data-i18n="autostart">开机自动启动</span><input type="checkbox" id="autostart"><i class="switch"></i>
+    <label class="switch-row" data-i18n-title="autostartTitle" title="Запускать Mintland автоматически при входе">
+      <span data-i18n="autostart">Запускать при входе</span><input type="checkbox" id="autostart"><i class="switch"></i>
     </label>
   </div>
 </header>
@@ -291,33 +306,33 @@
 <main class="layout">
   <section class="themes">
     <div class="collection-head">
-      <h1 data-i18n="collectionTitle">选一片风景。</h1>
-      <p data-i18n="collectionSubtitle">让图标成为风景的一部分。</p>
+      <h1 data-i18n="collectionTitle">Выберите пейзаж.</h1>
+      <p data-i18n="collectionSubtitle">Пусть иконки станут частью пейзажа.</p>
     </div>
     <div class="update-notice" id="updateNotice" hidden role="status" aria-live="polite">
       <span class="update-symbol" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5"/><path d="M4 12v3.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V12"/></svg></span>
-      <div class="update-copy"><b data-i18n="updateAvailable">有更新可用</b><p id="updateVersion"></p></div>
-      <button class="ghost-btn update-action" id="updateProgram" data-i18n="updateProgram">立即更新</button>
+      <div class="update-copy"><b data-i18n="updateAvailable">Доступно обновление</b><p id="updateVersion"></p></div>
+      <button class="ghost-btn update-action" id="updateProgram" data-i18n="updateProgram">Обновить</button>
     </div>
-    <div class="warn" id="autostartWarn" hidden role="alert"><p><b data-i18n="autostartBlocked">开机自动启动可能被拦截了</b><br><span id="autostartWarnText"></span></p><button id="autostartWarnOk" data-i18n="gotIt">知道了</button></div>
+    <div class="warn" id="autostartWarn" hidden role="alert"><p><b data-i18n="autostartBlocked">Возможно, автозапуск заблокирован</b><br><span id="autostartWarnText"></span></p><button id="autostartWarnOk" data-i18n="gotIt">Понятно</button></div>
     <div class="theme-list" id="themes"></div>
   </section>
 
   <div class="side">
     <section class="card preview-card">
-      <div class="preview-head"><h2 id="themeName">　</h2><label class="switch-row adaptive-switch" id="adaptiveRow" hidden><span data-i18n="adaptive">自适应</span><input type="checkbox" id="adaptive" role="switch" checked><i class="switch" aria-hidden="true"></i></label></div>
-      <div class="stage" id="stage"><div class="preview" id="previewBox"><iframe id="preview" data-i18n-title="livePreview" title="实时预览" tabindex="-1"></iframe></div></div>
-      <p class="preview-foot"><span class="live-dot"></span><span id="previewFoot">实时预览</span></p>
+      <div class="preview-head"><h2 id="themeName">&nbsp;</h2><label class="switch-row adaptive-switch" id="adaptiveRow" hidden><span data-i18n="adaptive">Адаптивно</span><input type="checkbox" id="adaptive" role="switch" checked><i class="switch" aria-hidden="true"></i></label></div>
+      <div class="stage" id="stage"><div class="preview" id="previewBox"><iframe id="preview" data-i18n-title="livePreview" title="Живой предпросмотр" tabindex="-1"></iframe></div></div>
+      <p class="preview-foot"><span class="live-dot"></span><span id="previewFoot">Живой предпросмотр</span></p>
       <div class="preview-actions">
-        <button class="ghost-btn share" id="reseed" data-i18n-title="refreshTitle" title="重新生成这个主题的画面">
+        <button class="ghost-btn share" id="reseed" data-i18n-title="refreshTitle" title="Сгенерировать новый пейзаж для этой темы">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.75"/><path d="M13.4 2.6v3.2h-3.2"/></svg>
-          <span data-i18n="refresh">刷新</span></button>
-        <button class="ghost-btn share" id="share" data-i18n-title="shareImageTitle" title="用保护隐私的方式分享你的桌面图片">
+          <span data-i18n="refresh">Обновить</span></button>
+        <button class="ghost-btn share" id="share" data-i18n-title="shareImageTitle" title="Сохранить изображение рабочего стола, не раскрывая личные файлы">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1.2"/><path d="m2.5 11.5 3.5-3 2.5 2 2-1.5 3 2.5"/></svg>
-          <span id="shareText">分享图片</span></button>
-        <button class="ghost-btn share" id="shareVideo" data-i18n-title="shareVideoTitle" title="用保护隐私的方式分享你的桌面动画">
+          <span id="shareText">Изображение</span></button>
+        <button class="ghost-btn share" id="shareVideo" data-i18n-title="shareVideoTitle" title="Записать анимацию рабочего стола, не раскрывая личные файлы">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="3.5" width="9" height="9" rx="1.5"/><path d="m10.8 6.6 3.4-2v6.8l-3.4-2"/></svg>
-          <span id="shareVideoText">分享动画</span></button>
+          <span id="shareVideoText">Видео</span></button>
       </div>
     </section>
     <section class="card controls" id="controls"></section>
@@ -327,54 +342,54 @@
 <div class="modal" id="purchaseModal" hidden role="dialog" aria-modal="true" aria-labelledby="purchaseTitle">
   <div class="box purchase-box">
     <div class="purchase-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
-    <h3 id="purchaseTitle" data-i18n="purchaseTitle">购买壁纸版</h3>
+    <h3 id="purchaseTitle" data-i18n="purchaseTitle">Расширенный набор</h3>
     <p class="sub" id="purchaseTheme"></p>
-    <p class="sub" data-i18n="purchaseMessage">体验版可永久使用沙滩和草地。壁纸版可解锁更多主题，并在同一个 Deskland 中使用。</p>
+    <p class="sub" data-i18n="purchaseMessage">Пляж и Луг доступны всегда. Расширенный набор открывает остальные темы в том же приложении Mintland.</p>
     <div class="actions">
-      <button class="ghost-btn" id="purchaseLater" data-i18n="purchaseLater">继续体验</button>
-      <button class="ghost-btn primary" id="purchaseWebsite" data-i18n="purchaseWebsite">前往官网</button>
+      <button class="ghost-btn" id="purchaseLater" data-i18n="purchaseLater">Продолжить осмотр</button>
+      <button class="ghost-btn primary" id="purchaseWebsite" data-i18n="purchaseWebsite">Открыть сайт</button>
     </div>
   </div>
 </div>
 
 <div class="modal" id="shareModal" hidden role="dialog" aria-modal="true" aria-labelledby="shareTitle">
   <div class="box">
-    <h3 id="shareTitle">桌面图已经准备好了</h3>
-    <p class="sub" id="shareSub">图标换成了示例图标，文件名换成了色块，不会露出你的文件。图片已复制到剪贴板，可以直接粘贴到聊天、微博、小红书……</p>
-    <img id="shareImg" data-i18n-alt="sharePreviewAlt" alt="分享图预览">
+    <h3 id="shareTitle">Изображение рабочего стола готово</h3>
+    <p class="sub" id="shareSub">Иконки заменены примерами, а имена файлов — цветными плашками, поэтому ваши файлы не видны. Изображение скопировано в буфер обмена: его можно сразу вставить в чат или публикацию.</p>
+    <img id="shareImg" data-i18n-alt="sharePreviewAlt" alt="Предпросмотр изображения для публикации">
     <video id="shareVid" hidden autoplay loop muted playsinline controls></video>
     <p class="path" id="sharePath"></p>
     <div class="actions">
-      <button class="ghost-btn" id="shareReveal" data-i18n="openFolder">打开所在文件夹</button>
-      <button class="ghost-btn" id="shareOpen">打开图片</button>
-      <a class="ghost-btn" id="shareDownload" hidden download="Deskland.png">保存图片</a>
-      <button class="ghost-btn primary" id="shareClose" data-i18n="ok">好的</button>
+      <button class="ghost-btn" id="shareReveal" data-i18n="openFolder">Показать в папке</button>
+      <button class="ghost-btn" id="shareOpen">Открыть изображение</button>
+      <a class="ghost-btn" id="shareDownload" hidden download="Mintland.png">Сохранить изображение</a>
+      <button class="ghost-btn primary" id="shareClose" data-i18n="ok">Готово</button>
     </div>
   </div>
 </div>
 
 <div class="modal" id="helpModal" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
   <div class="box help-box">
-    <button class="auth-close" id="helpCloseX" data-i18n-title="close" title="关闭" aria-label="Close">×</button>
-    <h3 id="helpTitle" data-i18n="helpTitle">使用帮助</h3>
-    <p class="sub" data-i18n="helpSubtitle">常见使用问题和解决方法</p>
+    <button class="auth-close" id="helpCloseX" data-i18n-title="close" title="Закрыть" aria-label="Закрыть">×</button>
+    <h3 id="helpTitle" data-i18n="helpTitle">Справка</h3>
+    <p class="sub" data-i18n="helpSubtitle">Частые вопросы и неполадки</p>
     <section class="help-article">
-      <h4 data-i18n="helpWallpaperQ">Deskland 频繁闪烁或重启，怎么办？</h4>
-      <p data-i18n="helpWallpaperA">如果系统壁纸会定时自动切换，切换时可能让 Deskland 闪烁或反复重启。请把常规壁纸改成不会自动切换的固定背景。</p>
+      <h4 data-i18n="helpWallpaperQ">Mintland мигает или перезапускается. Что делать?</h4>
+      <p data-i18n="helpWallpaperA">Если системные обои меняются автоматически, каждое изменение может заставлять Mintland мигать или перезапускаться. Используйте неподвижный фон без смены изображений.</p>
       <ol>
-        <li data-i18n="helpWallpaperStep1">打开 Windows 设置 → 个性化 → 背景。</li>
-        <li data-i18n="helpWallpaperStep2">将“个性化设置背景”设为“图片”或“纯色”，不要选择“幻灯片放映”或“Windows 聚焦”。</li>
-        <li data-i18n="helpWallpaperStep3">改完后重新打开 Deskland。</li>
+        <li data-i18n="helpWallpaperStep1">Откройте «Параметры системы» → «Оформление» → «Обои».</li>
+        <li data-i18n="helpWallpaperStep2">Выберите одно изображение или сплошной цвет. Не используйте слайд-шоу и динамические обои.</li>
+        <li data-i18n="helpWallpaperStep3">После изменения настройки перезапустите Mintland.</li>
       </ol>
     </section>
-    <div class="actions"><button class="ghost-btn primary" id="helpDone" data-i18n="gotIt">知道了</button></div>
+    <div class="actions"><button class="ghost-btn primary" id="helpDone" data-i18n="gotIt">Понятно</button></div>
   </div>
 </div>
 
 <footer class="bottom">
-  <span class="saved" id="saved" data-i18n="autosave">设置会自动保存，并立即应用到桌面</span>
+  <span class="saved" id="saved" data-i18n="autosave">Изменения сохраняются автоматически и сразу применяются к рабочему столу</span>
   <div class="bottom-actions">
-    <button class="ghost-btn help-button" id="helpOpen" data-i18n-title="helpButtonTitle" title="常见问题" aria-label="Help">?</button>
+    <button class="ghost-btn help-button" id="helpOpen" data-i18n-title="helpButtonTitle" title="Частые вопросы" aria-label="Справка">?</button>
   </div>
 </footer>
 
@@ -385,45 +400,53 @@ const host = window.chrome && window.chrome.webview;
 const send = m => { if (host) host.postMessage(JSON.stringify(m)); };
 
 const state = { registry0: null, registry: null, theme: 'beach', params: {}, screen: null, icons: null,
-  langSetting: 'auto', langSys: 'zh-CN', autostartWarn: false, autostartSw: '',
+  langSetting: 'auto', langSys: 'ru', autostartWarn: false, autostartSw: '',
   updateVersion: '', updateStatus: '', updateProgress: -1, updateError: '' };
 const $ = id => document.getElementById(id);
 const frame = $('preview');
 
-/* ---------- 界面语言：文字表在 i18n/<语言>.json（ui：界面文字；themes：主题名和参数——简体中文的就是 themes.json 本身） ---------- */
-// 增加语言时同步宿主 I18n.Supported 与体验版导出的语言列表。
-const LANGS = { 'en': 'English', 'zh-CN': '简体中文' };
+/* ---------- Язык интерфейса ----------
+   Таблицы текстов лежат в i18n/<язык>.json: раздел ui — надписи интерфейса,
+   раздел themes — названия тем и параметров. Русские названия тем и
+   параметров уже лежат в themes.json, поэтому в ru.json раздела themes нет.
+   При добавлении языка его нужно внести и в список ниже. */
+const LANGS = { 'ru': 'Русский', 'en': 'English' };
 const I18N = {};
-let lang = 'zh-CN';
+let lang = 'ru';
 const loadLang = code => I18N[code] ? Promise.resolve() :
   fetch('i18n/' + code + '.json').then(r => r.json()).then(j => { I18N[code] = j; }).catch(() => { I18N[code] = {}; });
-// 一句界面文字：当前语言 → 英文 → 简体中文；{名字} 换成 vars 里的值
+// Одна надпись: текущий язык → русский → английский; {имя} подставляется
+// из vars.
 function t(key, vars) {
   const pick = c => I18N[c] && I18N[c].ui && I18N[c].ui[key];
-  let str = pick(lang) ?? pick('en') ?? pick('zh-CN') ?? key;
+  let str = pick(lang) ?? pick('ru') ?? pick('en') ?? key;
   if (vars) str = str.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   return str;
 }
-// 更新、授权和反馈共用同一组底层连接错误；各业务仍可覆盖成更具体的提示。
+// Обновление и обмен файлами используют один набор сетевых ошибок;
+// конкретная операция может уточнить текст.
 function connectionErrorText(code) {
   const keys = { network_timeout: 'networkTimeout', network_dns: 'networkDns', network_tls: 'networkTls',
     network_local: 'networkLocal', network_error: 'networkLocal', server_unavailable: 'serverUnavailable',
     server_rejected: 'serverRejected', server_invalid: 'serverInvalid', download_invalid: 'downloadInvalid' };
   return keys[code] ? t(keys[code]) : '';
 }
-// 没有宿主时（浏览器里调界面）"跟随系统"按浏览器的语言
+// Без процесса программы (страница открыта в браузере) «как в системе»
+// означает язык браузера.
 function browserLang() {
   for (const l of navigator.languages || [navigator.language]) {
     const x = (l || '').toLowerCase();
-    if (x.startsWith('zh')) return 'zh-CN';
     if (LANGS[x.slice(0, 2)]) return x.slice(0, 2);
   }
   return 'en';
 }
-// 主题名、说明、分组、参数按界面语言换：当前语言 → 英文 → themes.json 原文（简体中文）
+// Названия тем, описания, группы и параметры переводятся по языку
+// интерфейса: текущий язык → английский → исходный текст из themes.json.
 function localizeRegistry() {
   const reg = JSON.parse(JSON.stringify(state.registry0));
-  const srcs = lang === 'zh-CN' ? [] : [lang, 'en'].map(c => (I18N[c] && I18N[c].themes) || {});
+  // Русские названия уже в themes.json, поэтому для русского языка
+  // переводы из i18n не подмешиваются.
+  const srcs = lang === 'ru' ? [] : [lang, 'en'].map(c => (I18N[c] && I18N[c].themes) || {});
   for (const th of reg.themes) {
     const trs = srcs.map(x => x[th.id]).filter(Boolean);
     const get = f => { for (const x of trs) { const v = f(x); if (v != null) return v; } return null; };
@@ -455,23 +478,26 @@ function applyStatic() {
 }
 async function setLang(code) {
   if (!LANGS[code]) code = 'en';
-  await Promise.all([loadLang('zh-CN'), loadLang('en'), loadLang(code)]);
+  await Promise.all([loadLang('ru'), loadLang('en'), loadLang(code)]);
   lang = code;
   localizeRegistry();
   applyStatic();
 }
-// 换了语言：界面上的字都重新填一遍（预览不用重新加载）
+// Смена языка: заново заполняем все надписи. Предпросмотр
+// перезагружать не нужно.
 function rerenderTexts() {
   if (!state.screen) return;
   renderHead(); renderThemes(); renderControls(); updateFoot(); shareBusy(shareState); showAutostartWarn(); showUpdate(); updatePurchaseText();
 }
 $('lang').addEventListener('change', e => {
   state.langSetting = e.target.value;
-  if (host) send({ t: 'lang', v: state.langSetting });     // 宿主存下来、换托盘菜单的文字，再回一条 lang（实际用哪种）
+  // Программа сохраняет выбор и переводит меню в лотке, затем присылает
+  // lang с фактически выбранным языком.
+  if (host) send({ t: 'lang', v: state.langSetting });
   else setLang(state.langSetting === 'auto' ? state.langSys : state.langSetting).then(rerenderTexts);
 });
 
-/* ---------- 主题清单 ---------- */
+/* ---------- Список тем ---------- */
 const themeById = id => state.registry.themes.find(t => t.id === id);
 function defaultsOf(theme) {
   const d = {};
@@ -524,11 +550,15 @@ $('themes').addEventListener('click', e => {
   if (b.dataset.id === state.theme) return;
   state.theme = b.dataset.id;
   send({ t: 'theme', id: state.theme });
-  if (seedOf(state.theme) === undefined) setSeed(newSeed(), false);   // 还没有种子：给一个，桌面和预览从一开始就是同一张
+  // Сида ещё нет — создаём: рабочий стол и предпросмотр сразу показывают
+  // один и тот же пейзаж.
+  if (seedOf(state.theme) === undefined) setSeed(newSeed(), false);
   showTheme();
 });
 
-/* ---------- 刷新：换一张（新的种子，按主题存进设置；桌面和预览用同一个种子） ---------- */
+/* ---------- Обновить пейзаж ----------
+   Новый сид сохраняется отдельно для каждой темы; рабочий стол и
+   предпросмотр используют один и тот же сид. */
 const newSeed = () => Math.floor(Math.random() * 1e6);
 const seedOf = id => (state.params[id] || {}).seed;
 function setSeed(v, live) {
@@ -538,7 +568,7 @@ function setSeed(v, live) {
 }
 $('reseed').addEventListener('click', () => setSeed(newSeed(), true));
 
-/* ---------- 参数控件（按清单自动生成） ---------- */
+/* ---------- Элементы управления параметрами (по описанию из themes.json) ---------- */
 function renderControls() {
   const theme = themeById(state.theme), vals = valuesOf(theme);
   if (!theme.groups) { $('controls').innerHTML = '<div class="empty">' + t('noParams') + '</div>'; return; }
@@ -564,7 +594,8 @@ function renderControls() {
 function fill(inp) { inp.style.setProperty('--p', ((inp.value - inp.min) / (inp.max - inp.min) * 100) + '%'); }
 const paramOf = key => themeById(state.theme).groups.flatMap(g => g.params).find(x => x.key === key);
 
-// 改一个参数：更新界面，并排队发给宿主和预览（拖动时每帧最多发一次）
+// Изменение параметра: обновляем интерфейс и ставим в очередь отправку
+// программе и в предпросмотр. При перетаскивании — не чаще раза в кадр.
 let pending = {}, scheduled = false;
 function setParam(key, v) {
   if (key === 'adaptive') {
@@ -584,11 +615,12 @@ function setParam(key, v) {
   }
   (state.params[state.theme] = state.params[state.theme] || {})[key] = v;
   pending[key] = v;
-  // 不用 requestAnimationFrame：窗口在后台或被遮住时它会暂停，消息就积压了
+  // Без requestAnimationFrame: в фоне или под другим окном он
+  // останавливается, и сообщения копились бы.
   if (!scheduled) { scheduled = true; setTimeout(flush, 30); }
 }
 $('controls').addEventListener('input', e => { if (e.target.dataset.key) setParam(e.target.dataset.key, +e.target.value); });
-// 单项恢复默认：点 ↺，或双击滑块
+// Сброс одного параметра: кнопка ↺ или двойной щелчок по ползунку
 $('controls').addEventListener('click', e => {
   const b = e.target.closest('[data-reset]');
   if (b) setParam(b.dataset.reset, paramOf(b.dataset.reset).default);
@@ -618,13 +650,15 @@ function flashSaved() {
 $('autostart').addEventListener('change', e => send({ t: 'autostart', v: e.target.checked }));
 $('adaptive').addEventListener('change', e => setParam('adaptive', e.target.checked ? 1 : 0));
 $('autostartWarnOk').addEventListener('click', () => { state.autostartWarn = false; showAutostartWarn(); send({ t: 'autostartWarnSeen' }); });
-// 开机自启被拦的提醒：宿主只给安全软件的名字，句子按界面语言拼
+// Предупреждение о заблокированном автозапуске: программа сообщает
+// только имя программы защиты, фразу собираем по языку интерфейса.
 function showAutostartWarn() {
   $('autostartWarnText').textContent = state.autostartSw ? t('autostartWarnSw', { sw: state.autostartSw }) : t('autostartWarnGeneric');
   $('autostartWarn').hidden = !state.autostartWarn;
 }
 
-/* ---------- 程序更新：版本、阶段、进度和错误全部来自宿主 ---------- */
+/* ---------- Обновление программы ----------
+   Версия, стадия, прогресс и ошибки приходят из программы. */
 function showUpdate() {
   const status = state.updateStatus, checking = status === 'checking';
   const busy = status === 'downloading' || status === 'installing';
@@ -656,7 +690,9 @@ $('updateProgram').addEventListener('click', () => {
   if (state.updateVersion) send({ t: 'updateProgram' });
 });
 
-/* ---------- 实时预览：iframe 按整块桌面的尺寸排版，再整体缩小 ---------- */
+/* ---------- Живой предпросмотр ----------
+   iframe размечается по размеру всего рабочего стола, затем уменьшается
+   целиком. */
 const toPreview = m => { if (frame.contentWindow) frame.contentWindow.postMessage(JSON.stringify(m), '*'); };
 function screenCss() {
   const k = window.devicePixelRatio || 1;
@@ -665,7 +701,8 @@ function screenCss() {
 function layoutPreview() {
   if (!state.screen) return;
   const s = screenCss(), stage = $('stage').getBoundingClientRect();
-  // 小窗口给参数区留出空间，避免预览挤得连第一个滑块都看不到。
+  // В узком окне оставляем место для параметров, иначе предпросмотр
+  // вытеснит даже первый ползунок.
   const maxHeight = Math.min(innerHeight * 0.42, Math.max(110, innerHeight - 520));
   const k = Math.min(stage.width / s.w, maxHeight / s.h);
   $('previewBox').style.width = Math.floor(s.w * k) + 'px';
@@ -677,7 +714,7 @@ addEventListener('resize', layoutPreview);
 addEventListener('message', e => {
   if (e.source !== frame.contentWindow) return;
   const m = JSON.parse(e.data);
-  if (m.t === 'ready') {                 // 预览页面加载好了：先给设置，再给图标
+  if (m.t === 'ready') {                 // страница загрузилась: сначала настройки, затем иконки
     toPreview({ t: 'settings', v: valuesOf(themeById(state.theme)) });
     if (state.icons) toPreview(state.icons);
   }
@@ -702,9 +739,12 @@ function showTheme() {
   frame.src = themeById(state.theme).page + '?preview=1';
 }
 
-/* ---------- 分享：宿主让壁纸页面画一张图 / 录一段动画（示例图标、名字是色块），保存、复制到剪贴板，再把预览发回来 ---------- */
+/* ---------- Поделиться ----------
+   Программа просит страницу темы нарисовать снимок или записать анимацию
+   (иконки заменяются примерами, имена — цветными плашками). Результат
+   сохраняется, копируется в буфер обмена и возвращается для предпросмотра. */
 let shareState = null;
-function shareBusy(which) {                                  // which：null（空闲）/ 'image' / 'video'
+function shareBusy(which) {                                  // which: null — простой, 'image', 'video'
   shareState = which;
   $('share').disabled = $('shareVideo').disabled = !!which;
   $('shareText').textContent = t(which === 'image' ? 'generating' : 'shareImage');
@@ -736,7 +776,7 @@ function closeShare() { $('shareModal').hidden = true; $('shareVid').pause(); }
 $('share').addEventListener('click', () => {
   shareBusy('image');
   if (host) { send({ t: 'share' }); return; }
-  setTimeout(() => {                                         // 没有宿主：直接让预览里的页面画一张（让按钮先显示"正在生成…"）
+  setTimeout(() => {                                         // без программы: рисуем прямо в предпросмотре
     try {
       const r = frame.contentWindow.desklandSnapshot();
       showShare({ ok: true, thumb: r.thumb, full: r.canvas.toDataURL('image/png') });
@@ -746,7 +786,7 @@ $('share').addEventListener('click', () => {
 $('shareVideo').addEventListener('click', () => {
   shareBusy('video');
   if (host) { send({ t: 'shareVideo' }); return; }
-  frame.contentWindow.desklandRecord(shareProgress).then(r => {   // 没有宿主：让预览里的页面录一段
+  frame.contentWindow.desklandRecord(shareProgress).then(r => {   // без программы: записываем в предпросмотре
     const url = URL.createObjectURL(r.blob);
     showShare({ ok: true, kind: 'video', url, full: url, thumb: r.poster, ext: r.mime === 'video/webm' ? 'webm' : 'mp4' });
   }, e => showShare({ ok: false, kind: 'video', msg: e.message }));
@@ -760,7 +800,7 @@ $('purchaseWebsite').addEventListener('click', () => {
 $('shareClose').addEventListener('click', closeShare);
 $('shareModal').addEventListener('click', e => { if (e.target === $('shareModal')) closeShare(); });
 
-/* ---------- 使用帮助 ---------- */
+/* ---------- Справка ---------- */
 let helpReturnFocus = null;
 function openHelp() {
   helpReturnFocus = document.activeElement;
@@ -781,12 +821,12 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { closeShare(); close
 $('shareOpen').addEventListener('click', () => send({ t: 'openShare' }));
 $('shareReveal').addEventListener('click', () => send({ t: 'revealShare' }));
 
-/* ---------- 和宿主通信 ---------- */
+/* ---------- Обмен сообщениями с программой ---------- */
 function onHost(m) {
   if (m.t === 'init') {
     state.langSetting = m.lang || 'auto';
-    state.langSys = m.langSys || 'zh-CN';
-    setLang(m.langEff || state.langSys).then(() => {        // 先按界面语言把文字表读进来，再画界面
+    state.langSys = m.langSys || 'ru';
+    setLang(m.langEff || state.langSys).then(() => {        // сначала тексты, потом отрисовка
       state.theme = themeById(m.theme) && themeById(m.theme).status === 'ready' ? m.theme : 'beach';
       state.params = m.params || {};
       state.screen = m.screen;
@@ -808,9 +848,9 @@ function onHost(m) {
     state.updateProgress = typeof m.progress === 'number' ? m.progress : -1;
     state.updateError = m.error || '';
     showUpdate();
-  } else if (m.t === 'updateAvailable') {              // 兼容旧开发联调消息
+  } else if (m.t === 'updateAvailable') {              // совместимость со старыми отладочными сообщениями
     onHost({ t: 'updateState', version: m.version, status: 'available', progress: -1 });
-  } else if (m.t === 'lang') {                                // 换了语言（宿主已经存好、换好托盘菜单）
+  } else if (m.t === 'lang') {                                // язык сменён (сохранён, меню в лотке переведено)
     state.langSetting = m.v;
     state.langSys = m.sys || state.langSys;
     setLang(m.eff).then(rerenderTexts);
@@ -827,7 +867,8 @@ function onHost(m) {
   }
 }
 
-// 单独在浏览器里打开时（没有宿主）：用模拟的桌面数据，方便调界面
+// Страница открыта в браузере без программы: берём тестовые данные
+// рабочего стола, чтобы удобно было править интерфейс.
 function mockHost() {
   const k = window.devicePixelRatio || 1, W = 1707, H = 1067, r = [];
   const cell = (c, row) => { const x = 4 + c * 76, y = 6 + row * 100; r.push([x * k, y * k, (x + 76) * k, (y + 92) * k]); };

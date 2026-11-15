@@ -1,5 +1,8 @@
-// 原创草地男孩放风筝：透明人物贴图 + 实时风筝、线和尾带；只接入桌面草地及设置预览。
-// 贴图只上传一次，人物与完整投影分别画入小纹理，再由草地合成到云层之下。
+// Мальчик с воздушным змеем на лугу: прозрачный спрайт персонажа плюс
+// змей, нить и хвост, рисуемые в реальном времени. Используется только на
+// рабочем столе с Лугом и в превью настроек.
+// Текстура загружается один раз: персонаж и его полная тень рисуются
+// в отдельные маленькие текстуры, а луг собирает их под слоем облаков.
 let meadowBoyScene = null;
 const meadowBoyRunDuration=2,meadowBoyTurnDuration=.22;
 function meadowBoyTripPose(elapsed,cycles=4,duration=meadowBoyRunDuration,trip={}) {
@@ -13,7 +16,8 @@ function meadowBoyTripPose(elapsed,cycles=4,duration=meadowBoyRunDuration,trip={
   }
   if(elapsed<runEnd){
     const runTime=elapsed-turn,stepTime=Math.max(0,runTime+strideLead),plantTime=trip.enter?0:.02;
-    // 转身最后 70ms 就开始迈步，转完仅留 20ms 落脚；加速时间不随整段路程拉长。
+    // Шаг начинается за последние 70 мс поворота, на приземление остаётся
+    // 20 мс. Время разгона не растягивается вместе с длиной маршрута.
     const moveTime=Math.max(0,runTime-plantTime),moveDuration=duration-plantTime;
     const accelerate=.16,decelerate=.22;
     const rampIntegral=(t,r)=>{
@@ -42,7 +46,9 @@ function meadowBoyRunningRig(activity) {
   const solve=(hip,knee,ankle,offset,front,back,lift,kick)=>{
     const u=((phase/(Math.PI*2)+offset)%1+1)%1;
     const swing=u>=.5,t=swing?(u-.5)*2:u*2;
-    // 离地后先屈膝收后脚，再向前送腿；鞋尖随小腿转动，避免像原地抬腿走路。
+    // После отрыва от земли колено сгибается и задняя нога подбирается,
+    // затем выносится вперёд. Носок идёт вслед за голенью — иначе шаг
+    // выглядит как поднимание ноги на месте.
     const recovery=Math.max(0,(t-.18)/.82);
     const step=swing?recovery*recovery*(3-2*recovery):t;
     const fold=swing?Math.pow(Math.sin(Math.PI*t),2):0;
@@ -65,7 +71,8 @@ function meadowBoyRunningRig(activity) {
     left:solve([-12,37],[-14,47],[-15,57],0,[-7.5,8.5],[1.4,19],19,9),
     right:solve([14,35],[18,44],[21,51],.5,[.5,7.2],[7,15.8],16,5),
     arm:-Math.sin(phase)*.42*weight,
-    // 持线轮的右臂跟着步频小幅前后摆，和空着的左臂相反，仍保持抬起。
+    // Правая рука с катушкой покачивается в такт шагам, левая — в
+    // противофазе; обе остаются поднятыми.
     reelArm:(Math.sin(phase)*.26+Math.sin(phase*2)*.035)*weight
   };
 }
@@ -85,11 +92,14 @@ function meadowBoyGroundPose(activity,rig,pose) {
     feet=[[-22.5*activity.squeeze,72.0],[37.8*activity.squeeze,63.3]];
     soles=feet.map((p,i)=>[p[0]+(i?1:-1)*pose.legs[i]*.24*activity.squeeze,p[1]-pose.legs[i]]);
   }
-  // 通过两只鞋的地面位置定义投影基线，支撑脚与完整人影在同一点相接。
-  // 跑步沿用斜背面站姿的地面倾角，避免抬起的鞋越过另一条腿时投影突然伸长。
+  // Базовая линия тени задаётся точками касания обеих обувью: опорная
+  // нога сходится с силуэтом ровно там же.
+  // При беге сохраняется наклон опоры из позы вполоборота — иначе тень
+  // резко вытягивалась бы, когда поднятая нога проходит над другой.
   const dx=feet[1][0]-feet[0][0],spacing=Math.sign(dx||1)*Math.max(12,Math.abs(dx));
   const slope=activity.running?-.19:Math.max(-.8,Math.min(.5,(feet[1][1]-feet[0][1])/spacing));
-  // 后脚收起时两只鞋可能在画面上重叠，仍以实际支撑脚固定投影，避免影子离地。
+  // Когда задняя нога подобрана, обувь может накладываться на экране;
+  // тень всё равно крепится к реальной опорной ноге и не отрывается от земли.
   const support=activity.running?soles[rig.left.contact?0:1]:null;
   const intercept=support?support[1]-slope*support[0]:(feet[0][1]+feet[1][1]-slope*(feet[0][0]+feet[1][0]))*.5;
   const contacts=feet.map((p,i)=>[p[0],p[1]-.5,activity.running?((i?rig.right:rig.left).contact?1:.22):1]);
@@ -97,10 +107,12 @@ function meadowBoyGroundPose(activity,rig,pose) {
 }
 function meadowBoyRunDestination(from,s,width,height,taskbar) {
   const distance=Math.min(Math.max(165,(height-taskbar)*.27),315);
-  // 接近上沿就继续跑出整个人物、风筝与投影，不在边缘停成半截。
+  // У верхнего края персонаж, змей и тень уходят за границу целиком,
+  // а не обрезаются на полпути.
   const exit=from.y-distance<116*s+24;
   const y=exit?-610*s-24:from.y-distance;
-  // 保留向左斜上方的路线；窄屏接近左边时让路线变陡，避免从侧面消失。
+  // Маршрут остаётся диагональным влево-вверх; на узком экране у левого
+  // края он становится круче, чтобы персонаж не исчезал сбоку.
   const x=Math.max(96*s+12,from.x-(from.y-y)*.65);
   return {x,y,exit};
 }
@@ -112,7 +124,8 @@ function meadowBoyTugPose(age) {
   return {active:true,reach,pull};
 }
 function meadowBoyKiteReaction(reaction,dt,impulse) {
-  // 手把线拉紧时给风筝一次冲量，弹性回复与阻尼使它摆过头后逐渐停稳。
+  // Рывок за нить даёт змею импульс; упругое возвращение с затуханием
+  // гасит качание после перелёта.
   reaction.vx-=100*impulse;reaction.vy-=120*impulse;reaction.spin+=2.8*impulse;
   reaction.vx+=(-18*reaction.x-3.4*reaction.vx)*dt;
   reaction.vy+=(-22*reaction.y-4*reaction.vy)*dt;
@@ -129,11 +142,13 @@ function meadowBoyPose(time,tug={active:false,reach:0,pull:0}) {
   const shift=Math.sin(time*1.05);
   const body=[Math.sin(time*.85)*1.7-tug.pull*1.8,Math.sin(time*1.7)*.65-tug.pull*.8];
   const tugOffset=[tug.reach*4-tug.pull*12,tug.reach*3-tug.pull*8];
-  // 保持头部朝向，不再左右镜像转头。
+  // Голова сохраняет направление и больше не отражается зеркально.
   const look=1;
-  // 平时保持抬手姿势，每隔九秒快速挥动一次，约 0.6 秒内挥出再收回。
+  // Обычно рука поднята; раз в девять секунд — быстрое маховое движение
+  // примерно на 0,6 с туда и обратно.
   const reel=-.18+(tug.active?-tug.pull*.22:meadowBoyWavePull(time,tug)*1.14);
-  // 素材中右手在线轮下方握柄；端点和抬手部件共用肩关节、角度及拉线位移。
+  // На спрайте правая рука держит рукоятку под катушкой; конец нити и
+  // поднятая рука делят плечевой сустав, угол и смещение от натяжения.
   const angle=reel+.18,c=Math.cos(angle),s=Math.sin(angle);
   const armPoint=(x,y)=>{
     const q=[-21.+c*(x+21.)-s*(y+9.)-tugOffset[0]*.35,
@@ -202,7 +217,8 @@ vec2 spriteUV(vec2 p) {
 vec2 personSource(vec2 p) {
   vec2 boy=bodySpace(p);
   vec2 rest=boy;
-  // 站着交替提脚、挪重心；膝盖往上逐渐固定，裤腿不会被整体拉走。
+  // В покое ноги поочерёдно приподнимаются, вес переносится; выше колена
+  // точки закрепляются, чтобы штанина не тянулась целиком.
   float lower=smoothstep(24.,48.,rest.y);
   float right=smoothstep(-4.,9.,rest.x);
   float lift=mix(uLegs.x,uLegs.y,right);
@@ -265,7 +281,8 @@ float runnerArmMask(vec2 p) {
   return (1.-smoothstep(-25.,-21.,p.x))*smoothstep(-8.,-3.,p.y)*(1.-smoothstep(29.,31.,p.y));
 }
 float runnerReelArmMask(vec2 p) {
-  // 沿头发与线轮之间的透明缝拆开，摆臂不会带走头发边缘。
+  // Разрез идёт по прозрачному шву между волосами и катушкой, поэтому
+  // мах рукой не тянет за собой край волос.
   float boundary=p.y < -50. ? 32. : p.y < -43. ? mix(31.,34.,(p.y+50.)/7.) :
     p.y < -34. ? mix(34.,28.,(p.y+43.)/9.) : mix(28.,23.,clamp((p.y+34.)/14.,0.,1.));
   return smoothstep(boundary-.5,boundary+.5,p.x)*(1.-smoothstep(2.,6.,p.y));
@@ -279,7 +296,8 @@ vec4 runningBoy(vec2 p,vec4 trunk,float lod) {
   vec2 rightThigh=boneSource(p,rh,rk,uRightHipKnee.xy,uRightHipKnee.zw);
   vec2 rightShin=boneSource(p,rk,ra,uRightHipKnee.zw,uRightAnkle);
   vec2 rightFoot=ra+turn(p-uRightAnkle,-uFootAngles.y);
-  // 同一张站立图拆成髋、膝、踝和鞋，连续改变关节位置，避免换图导致比例跳动。
+  // Одна стойка режется на бедро, колено, стопу и обувь; положения
+  // суставов меняются непрерывно, и пропорции не прыгают при смене кадра.
   vec4 left=rigJoint(p,uLeftHipKnee.zw,vec3(.98,.76,.47),3.5);
   left=over(left,rigJoint(p,uLeftAnkle,vec3(.97,.96,.88),2.8));
   left=over(left,rigPiece(leftThigh,-1.,35.5,49.,lod));
@@ -294,7 +312,8 @@ vec4 runningBoy(vec2 p,vec4 trunk,float lod) {
   trunk.a*=(1.-cut)*(1.-runnerArmMask(p))*(1.-runnerReelArmMask(p));
   vec2 armSource=vec2(-23.,-5.)+turn(p-vec2(-23.,-5.),-uRig.y);
   vec4 arm=standingBoy(armSource,lod);arm.a*=runnerArmMask(armSource);
-  // 围绕右肩转动整段手臂与线轮，和 JS 里的连线端点使用同一变换。
+  // Рука с катушкой поворачивается вокруг правого плеча тем же
+  // преобразованием, что и конец нити в JS.
   vec2 reelPivot=vec2(22.,-7.);
   vec2 reelSource=reelPivot+turn(p-reelPivot,-uRig.z);
   vec4 reelArm=standingBoy(reelSource,lod);reelArm.a*=runnerReelArmMask(reelSource);
@@ -306,7 +325,8 @@ vec4 runningBoy(vec2 p,vec4 trunk,float lod) {
 vec4 characterColor(vec2 p) {
   p.x/=uMotion.z;
   vec2 boy=personSource(p),space=bodySpace(p);
-  // 直接使用新男孩全身素材；右手本来就在画面左侧，不再镜像人物或拼旧身体。
+  // Берём готовый спрайт мальчика целиком: правая рука и так слева на
+  // картинке, поэтому зеркалить фигуру и склеивать старое тело не нужно.
   vec2 pivot=vec2(-21.,-9.);
   vec2 armSource=pivot+turn(space+uTug*.35-pivot,-(uPose.z+.18));
   float lod=uShadow*2.8;
@@ -314,7 +334,8 @@ vec4 characterColor(vec2 p) {
   vec4 arm=spriteColor(textureLod(uCharacter,spriteUV(armSource),lod),armSource);
   person.a*=1.-armMask(boy);
   arm.a*=armMask(armSource);
-  // 肩关节留在手臂后面，挥手和拉线时袖口不会断开。
+  // Плечевой сустав остаётся позади руки, чтобы манжета не разрывалась
+  // при взмахе и натяжении нити.
   vec4 shoulder=rigJoint(space,pivot,vec3(.90,.22,.16),5.0);
   vec4 front=over(over(person,shoulder),arm);
   vec2 runPoint=p-vec2(0.,uMotion.w-10.);
@@ -326,12 +347,14 @@ vec4 characterColor(vec2 p) {
 void main() {
   vec2 screen=uOffset+vec2(gl_FragCoord.x/uScale,uRes.y-gl_FragCoord.y/uScale);
   vec2 p=(screen-uPlace.xy)/uPlace.z;
-  // 投影经过当前鞋底的地面位置，保持向右下的光向，不再使用固定的离地偏移。
+  // Тень проходит через текущую точку подошвы, свет по-прежнему падает
+  // вправо-вниз, а фиксированное смещение от земли больше не используется.
   float sy=(p.y-uGround.x*p.x-uGround.y)/(uGround.x*.46-.64);
   vec2 projected=vec2(p.x+.46*sy,uGround.x*(p.x+.46*sy)+uGround.y+sy);
   vec2 personPoint=mix(p,projected,uShadow);
   vec4 person=characterColor(personPoint);
-  // 风筝较高：整只风筝与三条尾带一起投影，方向和云影一致。
+  // Змей высоко: он и три ленты тени отбрасываются вместе, в том же
+  // направлении, что и тени облаков.
   vec4 kite=kiteColor(p-uShadow*vec2(98.,134.),screen);
   vec2 hand=uHand,attach=uKite+turn(vec2(-41.,-16.),kiteAngle());
   vec2 control=mix(hand,attach,.5)+vec2(-13.+sin(uTime*.8)*6.,18.)*(1.-uTension*.85);
@@ -340,7 +363,8 @@ void main() {
     float t=float(i)/6.;vec2 point=mix(mix(hand,control,t),mix(control,attach,t),t);
     line=min(line,segment(p,previous,point));previous=point;
   }
-  // 线从高举的线轮伸出，经过人物前方时仍可见，避免看起来从头或脚处起线。
+  // Нить выходит из поднятой катушки и остаётся видимой на фоне
+  // персонажа — иначе кажется, что она начинается у головы или ног.
   vec4 result=over(kite,person);
   result=over(result,vec4(.94,.92,.77,(1.-smoothstep(.4,1.1,line))*.94));
   float contactL=(1.-smoothstep(.65,1.15,length((p-uContactL.xy)/vec2(7.,2.6))))*uContactL.z;
@@ -359,7 +383,8 @@ void main() {
     const distance=Math.hypot(to.x-from.x,to.y-from.y);
     const cycles=Math.max(2,Math.round(distance/(s*80)));
     return {start:time,from:{...from},to:{x:to.x,y:to.y},
-      // 长路程增加迈步次数，保留清楚的收腿动作，不靠加快步频赶完。
+      // На длинном маршруте число шагов растёт, но подбирание ноги
+      // остаётся читаемым: темп не ускоряется ради скорости.
       duration:Math.max(meadowBoyRunDuration,distance/55,cycles*.52),cycles,...flags};
   };
   function loadSprite(path,unit,targetTexture,size=384){
@@ -376,7 +401,7 @@ void main() {
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
       ready++;
     };
-    image.onerror=()=>console.warn('草地放风筝人物素材加载失败：'+path);
+    image.onerror=()=>console.warn('не удалось загрузить спрайт мальчика с воздушным змеем: '+path);
     image.src=path;
   }
   loadSprite('assets/meadow-kite-boy-level-face.png',gl.TEXTURE4,texture);
@@ -400,7 +425,8 @@ void main() {
     const s=Math.max(.24,Math.min(1.25,W/1379,(H-TASKBAR)/1141))*.35;
     if(now-lastCheck>500){
       lastCheck=now;
-      // 移动或增删图标不会打断人物跑步，仅在画面尺寸变化时重新定位。
+      // Перемещение и добавление иконок не прерывает бег; персонаж
+      // переставляется только при изменении размера кадра.
       const next=[W,H,TASKBAR].join(',');
       if(signature!==next){
         signature=next;target=choosePosition(s);
@@ -410,7 +436,8 @@ void main() {
     }
     if(returnAt!==null){
       if(time<returnAt)return null;
-      // 在整个画面之外换到下方，重新跑入时人物、牵线和风筝一起连续出现。
+      // За пределами кадра персонаж переносится вниз, чтобы при новом
+      // выходе он, нить и змей появлялись связно.
       position={x:Math.max(96*s+12,Math.min(W*.70,W-612*s-12)),y:H+116*s+24};
       const y=(H-TASKBAR)*.70;
       const destination={x:Math.max(96*s+12,position.x-(position.y-y)*.65),y};
@@ -441,10 +468,12 @@ void main() {
       pullStarted=time;nextPullAt=time+7.8;
     }
     const tug=meadowBoyTugPose(time-pullStarted);
-    // 快速挥动持线手和专门拉线共用反馈，避免手先动、等下一次拉线才带动风筝。
+    // Быстрый взмах руки и отдельное натяжение дают одну и ту же отдачу,
+    // иначе рука двигалась бы раньше, чем змей отреагирует.
     const linePull=activity.back?0:Math.max(tug.pull,meadowBoyWavePull(time,tug));
     meadowBoyKiteReaction(kiteReaction,dt,Math.max(0,linePull-lastLinePull));lastLinePull=linePull;
-    // 跑动时平滑加强横向摆幅，起跑、停步后逐渐恢复平时的轻摆。
+    // На бегу боковое качание плавно усиливается, а после старта или
+    // остановки возвращается к обычному лёгкому покачиванию.
     const runWind=activity.running?Math.sin(Math.PI*activity.progress):0;
     const gust=(Math.sin(time*4.8)*60+Math.sin(time*7.1)*8)*runWind;
     const baseKx=215+Math.sin(time*.72)*21+Math.sin(time*1.23)*5+gust,baseKy=205+Math.sin(time*.49+.6)*10;
@@ -452,7 +481,8 @@ void main() {
     if(!kitePosition||lastScale!==s)kitePosition={...desiredKite};lastScale=s;
     const follow=1-Math.exp(-dt/0.23);
     kitePosition.x+=(desiredKite.x-kitePosition.x)*follow;kitePosition.y+=(desiredKite.y-kitePosition.y)*follow;
-    // 拉紧的位移同帧传到风筝，绕开跟随位置的缓动；松手后保留弹性摆动。
+    // Смещение от натяжения уходит змею в том же кадре, минуя сглаживание
+    // слежения; после отпускания остаётся упругое качание.
     const kx=baseKx+Math.max(-30,Math.min(32,(kitePosition.x-desiredKite.x)/s))+kiteReaction.x-linePull*10;
     const ky=baseKy+Math.max(-30,Math.min(32,(kitePosition.y-desiredKite.y)/s))+kiteReaction.y-linePull*12;
     const kiteRock=kiteReaction.angle+linePull*.10;
@@ -460,7 +490,8 @@ void main() {
     const rig=meadowBoyRunningRig(activity);
     const ground=meadowBoyGroundPose(activity,rig,pose);
     if(activity.back){
-      // 斜背面各帧的握线手位置，连线随转身和跑步动作一起移动。
+      // Положение руки с нитью берётся из кадров вполоборота, поэтому
+      // линия движется вместе с поворотом и бегом.
       const grip=[[44,-23],[37,-23],[49,-25],[37,-23]][activity.frame];
       const angle=activity.running?rig.reelArm:0,c=Math.cos(angle),sn=Math.sin(angle);
       pose.hand=[(22+c*(grip[0]-22)-sn*(grip[1]+7))*activity.squeeze,
@@ -512,7 +543,8 @@ void main() {
         gl.disable(gl.SCISSOR_TEST);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(shader.U.uShadow,i===0?1:0);
         gl.enable(gl.SCISSOR_TEST);
-        // 空白处不执行人物着色器；重叠小块直接覆盖同一结果，不会叠深。
+        // На пустых местах шейдер персонажа не выполняется; перекрывающиеся
+        // фрагменты дают тот же результат и не темнеют от наложения.
         for(const [x0,y0,x1,y1] of regions[i]){
           const l=Math.max(0,Math.floor((position.x+x0*s)*k)-left-2);
           const r=Math.min(width,Math.ceil((position.x+x1*s)*k)-left+2);

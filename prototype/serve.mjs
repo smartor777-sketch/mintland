@@ -1,4 +1,5 @@
-// 本地静态服务器：node prototype/serve.mjs → http://localhost:5178/（海边插画 flat.html）
+// Локальный статический сервер: node prototype/serve.mjs → http://localhost:5178/
+// (по умолчанию открывается пляж — flat.html)
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
