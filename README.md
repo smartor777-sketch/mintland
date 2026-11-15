@@ -25,7 +25,7 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 
 **Панель управления** — ярлык «Mintland — темы и настройки»:
 ---
-![Панель управления Mintland](docs/switcher.png)
+![Панель управления Mintland](docs/switcher-ru.png)
 ---
 **Темы** — анимированные превью (GIF):
 

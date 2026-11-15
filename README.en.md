@@ -24,7 +24,7 @@ tests) — see [`docs/en/WAYLAND.md`](docs/en/WAYLAND.md).
 
 **Control panel** — the shortcut "Mintland — themes and settings":
 ---
-![Mintland control panel](docs/switcher.png)
+![Mintland control panel](docs/switcher-en.png)
 ---
 **Themes** — animated previews (GIF):
 

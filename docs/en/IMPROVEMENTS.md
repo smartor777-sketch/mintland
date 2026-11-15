@@ -4,7 +4,9 @@
 > **Date:** 14.11.2026, updated 15.11.2026.
 > **Marks:** ✅ — done and verified; 🟡 — the mechanism exists, but the task is not closed;
 > ⬜ — not started; ⛔ — cancelled, the reason is in the text of the item.
-> **Status:** 10 of 14 done, §9 cancelled in favour of §11, §8 and §12–§14 not started.
+> **Status:** 10 of 14 done, §9 cancelled in favour of §14 (variants inside a
+> card), §15 (English) is complete. Not started: §8 (baking), §16 (.deb),
+> §17 (maps).
 > **Selection principle:** only what can be done without rewriting the architecture and gives a measurable effect.
 > **How to read:** the items are ordered by the "gain / risk" ratio. Start at the top.
 > **Paths:** all paths in the document are from the repository root, not from `docs/`.
@@ -26,7 +28,7 @@
 | 9 | Theme preset next to the theme page | new themes are many times cheaper | ⛔ cancelled in favour of §11 |
 | 10 | Watching the liveness of `nemo-desktop` | icons do not disappear silently | ✅ done |
 | 11 | Variants inside the theme card | the list does not grow with presets | ✅ done (Night) |
-| 12 | English interface and documentation | the program is available outside Russia | ⬜ not started |
+| 12 | English interface and documentation | the program is available outside Russia | ✅ done |
 | 13 | Building a `.deb` | installation in two clicks | ⬜ not started |
 | 14 | Maps: one engine, four themes | one more class of scenes | ⬜ not started |
 
@@ -606,7 +608,7 @@ for each ready entry, there is no nesting. Five cards, two of which are
 variants of the neighbouring ones, are worse than three honest ones.
 
 Therefore the mechanism was replaced by **variants inside the card** (§11 in this plan,
-§15 in `THEMES.md`): one card, a switcher inside it, the theme list does not
+§14 in `THEMES.md`): one card, a switcher inside it, the theme list does not
 grow. The `preset` field was removed from the registry, `switcher.py` no longer reads it.
 
 The useful part of the first stage remained: **the palette moved out of the shader into
@@ -697,7 +699,7 @@ flicker when enabling the layer was removed — [`OCCLUSION.md`](OCCLUSION.md).
 9. ⛔ Theme preset (§9) — **cancelled**. The mechanism was written and worked, but both
    preset themes (Maldives, Lagoon) turned out to be visual clones of Beach:
    only the colours differed. Replaced by variants inside the card (§11).
-11. ✅ Variants inside the card (§15) — in all three themes. Night has two
+11. ✅ Variants inside the card (§14) — in all three themes. Night has two
    ("Polar", "Fireflies"), Beach and Meadow have one each so far — the mechanism
    is shared, varieties are added by a table.
    The preview in the card follows the variant; sliders that make no sense in the
@@ -709,12 +711,12 @@ flicker when enabling the layer was removed — [`OCCLUSION.md`](OCCLUSION.md).
 
 **Stage 6 — accessibility (3–5 days, low risk):**
 
-12. ⬜ English interface and documentation (§16).
-13. ⬜ Building a `.deb` (§17).
+12. ✅ English interface and documentation (§15).
+13. ⬜ Building a `.deb` (§16).
 
 **Stage 7 — new scenes (1–2 weeks, medium risk):**
 
-14. ⬜ Map engine (§18).
+14. ⬜ Map engine (§17).
 
 ### Why §9 comes before §8
 
@@ -785,7 +787,7 @@ Check the on/off cycle and the icons by the method from `THEMES.md`, §9 ("Live 
 
 ---
 
-## 15. ✅ A variant inside the card, not a separate theme
+## 14. ✅ A variant inside the card, not a separate theme
 
 ### Problem
 
@@ -870,7 +872,7 @@ A second variant for Meadow. The mechanism is shared, but `meadow.html` has not 
 
 ---
 
-## 16. ⬜ English interface and documentation
+## 15. ✅ English interface and documentation
 
 ### Problem
 
@@ -907,9 +909,31 @@ commit `4b1ede9`).
 The interface — 1–2 days. The documentation — 1–2 days for the translation and as much again
 for keeping it up to date.
 
+### Done
+
+**Interface.** All of `switcher.py`'s labels live in a `UI` dictionary with
+`ru` and `en` entries, read through `t(lang, key)`. Theme names, descriptions,
+groups, parameter labels, variants and units go through `theme_text`,
+`param_text`, `group_text`, `variant_text` — the Russian text still lives in
+`themes.json` so there is a single source. The language switch sits in the
+status row; the choice is stored in `~/.config/mintland/lang`, and without it
+the language comes from `LANG`, defaulting to Russian.
+
+Found and fixed while checking: the "The layer keeps running after you close
+this window" note and the "Theme" heading were local variables and stayed
+Russian when the language changed. They are widget attributes now.
+
+**Documentation.** `README.en.md` is a full translation of the README, and the
+two link to each other. `docs/en/` holds all seven documents plus an index,
+3 577 lines. Verified by structure rather than by eye: heading counts, code
+fence counts and table row counts match the originals for every file.
+
+Russian stays the development language: the strings in `themes.json`, the code
+comments and the original documents are Russian. English is added alongside.
+
 ---
 
-## 17. ⬜ Building a `.deb`
+## 16. ⬜ Building a `.deb`
 
 ### Why
 
@@ -957,13 +981,13 @@ write that X11 and Cinnamon are supported.
 
 ### Order
 
-It is more logical after §16: a package with an interface in one language is worse than a package with
+It is more logical after §15: a package with an interface in one language is worse than a package with
 two. And after §8 (baking), because it changes the file structure of a
 theme, and therefore what is put into the package.
 
 ---
 
-## 18. ⬜ Maps: one engine, four themes
+## 17. ⬜ Maps: one engine, four themes
 
 ### What this is
 
@@ -1041,7 +1065,7 @@ search for places and the drawing of houses twice.
 An engine plus a table gives: a new map style is a set of tiles and a palette,
 that is tens of lines, not a thousand.
 
-### How this relates to §9 and §15
+### How this relates to §9 and §14
 
 This is exactly the case §14 in `THEMES.md` talks about: the mechanics are
 fundamentally different, therefore **its own page** is needed, not a variant of
@@ -1052,10 +1076,9 @@ four maps will again turn into four copies of a thousand lines.
 
 ### When to take it on
 
-Not before §8 (baking) and §12 (English interface) are closed.
-The reason is simple: `PAPER.md` relies directly on baking — the static part is drawn
-once into a texture — and without English it is too early to ship new themes in a
-package.
+Not before §8 (baking) is closed: `PAPER.md` relies directly on it — the static
+part is drawn once into a texture. English (§15) is already done, so the second
+condition is met.
 
 ### Cost
 
@@ -1063,10 +1086,10 @@ package.
 
 ---
 
-## 19. Related documents
+## 18. Related documents
 
 - [`WOLOLAND.md`](WOLOLAND.md) — the analysis of the other project, from which the ideas were taken.
-- [`THEMES.md`](THEMES.md) — the theme contract. Items 7, 9 and 11 are reflected: §14 — theme presets, §15 — variants inside the card.
+- [`THEMES.md`](THEMES.md) — the theme contract. Items 7, 9 and 11 are reflected: §14 — theme presets, §14 — variants inside the card.
 - [`WAYLAND.md`](WAYLAND.md) — the port plan; items 3, 4 and 10 will have to be rethought on Wayland (there `nice` works, but `xprop` does not).
-- [`PAPER.md`](PAPER.md) — a technical description of the map engine (§18): isometry, sprites, baking, licences.
+- [`PAPER.md`](PAPER.md) — a technical description of the map engine (§17): isometry, sprites, baking, licences.
 - [`SAFETY.md`](SAFETY.md) — the safety contract; none of the items above violate it.
