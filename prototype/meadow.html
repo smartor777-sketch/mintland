@@ -597,8 +597,13 @@ let circStats = null, circTex = null, circBuf = null, cgW = 0, cgH = 0;
 const rnd1 = (x, y, k) => hash2(x, y, k);                  // 固定的随机数（和换种子一起变）
 const skyClouds = [];
 let flowT = 0;
+// Детерминированный поток по позиции облака. Раньше здесь был Math.random:
+// одна и та же облачная сцена при каждом пересоздании получалась другой,
+// поэтому сдвиг иконки «перетасовывал» всё небо. Теперь форма зависит
+// только от x и seed — облако на том же месте всегда одно и то же.
 function makeSkyCloud(x) {
-  const rnd = Math.random, R = 95 * 1.2;                 // 轮廓大一些（云厚一些，才放得下大圆）；圆的大小还是按 95 算
+  const cloudSeed = ((seed ^ 0x5c10d) + Math.imul(Math.round(x), 2654435761)) >>> 0;
+  const rnd = mulberry32(cloudSeed), R = 95 * 1.2;       // 轮廓大一些（云厚一些，才放得下大圆）；圆的大小还是按 95 算
   // 1) 大致的轮廓：底下一排大圆（中间大、两边小），上面再堆几个 → 底宽上窄的一团
   const n = 3 + Math.floor(rnd() * 3), w = R * (1.0 + n * 0.5);
   const body = [];
@@ -655,7 +660,7 @@ function stepSkyClouds(dt) {
   for (let n = alive.length; n < want; n++) {
     let best = null, bestD = -1;
     for (let k = 0; k < 20; k++) {
-      const c = makeSkyCloud(Math.random() * W);
+      const c = makeSkyCloud(rnd1(k, n, 0x9e37) * W);
       const dmin = Math.min(1e9, ...skyClouds.map(o => Math.hypot((o.x - c.x) / 1.6, o.y - c.y)));
       if (dmin > bestD) { bestD = dmin; best = c; }
     }

@@ -93,6 +93,17 @@ function beachPalmClear(x, y, radius) {
     return Math.hypot(dx, dy) > radius;
   });
 }
+// Детерминированный «вес» точки: одинаков для одной и той же позиции при
+// одном seed, независимо от того, сколько точек проверено до неё.
+// Нужен, чтобы выбор места не зависел от порядка обхода: иначе сдвиг одной
+// иконки меняет число вызовов ГПСЧ и переставляет все деревья на карте.
+function palmWeight(x, y, salt) {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263)
+        ^ Math.imul((seed + salt) | 0, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
 function chooseMaldivesPalms() {
   const random = mulberry32((seed ^ 0x41fc72) >>> 0), chosen = [], order = BEACH_PALM_STYLES.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) {const j = Math.floor(random() * (i + 1));[order[i], order[j]] = [order[j], order[i]];}
@@ -104,7 +115,7 @@ function chooseMaldivesPalms() {
     // 只尝试正常尺寸；沙地或图标间距不足时省略这棵树，不缩成迷你树。
     for (const baseScale of [.62]) {
       const scale = baseScale * .80 * (style.size || 1);
-      const radius = style.radius * scale, offsetX = random() * 13, offsetY = random() * 13;let best = null, candidates = 0;
+      const radius = style.radius * scale, offsetX = random() * 13, offsetY = random() * 13;let best = null;
       for (let y = 100 * scale + offsetY; y < H - TASKBAR - 55 * scale; y += 13) for (let x = radius + 5 + offsetX; x < W - radius - 5; x += 13) {
         const shore = sampleArr(FB.s, x, y);
         if (shore > -25 || shore < -58) continue;
@@ -115,9 +126,13 @@ function chooseMaldivesPalms() {
         const crown = {x: x + style.crown[0] * scale * mirror, y: y + style.crown[1] * scale};
         if (crown.x < radius + 3 || crown.x > W - radius - 3) continue;
         if (crown.y < radius + 3 || !beachPalmClear(x, y - 16 * scale, 10 * scale) || !beachPalmClear(crown.x, crown.y, radius)) continue;
-        if (random() < 1 / ++candidates) best = {x, y, scale, variant, mirror, opacity: 0, retiring: false};
+        // Резервуарная выборка заменена на выбор по весу точки: вес не
+        // зависит от числа уже просмотренных кандидатов, поэтому сдвиг
+        // иконки в стороне не трогает деревья в других местах.
+        const w = palmWeight(x, y, variant * 2654435761);
+        if (!best || w > best.w) best = {x, y, scale, variant, mirror, opacity: 0, retiring: false, w};
       }
-      if (best) {selected = best;break;}
+      if (best) {delete best.w; selected = best; break;}
     }
     if (selected) chosen.push(selected);
   }
