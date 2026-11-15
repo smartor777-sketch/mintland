@@ -28,9 +28,9 @@ tests) — see [`docs/en/WAYLAND.md`](docs/en/WAYLAND.md).
 ---
 **Themes** — animated previews (GIF):
 
-| Beach | Meadow | Night |
-|---|---|---|
-| ![Beach](docs/theme-beach.gif) | ![Meadow](docs/theme-meadow.gif) | ![Night](docs/theme-night.gif) |
+| Beach | Meadow | Night | Forest |
+|---|---|---|---|
+| ![Beach](docs/theme-beach.gif) | ![Meadow](docs/theme-meadow.gif) | ![Night](docs/theme-night.gif) | ![Forest](docs/theme-forest.gif) |
 
 *The previews are recorded from these same scenes; on the Deskland website the
 top block is a live WebGL iframe, not a video file.*
@@ -177,7 +177,7 @@ when the buttons are pressed.
 Launch: the **"Mintland — themes and settings"** shortcut, or `python3
 switcher.py`.
 
-- cards for the ready themes from `prototype/themes.json` (Beach, Meadow, Night)
+- cards for the ready themes from `prototype/themes.json` (Beach, Meadow, Night, Forest)
   with animated GIF previews;
 - **Turn layer on** / **Turn layer off** buttons;
 - parameter sliders for the selected theme: palms, kayaks, gulls, clouds,
@@ -187,12 +187,15 @@ switcher.py`.
 - if the layer is off, the selected theme applies the next time it is turned on;
 - in the Meadow theme the boy and the kitten are toggled under "Characters";
 - in the Night theme — aurora, meteors, moon and mist;
+- in the Forest theme — trees of seven kinds on grass drawn with strokes; your
+  icons sit in clearings, and trees that ended up under an icon sink into the
+  ground and grow back;
 - the interface language switch is in the status row: Russian (the development
   language) and English. The choice is stored in `~/.config/mintland/lang`;
   without a saved choice the language comes from `LANG`.
 
-Themes with status `locked` in `themes.json` (Maldives, Forest, City and so on)
-are not available in this build — they have no HTML pages.
+Themes with status `locked` in `themes.json` (Maldives, City and so on) are not
+available in this build — they have no HTML pages.
 
 How to add your own theme — see [`docs/en/THEMES.md`](docs/en/THEMES.md). What
 could be improved and in what order — [`docs/en/IMPROVEMENTS.md`](docs/en/IMPROVEMENTS.md).

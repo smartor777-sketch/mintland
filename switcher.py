@@ -50,12 +50,18 @@ THEME_INFO = {
         "desc": "Звёздное небо, полярное сияние и туман; иконки в мягком ореоле.",
         "thumb": "docs/theme-night.gif",
     },
+    "forest": {
+        "name": "Лес",
+        "desc": "Плоские деревья на траве; вокруг иконок — пустые поляны.",
+        "thumb": "docs/theme-forest.gif",
+    },
 }
 
 GROUP_LABELS = {
     "beach": ["Берег", "Вода", "Элементы"],
     "meadow": ["Вокруг иконок", "Облака", "Персонажи"],
     "night": ["Иконки", "Небо", "Туман", "Воздух"],
+    "forest": ["Лес", "Земля"],
 }
 
 PARAM_LABELS = {
@@ -83,6 +89,11 @@ PARAM_LABELS = {
         "mist": "Плотность тумана",
         "fireflies": "Светлячки",
     },
+    "forest": {
+        "trees": "Деревья",
+        "glade": "Поляна",
+        "sigma": "Ореол вокруг иконок",
+    },
 }
 
 # Наши подобранные значения по умолчанию (в themes.json у Beach 4 пальмы,
@@ -91,7 +102,7 @@ DEFAULT_OVERRIDES = {
     "beach": {"palms": 2, "kayaks": 1, "birds": 1},
 }
 
-THEME_ORDER = {"beach": 0, "meadow": 1, "night": 2}
+THEME_ORDER = {"beach": 0, "meadow": 1, "night": 2, "forest": 3}
 
 # Единицы только латиницей/по-русски. Счётчики (пальмы, каяки, чайки)
 # показываем без единиц: число и так понятно.
@@ -99,6 +110,7 @@ UNIT_LABELS = {
     "beach": {"sigma": "px", "shoal": "px", "shallow": "px"},
     "meadow": {"sigma": "px"},
     "night": {"halo": "px", "shoot": "шт", "fireflies": "шт"},
+    "forest": {"trees": "шт", "glade": "px", "sigma": "px"},
 }
 
 
@@ -188,6 +200,17 @@ UI = {
                     "fireflies": "Fireflies",
                 },
                 "variants": {"polar": "Polar", "fireflies": "Fireflies"},
+            },
+            "forest": {
+                "name": "Forest",
+                "desc": "Flat trees on grass; your icons sit in clearings.",
+                "groups": ["Forest", "Ground"],
+                "params": {
+                    "trees": "Trees",
+                    "glade": "Clearing",
+                    "sigma": "Halo around icons",
+                },
+                "variants": {"forest": "Forest"},
             },
         },
     },

@@ -98,6 +98,7 @@ def main():
     b = Bench(args.html, w, h)
     b.load("file://" + str(args.html.resolve()) + "?wallpaper=1&freeze=1")
 
+    # Наборы под конкретную тему: у Ночи — туман и сияние, у Леса — деревья.
     cases = [
         ("всё как есть", None),
         ("туман выключен", {"mist": 0}),
@@ -105,6 +106,8 @@ def main():
         ("ореолы выключены", {"halo": 0}),
         ("без эффектов", {"mist": 0, "aurora": 0, "halo": 0, "shoot": 0}),
         ("вернуть всё", {"mist": 0.5, "aurora": 0.7, "halo": 96, "shoot": 2}),
+        ("деревьев нет", {"trees": 0}),
+        ("деревьев много", {"trees": 900}),
     ]
 
     print("\n%s (%dx%d)" % (args.html, w, h))
@@ -118,6 +121,9 @@ def main():
         if "error" in d:
             print("  %-18s %s" % (name, d["error"]))
             return 1
+        if not d.get("ms"):
+            print("  %-18s нет замера: %r" % (name, d))
+            continue
         print("  %-18s %6.1f мс/кадр   (%.0f fps)" % (name, d["ms"], d["fps"]))
     return 0
 

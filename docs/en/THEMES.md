@@ -59,6 +59,7 @@ Assets (`prototype/assets/*.png`) — only if the scene uses them.
 | Beach | `prototype/flat.html` | WebGL2 shader: the shoreline is built from the icons, waves, palms, kayaks, seagulls |
 | Meadow | `prototype/meadow.html` | WebGL2: clouds around the icons, a boy with a kite, a kitten |
 | Night | `prototype/night.html` | Canvas 2D without a single asset file: stars, aurora, mist, halos around the icons |
+| Forest | `prototype/forest.html` | WebGL2 ground with a canvas 2D layer on top: trees of seven kinds, drawn in code; clearings around the icons |
 
 Another 11 themes in `themes.json` have `status: "locked"` — there are no HTML scenes for them.
 These are not "disabled" themes but blanks from Deskland: they only have a thumbnail.

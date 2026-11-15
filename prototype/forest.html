@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mintland · Лес</title>
+<!--
+  Mintland · тема «Лес» (вид сверху; WebGL2 для земли и canvas 2D
+  для деревьев)
+  Ориентир по стилю: плоская векторная иллюстрация — светло-зелёная
+  земля со штрихами травы, поверх неё лес из стилизованных деревьев
+  нескольких пород. Вокруг иконок земля остаётся пустой: там, где
+  стоит иконка, деревья не растут.
+  - Земля: та же, что в теме «Луг», — крупные заливки, зерно бумаги и
+    трава параллельными штрихами
+  - Деревья: рисуются кодом (не картинками), поэтому произвольного
+    размера и перекрашиваются под вариант. Порядок — по глубине:
+    дальние деревья мельче и бледнее, ближние крупнее и темнее
+  - Вокруг иконок: деревья убираются, остаётся голая земля
+-->
+<style>
+  :root { --taskbar: 48px; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #a6c46e; }
+  body { font-family: "Cantarell", "Ubuntu", "Noto Sans", "DejaVu Sans", system-ui, sans-serif; }
+  #art { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  /* Деревья рисуются поверх сцены отдельным canvas 2D: WebGL-шейдер земли
+     о них ничего не знает, а пятна векторных крон на canvas 2D выходят
+     ровнее, чем в шейдере. */
+  #trees { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; pointer-events: none; }
+  #desktop { position: fixed; left: 0; top: 0; right: 0; bottom: var(--taskbar); }
+
+  .icon {
+    position: absolute; width: 76px; padding: 4px 2px 5px;
+    display: flex; flex-direction: column; align-items: center;
+    border: 1px solid transparent; border-radius: 4px;
+    user-select: none; touch-action: none; cursor: default;
+  }
+  .icon:hover { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.24); }
+  .icon.sel { background: rgba(0,120,215,.34); border-color: rgba(140,200,255,.7); }
+  .icon.drag { opacity: .88; z-index: 10; transform: scale(1.04); }
+  .icon.settle { transition: left .22s cubic-bezier(.2,.8,.3,1), top .22s cubic-bezier(.2,.8,.3,1); }
+  .icon.born { animation: born .45s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes born { from { opacity: 0; transform: scale(.6); } }
+  .glyph { width: 48px; height: 48px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)) drop-shadow(3px 6px 4px rgba(90,80,110,.25)); pointer-events: none; }
+  .glyph svg { width: 100%; height: 100%; display: block; }
+  .label {
+    margin-top: 3px; max-width: 72px; font-size: 12px; line-height: 15px; color: #fff; text-align: center;
+    text-shadow: 0 0 2px rgba(0,0,0,.95), 0 1px 3px rgba(0,0,0,.85);
+    word-break: break-all; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    pointer-events: none;
+  }
+
+  #taskbar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--taskbar);
+    background: rgba(28,32,38,.6); backdrop-filter: blur(28px) saturate(1.6); -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    border-top: 1px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; justify-content: center; z-index: 40;
+  }
+  #taskbar .apps { display: flex; gap: 4px; }
+  #taskbar .app { width: 40px; height: 40px; border-radius: 4px; display: grid; place-items: center; }
+  #taskbar .app:hover { background: rgba(255,255,255,.08); }
+  #taskbar .app svg { width: 24px; height: 24px; }
+  #clock { position: absolute; right: 14px; color: #fff; font-size: 12px; line-height: 16px; text-align: right; }
+
+  #panel {
+    position: fixed; top: 14px; right: 14px; width: 284px; max-height: calc(100vh - var(--taskbar) - 28px); overflow: auto;
+    background: rgba(20,52,64,.74); backdrop-filter: blur(18px) saturate(1.3); -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    color: #eef6f5; border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+    font-size: 12px; line-height: 1.4; box-shadow: 0 12px 32px rgba(0,0,0,.25); z-index: 50;
+  }
+  #panel.hidden { display: none; }
+  /* Режим обоев (?wallpaper=1, страницу загружает рабочий стол):
+     настоящие иконки и панель рисует система, не страница */
+  body.wall #panel, body.wall #taskbar, body.wall #desktop { display: none; }
+  #panel header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; }
+  #panel header b { font-size: 14px; letter-spacing: .06em; }
+  #panel header span { margin-left: 8px; opacity: .55; }
+  #panel.collapsed .body { display: none; }
+  .ibtn { background: none; border: 0; color: inherit; opacity: .6; cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px; }
+  .ibtn:hover { opacity: 1; }
+  #panel .body { padding: 0 14px 14px; }
+  .sec { margin-top: 12px; }
+  .sec > .t { opacity: .6; margin-bottom: 6px; }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); background: rgba(255,255,255,.06); border-radius: 7px; padding: 2px; gap: 2px; }
+  .seg button { background: none; border: 0; color: inherit; padding: 5px 0; border-radius: 5px; cursor: pointer; font: inherit; opacity: .75; white-space: nowrap; }
+  .seg button:hover { opacity: 1; }
+  .seg button.on { background: rgba(255,255,255,.17); opacity: 1; }
+  .slider { margin-top: 9px; }
+  .slider .row { display: flex; justify-content: space-between; }
+  .slider .row span:last-child { opacity: .6; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; margin: 4px 0 0; accent-color: #7fe3d6; }
+  .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+  .toggles label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .toggles input { accent-color: #7fe3d6; margin: 0; }
+  .btns { display: flex; gap: 6px; }
+  .btns button {
+    flex: 1; font: inherit; color: inherit; cursor: pointer; padding: 7px 0; border-radius: 7px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.1);
+  }
+  .btns button:hover { background: rgba(255,255,255,.18); }
+  #stats { margin-top: 12px; padding: 8px 10px; border-radius: 7px; background: rgba(0,0,0,.25); font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; line-height: 1.6; color: #d4e4e2; }
+  #stats .live { color: #7fe3d6; }
+  .hint { margin-top: 10px; opacity: .5; font-size: 11px; line-height: 1.6; }
+  #nogl { position: fixed; inset: 0; display: none; place-items: center; color: #fff; font-size: 16px; }
+</style>
+</head>
+<body>
+<canvas id="art"></canvas>
+<canvas id="trees"></canvas>
+<div id="desktop"></div>
+
+<div id="taskbar">
+  <div class="apps">
+    <div class="app"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="9.5" height="9.5" fill="#4cc2ff"/><rect x="12.5" y="2" width="9.5" height="9.5" fill="#4cc2ff"/><rect x="2" y="12.5" width="9.5" height="9.5" fill="#4cc2ff"/><rect x="12.5" y="12.5" width="9.5" height="9.5" fill="#4cc2ff"/></svg></div>
+    <div class="app"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="#fff" stroke-width="2"/><path d="M15 15l5 5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+    <div class="app"><svg viewBox="0 0 24 24"><path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v1H2z" fill="#e09b1d"/><path d="M2 9h20v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#ffc83d"/></svg></div>
+    <div class="app"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1b8fd6"/><path d="M6 13c1-5 11-6 12 0-3-2-8-2-9 2 0 2 2 3 4 3-4 1-7-1-7-5z" fill="#6fe37a" opacity=".9"/></svg></div>
+    <div class="app"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2.5" fill="#2b2b2b" stroke="#777"/><path d="M6 9l3 3-3 3M11 15h6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div>
+  </div>
+  <div id="clock"></div>
+</div>
+
+<aside id="panel">
+  <header>
+    <div><b>Mintland</b><span>Луг</span></div>
+    <div><button class="ibtn" id="collapse" title="Свернуть">–</button></div>
+  </header>
+  <div class="body">
+    <div class="sec"><div class="t">Раскладка рабочего стола</div>
+      <div class="seg">
+        <button data-v="mine">Как у вас</button><button data-v="arranged">По порядку</button><button data-v="messy">Вперемешку</button><button data-v="minimal">Минимум</button>
+      </div>
+    </div>
+    <div class="sec" id="sliders"></div>
+    <div class="sec toggles">
+      <label><input type="checkbox" data-key="debug">Показать границы облаков</label>
+      <label><input type="checkbox" data-key="snap">Привязка к сетке</label>
+      <label><input type="checkbox" data-key="cap30">Ограничить 30 кадров/с</label>
+    </div>
+    <div class="sec btns">
+      <button id="btnAdd">＋ Новый файл</button>
+      <button id="btnSeed">Другие облака</button>
+    </div>
+    <div id="stats"></div>
+    <div class="hint">Перетащите иконку — облака сдвинутся за ней<br>Del — удалить · H — скрыть панель</div>
+  </div>
+</aside>
+<div id="nogl">Этот браузер не поддерживает WebGL2, тема работать не будет.</div>
+
+<script>
+'use strict';
+
+/* ======================================================================
+   Параметры
+   ====================================================================== */
+const CELL_W = 76, CELL_H = 100, GRID_X0 = 4, GRID_Y0 = 6, TASKBAR = 48;
+const STEP = 5;
+const MORPH_MS = 1800;
+
+const QS = new URLSearchParams(location.search);
+const WALL = QS.has('wallpaper');      // режим обоев: страницу открывает рабочий стол
+const FREEZE = QS.has('freeze');
+// ?variant=… — вариант темы для записи превью и прямых ссылок.
+const URL_VARIANT = QS.get('variant');       // заморозка: не крутим requestAnimationFrame, кадр задаётся снаружи (tools/capture-theme.py)
+// Значения по умолчанию должны совпадать с полем default темы «Лес»
+// в themes.json. Параметры grain и quality не настраиваются.
+const P = {
+  sigma: 72, warp: 40, edge: 10, cover: 0.3, flow: 1, grain: 1, quality: 2,   // quality 2: рисуем в реальных пикселях экрана — при масштабе 150% картинка не растягивается и остаётся чёткой
+  debug: false, snap: true, cap30: true,
+  adaptive: 1,
+  trees: 300,             // сколько деревьев в лесу
+  glade: 46,              // на сколько пикселей от иконки деревья не растут
+};
+/* Варианты темы. Пока один — `meadow`, повторяющий прежние цвета, поэтому
+   вид темы не меняется. Дальше вариант должен менять форму (осень, зима),
+   а не только палитру: иначе он читается клоном — проверено на Пляже. */
+const VARIANTS = {
+  forest: {
+    gLight: [0.78, 0.85, 0.55], gMid: [0.64, 0.77, 0.43],
+    gDeep:  [0.54, 0.70, 0.37], ink:  [0.26, 0.40, 0.19],
+    shadow: [0.56, 0.66, 0.52],
+  },
+};
+let variantId = 'forest';
+if (URL_VARIANT && VARIANTS[URL_VARIANT]) variantId = URL_VARIANT;
+
+// Цвета варианта в шейдерные uniforms.
+function applyVariant(U) {
+  const v = VARIANTS[variantId] || VARIANTS.forest;
+  gl.uniform3fv(U.uGLight, v.gLight);
+  gl.uniform3fv(U.uGMid, v.gMid);
+  gl.uniform3fv(U.uGDeep, v.gDeep);
+  gl.uniform3fv(U.uInk, v.ink);
+  gl.uniform3fv(U.uShadow, v.shadow);
+}
+
+const DEFAULTS = Object.assign({}, P);
+const DISPLAY_KEYS = ['adaptive'];
+const SLIDERS = [
+  { key: 'trees',  label: 'Деревья', min: 0, max: 900, step: 10, fmt: v => v + ' шт' },
+  { key: 'glade',  label: 'Поляна', min: 0, max: 200, step: 2, fmt: v => v + ' px' },
+  { key: 'sigma',  label: 'Ореол вокруг иконок', min: 40, max: 200, step: 1, fmt: v => v + ' px', act: 'field' },
+];
+
+/* ======================================================================
+   Данные иконок и раскладок
+   ====================================================================== */
+const PAGE = '<path d="M12 4h17l9 9v29a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="#fbfbfb" stroke="#c4c4c4"/><path d="M29 4v7a2 2 0 0 0 2 2h7z" fill="#dedede"/>';
+const LINES = '<path d="M24 20h10M24 25h10M24 30h10M24 35h10" stroke="#c9c9c9" stroke-width="1.6"/>';
+const badge = (color, text, size = 11) => `<rect x="4" y="21" width="19" height="19" rx="3" fill="${color}"/><text x="13.5" y="34.5" text-anchor="middle" font-family="Noto Sans,Arial" font-weight="700" font-size="${size}" fill="#fff">${text}</text>`;
+const SVG = {
+  folder: '<path d="M4 12a3 3 0 0 1 3-3h11l4 4h19a3 3 0 0 1 3 3v2H4z" fill="#e09b1d"/><path d="M4 17h40v20a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z" fill="#ffc83d"/><path d="M4 17h40v2.5H4z" fill="#ffd978"/>',
+  docx: PAGE + LINES + badge('#185abd', 'W'),
+  xlsx: PAGE + '<path d="M24 19h11v17H24zM24 24.5h11M24 30h11M29.5 19v17" stroke="#9ac9a9" stroke-width="1.3" fill="none"/>' + badge('#107c41', 'X'),
+  pdf:  PAGE + LINES + badge('#d33a2c', 'PDF', 7.5),
+  cad:  PAGE + LINES + badge('#2a7fd4', 'DWG', 7),
+  txt:  PAGE + '<path d="M16 18h16M16 23h16M16 28h16M16 33h10" stroke="#9a9a9a" stroke-width="1.6"/>',
+  png:  PAGE + '<rect x="14" y="17" width="20" height="17" rx="1.5" fill="#8fd0f5"/><path d="M14 30l6-6 5 5 3-3 6 6v1.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 14 34z" fill="#3fa35a"/><circle cx="29" cy="21.5" r="2" fill="#fff4b8"/>',
+  shot: '<rect x="3" y="13" width="42" height="25" rx="1" fill="#1d2129" stroke="#f2f2f2" stroke-width="1.5"/><rect x="6" y="16" width="14" height="3" fill="#5b8def"/><rect x="6" y="21" width="22" height="2" fill="#6c7280"/><rect x="6" y="25" width="18" height="2" fill="#6c7280"/><rect x="31" y="16" width="11" height="18" fill="#2e3440"/>',
+  zip:  PAGE + '<path d="M22 4v4h3v3h-3v3h3v3h-3v3h3v3h-3" stroke="#8a6d3b" stroke-width="2" fill="none"/><rect x="20" y="26" width="7" height="8" rx="1" fill="#8a6d3b"/>',
+  bin:  '<path d="M12 14h24l-2.5 27a3 3 0 0 1-3 2.7H17.5a3 3 0 0 1-3-2.7z" fill="rgba(215,235,250,.55)" stroke="rgba(255,255,255,.9)" stroke-width="1.2"/><path d="M10 12.5h28" stroke="rgba(255,255,255,.95)" stroke-width="2.4" stroke-linecap="round"/><path d="M19 19l1 19M24 19v19M29 19l-1 19" stroke="rgba(255,255,255,.7)" stroke-width="1.2"/>',
+  pc:   '<rect x="5" y="8" width="38" height="26" rx="2" fill="#1f8fe0" stroke="#bfe3ff" stroke-width="1.5"/><path d="M5 30h38" stroke="#0d5fa8" stroke-width="3"/><path d="M19 34l-2 6h14l-2-6z" fill="#9aa7b4"/>',
+};
+const APP_COLORS = ['#e8553e','#2f7de1','#18a058','#8b5cf6','#f59e0b','#0ea5a4','#db2777','#334155','#16a34a','#2563eb'];
+function appSVG(name) {
+  let h = 0; for (const ch of name) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return `<rect x="5" y="5" width="38" height="38" rx="9" fill="${APP_COLORS[h % APP_COLORS.length]}"/><path d="M5 14a9 9 0 0 1 9-9h20a9 9 0 0 1 9 9v6H5z" fill="#fff" opacity=".14"/>` +
+    `<text x="24" y="31.5" text-anchor="middle" font-family="Noto Sans,Arial" font-weight="700" font-size="18" fill="#fff">${[...name][0]}</text>`;
+}
+const glyphOf = (name, type) => type === 'app' ? appSVG(name) : SVG[type];
+
+const FILES = [
+  ['Корзина','bin'], ['Проекты','folder'], ['Смета 2026.xlsx','xlsx'], ['Требования.docx','docx'],
+  ['Снимок_0927.png','png'], ['Договор скан.pdf','pdf'], ['Новая папка','folder'], ['Материалы','folder'],
+  ['Фото из поездки','folder'], ['Установщик.zip','zip'], ['Протокол встречи.docx','docx'], ['Идеи обоев','folder'],
+  ['Отчёт за неделю.xlsx','xlsx'], ['Эскиз.png','png'], ['Старый бэкап','folder'], ['Фото из чата.png','png'], ['Инструкция.pdf','pdf'], ['Резюме.docx','docx'], ['Расходы.xlsx','xlsx'], ['Архив.zip','zip'], ['Иллюстрация.png','png'], ['Загрузки','folder'], ['Стикеры.png','png'], ['Расчётный лист.xlsx','xlsx'], ['Договор аренды.pdf','pdf'], ['Дневник.docx','docx'], ['Снимок экрана.png','png'],
+];
+const EXTRA = [
+  ['Новый документ.txt','txt'], ['Новая папка (2)','folder'], ['Счёт.pdf','pdf'], ['Выгрузка.xlsx','xlsx'],
+  ['Снимок_0928.png','png'], ['Заметки.txt','txt'], ['Архив копия.zip','zip'], ['Новая папка (3)','folder'],
+];
+const APPS = ['Корзина','Мой компьютер','Telegram','Slack','Zoom','Google Meet','Spotify','CapCut','Photoshop','Obsidian','VS Code','Krita',
+  'AutoCAD','Rhino','KeyShot','Dropbox','Chrome','Blender','Figma','Notion','Skype','Steam','Eagle','OBS','Kimi','PureRef','Запись экрана','NX 12.0','MarkText','Codex'];
+const MISC = [['projects','folder'],['Игры','folder'],['todolist','folder'],['OKR.xlsx','xlsx'],['Постоянные расходы.xlsx','xlsx'],
+  ['pdfarrange','app'],['stp.log','txt'],['Деталь.stp','txt'],['Деталь.3dm','png'],['Просмотр','folder']];
+const RIGHT = [['plot.log','txt'],['Инструменты','folder'],['Архив.rar','zip'],['1685x128.png','png'],['Фото из чата.jpg','png'],['0914.png','png'],
+  ['Фото из чата 2.jpg','png'],['images.png','png'],['Содержание.docx','docx'],['api.txt','txt'],['c4ef.png','png'],['0918.png','png'],
+  ['Правка платы.pdf','pdf'],['recommend.txt','txt'],['button.stp','txt'],['Новый текст (2).txt','txt'],['ugstep21','txt'],['Новый текст (3).txt','txt'],
+  ['План работ.txt','txt'],['Фото из чата 3.jpg','png'],['Новый DOCX.docx','docx'],['SEO.txt','txt'],['resend.txt','txt'],['Описание продукта.txt','txt'],
+  ['USER.pdf','pdf'],['Новый текст.txt','txt'],['Стул.pur','png'],['PAP-20.pdf','pdf'],['Презентация.pptx','pdf'],['Замечания.txt','txt']];
+function mineCells() {
+  const out = []; let a = 0, m = 0, rgt = 0, sh = 0;
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 10; r++) {
+    const name = APPS[a++];
+    out.push([c, r, name, name === 'Корзина' ? 'bin' : name === 'Мой компьютер' ? 'pc' : 'app']);
+  }
+  for (let r = 0; r < 10; r++) out.push([3, r, ...MISC[m++]]);
+  for (let r = 0; r < 5; r++) out.push([5, r, `Деталь ${r + 1}.dwg`, 'cad']);
+  out.push([6, 0, 'Тест ноги.bak', 'txt']);
+  for (const [c, r] of [[6,4],[6,5],[6,6],[6,7],[6,8],[7,3],[7,4],[7,5],[7,6],[7,7],[8,4],[8,5],[8,6],[9,2],[9,3],[9,4],[9,5],[9,6]])
+    out.push([c, r, `ScreenShot ${++sh}.png`, 'shot']);
+  for (const [c, r] of [[11,1],[11,2],[11,3],[12,1],[12,2],[12,3],[12,4],[13,1],[13,2],[13,3],[13,4],[14,1],[14,3],[14,4],[15,1],[15,6],
+    [16,4],[16,6],[17,4],[17,5],[17,6],[17,7],[19,4],[19,5],[19,8],[20,0],[20,4],[20,6],[21,0],[21,5],[21,6]]) {
+    const f = RIGHT[rgt++ % RIGHT.length]; out.push([c, r, f[0], f[1]]);
+  }
+  return out;
+}
+
+/* ======================================================================
+   Шум на CPU и бесшовная текстура шума
+   ====================================================================== */
+let seed = (Math.random() * 1e6) | 0;
+function hash2(x, y, k = 0) {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed + k, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x, y, k = 0) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const a = hash2(ix, iy, k), b = hash2(ix + 1, iy, k), c = hash2(ix, iy + 1, k), d = hash2(ix + 1, iy + 1, k);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+function fbm(x, y, k = 0) {
+  let a = 0.5, s = 0;
+  for (let i = 0; i < 4; i++) { s += a * vnoise(x, y, k + i * 7); x = x * 2.03 + 17.1; y = y * 2.03 + 17.1; a *= 0.5; }
+  return s;
+}
+function tileNoise(x, y, px, py, k) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const m = (v, p) => ((v % p) + p) % p;
+  const x0 = m(ix, px), x1 = m(ix + 1, px), y0 = m(iy, py), y1 = m(iy + 1, py);
+  const a = hash2(x0, y0, k), b = hash2(x1, y0, k), c = hash2(x0, y1, k), d = hash2(x1, y1, k);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+function tileFbm(u, v, periods, k) {
+  let s = 0, w = 0.5, tw = 0;
+  for (let i = 0; i < periods.length; i++) { s += w * tileNoise(u * periods[i], v * periods[i], periods[i], periods[i], k + i * 13); tw += w; w *= 0.5; }
+  return s / tw;
+}
+function makeNoiseImage() {
+  const S = 256, d = new Uint8Array(S * S * 4);
+  const chans = [[8, 16, 32, 64], [8, 16, 32, 64], [8, 16, 32], [16, 32, 64, 128]];
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = x / S, v = y / S, i = (y * S + x) * 4;
+    for (let c = 0; c < 4; c++) {
+      let n = tileFbm(u, v, chans[c], 100 + c * 50);
+      d[i + c] = Math.min(Math.max((n - 0.5) * 1.9 + 0.5, 0), 1) * 255;
+    }
+  }
+  return { S, d };
+}
+
+/* ======================================================================
+   Поле суши (CPU): s — знаковое расстояние до берега (меньше нуля — суша)
+   ====================================================================== */
+let W = innerWidth, H = innerHeight, Gw = 1, Gh = 1, NZ = null;
+function buildNoise() {
+  const N = Gw * Gh;
+  NZ = { wx: new Float32Array(N), wy: new Float32Array(N) };
+  for (let gy = 0; gy < Gh; gy++) for (let gx = 0; gx < Gw; gx++) {
+    const i = gy * Gw + gx, x = gx * STEP, y = gy * STEP;
+    NZ.wx[i] = fbm(x * 0.0028, y * 0.0028, 1) - 0.47;
+    NZ.wy[i] = fbm(x * 0.0028, y * 0.0028, 2) - 0.47;
+  }
+}
+let fieldMs = 0;
+function computeField(rects) {
+  const t0 = performance.now();
+  const N = Gw * Gh, f1 = new Float32Array(N);
+  const sig = P.sigma, is1 = 1 / (sig * sig);
+  const wa = P.warp * 2.2, wmax = wa * 0.5;
+  for (const r of rects) {
+    const R = 5.5 * sig + Math.max(r.hw, r.hh) * 0.5 + wmax;
+    const gx0 = Math.max(0, Math.floor((r.cx - R) / STEP)), gx1 = Math.min(Gw - 1, Math.ceil((r.cx + R) / STEP));
+    const gy0 = Math.max(0, Math.floor((r.cy - R) / STEP)), gy1 = Math.min(Gh - 1, Math.ceil((r.cy + R) / STEP));
+    const chw = r.hw * 0.5, chh = r.hh * 0.5;
+    for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+      const i = gy * Gw + gx;
+      const qx = gx * STEP + NZ.wx[i] * wa, qy = gy * STEP + NZ.wy[i] * wa;
+      let dx = Math.abs(qx - r.cx) - chw, dy = Math.abs(qy - r.cy) - chh;
+      if (dx < 0) dx = 0; if (dy < 0) dy = 0;
+      f1[i] += Math.exp(-(dx * dx + dy * dy) * is1);
+    }
+  }
+  // Нижняя граница — вклад на краю области расчёта: расстояние до берега
+  // внутри и снаружи получается одинаковым, и в открытом море не видно
+  // прямоугольного шва.
+  const c0 = Math.sqrt(-Math.log(0.35)), s = new Float32Array(N), fMin = Math.exp(-30);
+  for (let i = 0; i < N; i++) {
+    const g = Math.log(Math.max(f1[i], fMin));
+    s[i] = sig * (Math.sqrt(Math.max(-g, 0)) - c0) - sig * 0.6 * Math.max(g, 0);
+  }
+  fieldMs = performance.now() - t0;
+  return { s };
+}
+function sampleArr(a, x, y) {
+  const fx = Math.min(Math.max(x / STEP, 0), Gw - 1.001), fy = Math.min(Math.max(y / STEP, 0), Gh - 1.001);
+  const ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, i = iy * Gw + ix;
+  return (a[i] * (1 - tx) + a[i + 1] * tx) * (1 - ty) + (a[i + Gw] * (1 - tx) + a[i + Gw + 1] * tx) * ty;
+}
+
+/* ======================================================================
+   Шейдер
+   ====================================================================== */
+const VS = `#version 300 es
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+uniform sampler2D uNoise, uFA, uFB;
+uniform vec2 uRes, uGrid;
+uniform float uScale, uSeed, uStep, uMix, uTime, uDebug, uEdge;
+// Палитра приходит извне, как и у Пляжа: это основа вариантов темы.
+uniform vec3 uGLight, uGMid, uGDeep, uInk, uShadow;
+out vec4 o;
+
+// ---- Палитра ----
+// Цвета — в uniforms uGLight…uShadow; значения задаёт VARIANTS в JS.
+const vec2 LIGHT = vec2(-0.6, -0.8);                                          // солнце слева сверху
+const vec2 SHADOW_OFF = vec2(115.0, 156.0);                                    // тень ложится вправо-вниз, далеко от облака — значит, облако плывёт высоко
+const int CIRC_K = 36;
+
+float hash2(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float ss(float a, float b, float x) { float t = clamp((x - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+vec4 N(vec2 p, float scale) { return texture(uNoise, p / scale + uSeed * 0.013); }
+float fieldS(sampler2D t, vec2 p) { return texture(t, (p / uStep + 0.5) / uGrid).r; }
+float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+
+// Расстояние до отрезка
+float segD(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0)); }
+
+// Штрихи травы: не больше одного на ячейку 12×6, направление задаётся
+// крупным участком (параллельные ряды штрихов), густота тоже зависит от
+// места — где-то гуще, где-то пусто
+// Смотрим только свою ячейку и соседние сверху и снизу: штрих не
+// выходит за пределы ячейки по горизонтали
+float grassInk(vec2 p) {
+  const vec2 G = vec2(12.0, 6.0);
+  vec2 c0 = floor(p / G);
+  float ink = 0.0;
+  for (int j = -1; j <= 1; j++) {
+    vec2 c = c0 + vec2(0.0, float(j));
+    vec2 cp = (c + 0.5) * G;
+    float h = hash2(c + 3.1);
+    float dens = 0.75 * ss(0.42, 0.72, N(cp, 900.0).r) * ss(0.35, 0.6, N(cp + 50.0, 380.0).g) + 0.02;   // рисуем пятнами и пучками, между ними пусто
+    if (h > dens) continue;
+    float ang = (N(cp, 1400.0).g - 0.5) * 0.7 + (hash2(c + 7.7) - 0.5) * 0.3;    // в основном почти горизонтально; в пределах пятна штрихи параллельны
+    float len = 2.5 + 3.0 * hash2(c + 1.9);                                      // половина длины 2,5–5,5 px
+    vec2 ctr = cp + (vec2(hash2(c + 4.3), hash2(c + 5.9)) - 0.5) * vec2(2.0, 3.0);
+    vec2 dir = vec2(cos(ang), sin(ang)) * len;
+    float d = segD(p, ctr - dir, ctr + dir);
+    ink = max(ink, (1.0 - ss(0.2, 0.9, d)) * (0.35 + 0.45 * hash2(c + 9.1)));
+  }
+  return ink;
+}
+
+void main() {
+  vec2 p = vec2(gl_FragCoord.x, uRes.y * uScale - gl_FragCoord.y) / uScale;
+
+  // ---------- Луг: крупные акварельные заливки жёлто-зелёного и зелёного, несколько участков темнее, верхний левый (к свету) чуть светлее; зерно бумаги ----------
+  float w1 = N(p, 1900.0).b, w2 = N(p + 311.0, 650.0).g;
+  vec3 col = mix(uGMid, uGLight, ss(0.3, 0.75, w1 * 0.7 + w2 * 0.3));
+  col = mix(col, uGDeep, ss(0.45, 0.85, N(p + 977.0, 1300.0).r) * 0.4);       // порог размыт: шум растянут сильно, резкий порог дал бы ступенчатые квадраты
+  col *= 1.0 + 0.05 * (0.5 - (p.x + p.y) / (uRes.x + uRes.y));
+  col *= 1.0 + (hash2(floor(p * (0.8 * max(uScale, 1.0)))) - 0.5) * 0.035;   // зерно в реальных пикселях экрана
+  // Тёмно-зелёные штрихи травы
+  col = mix(col, uInk, grassInk(p) * 0.75);
+
+  // ---------- Поляна вокруг иконок ----------
+  // В лесу облаков нет: там, где стоит иконка, должна быть голая земля.
+  // Поле расстояний (как и в теме «Луг») показывает, где иконки; в этих
+  // местах траву режем и слегка высветляем — читается как вытоптанный
+  // участок. Деревья там тоже не растут (см. buildTrees).
+  float field = mix(fieldS(uFA, p), fieldS(uFB, p), uMix);
+  float glade = ss(uEdge + 46.0, uEdge + 4.0, field);
+  col = mix(col, mix(col, vec3(0.92, 0.95, 0.80), 0.35), glade * 0.75);
+  col = mix(col, col * uGDeep, glade * 0.18);
+
+  if (uDebug > 0.5) col = mix(col, vec3(0.9, 0.15, 0.15), glade);
+  o = vec4(col, 1.0);
+}`;
+
+/* ======================================================================
+   WebGL
+   ====================================================================== */
+const cv = document.getElementById('art');
+// Деревья — отдельный canvas 2D поверх сцены.
+const treeCv = document.getElementById('trees');
+const tctx = treeCv.getContext('2d');
+const gl = cv.getContext('webgl2', { antialias: false });
+if (!gl) document.getElementById('nogl').style.display = 'grid';
+function program(fs) {
+  const mk = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); throw new Error('shader'); }
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, mk(gl.VERTEX_SHADER, VS));
+  gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LuInk_STATUS)) console.error(gl.getProgramInfoLog(p));
+  const U = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const nm = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, ''); U[nm] = gl.getUniformLocation(p, nm); }
+  return { p, U };
+}
+const PR = program(FS);
+// Программа шейдера земли (одна на всю тему).
+gl.bindVertexArray(gl.createVertexArray());
+
+let noiseTex = null;
+function buildNoiseTex() {
+  const { S, d } = makeNoiseImage();
+  noiseTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, noiseTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, S, S, 0, gl.RGBA, gl.UNSIGNED_BYTE, d);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+}
+const f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+function toHalf(v) {
+  f32[0] = v; const x = u32[0];
+  const sign = (x >>> 16) & 0x8000, e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
+  if (e <= 0) return sign;
+  if (e >= 31) return sign | 0x7c00;
+  return sign | (e << 10) | (m >>> 13);
+}
+// Две текстуры поля суши: между ними интерполируем from → to
+const ftex = [null, null];
+let fromI = 0, toI = 0, morphT0 = -1e9, morphDur = MORPH_MS, FA = null, FB = null;
+function allocField() {
+  for (let i = 0; i < 2; i++) {
+    if (ftex[i]) gl.deleteTexture(ftex[i]);
+    ftex[i] = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, ftex[i]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, Gw, Gh, 0, gl.RED, gl.HALF_FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+}
+function uploadField(i, Fd) {
+  const d = new Uint16Array(Gw * Gh);
+  for (let k = 0; k < d.length; k++) d[k] = toHalf(Fd.s[k]);
+  gl.bindTexture(gl.TEXTURE_2D, ftex[i]);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); // R16F: строки нечётной ширины тоже грузим плотно
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, Gw, Gh, gl.RED, gl.HALF_FLOAT, d);
+}
+
+const iconRects = () => icons.map(ic => ({ cx: ic.x + ic.w / 2, cy: ic.y + ic.h / 2, hw: ic.w / 2 - 4, hh: ic.h / 2 - 2 }));
+function commit(fromEmpty = false) {
+  const nf = computeField(P.adaptive ? iconRects() : []);
+  const target = 1 - toI;
+  if (fromEmpty) { FA = computeField([]); uploadField(toI, FA); }
+  else FA = FB;
+  FB = nf;
+  uploadField(target, FB);
+  fromI = toI; toI = target;
+  morphT0 = performance.now();
+  morphDur = fromEmpty ? 2600 : MORPH_MS;
+  rebuildForest();                          // поляна вокруг иконок изменилась
+}
+function refresh() {
+  FA = FB = computeField(P.adaptive ? iconRects() : []);
+  uploadField(toI, FB);
+  fromI = toI; morphT0 = -1e9;
+  rebuildForest();
+}
+
+/* ======================================================================
+   Текущее поле: при перемещении иконок плавный переход между старой и новой текстурами
+   ====================================================================== */
+let curMix = 1;
+const curS = (x, y) => FB ? sampleArr(FA.s, x, y) * (1 - curMix) + sampleArr(FB.s, x, y) * curMix : 999;
+
+/* ======================================================================
+   Деревья
+   ======================================================================
+   Деревья рисуются кодом, а не берутся картинками: так они произвольного
+   размера, не требуют лицензии и легко перекрашиваются.
+
+   Порядок — по глубине: дальние деревья мельче и бледнее, ближние
+   крупнее и темнее. Список строится один раз (сид фиксирован), и
+   каждый кадр деревья рисуются в порядке «дальние — ближние».
+
+   Вокруг иконок деревья не растут: для каждого проверяется расстояние
+   до ближайшей иконки по полю расстояний (то же, что у Луга), и если
+   иконка слишком близко, дерево пропускается. Получается поляна.
+
+   Всего пять пород:
+     pine   — ёлка: ярусы хвои, тёмный сине-зелёный
+     spruce — ель: то же, но вытянутая и светлее
+     oak    — дуб: круглая крона из нескольких пятен
+     birch  — берёза: вытянутая крона и белый ствол
+     bush   — куст: низкая широкая крона у самой земли
+   ====================================================================== */
+
+// Палитра пород: [тень, свет, крона, ствол]. Оттенки заданы явно,
+// чтобы лес читался как набор плоских пятен, а не как градиент.
+// Породы. У каждой свой силуэт и своя палитра: на референсе деревья
+// отличаются не только формой, но и оттенком — от тёмно-сине-зелёных
+// елей до жёлто-зелёных дубов.
+const TREE_KINDS = {
+  // Ель: ярусы хвои, конус, тёмно-сине-зелёная.
+  spruce: {
+    shadow: '#16302a', dark: '#1f4438', light: '#33604a', trunk: '#3e3024',
+    form: 'conifer', tiers: 5, narrow: 0.78,
+  },
+  // Сосна: ярусы реже, крона шире, оттенок теплее.
+  pine: {
+    shadow: '#1b2f2a', dark: '#2a4a38', light: '#4d7145', trunk: '#463526',
+    form: 'conifer', tiers: 4, narrow: 1.0,
+  },
+  // Ель голубая: тот же конус, но холоднее и светлее.
+  fir: {
+    shadow: '#18313a', dark: '#254a56', light: '#4a7c85', trunk: '#3e3024',
+    form: 'conifer', tiers: 6, narrow: 0.68,
+  },
+  // Дуб: крона-облако с волнистым краем и заметный ствол.
+  oak: {
+    shadow: '#243a26', dark: '#3a5a30', light: '#5d8043', trunk: '#7a5a3a',
+    form: 'scallop', bumps: 11, trunkH: 0.62, wobble: 0.42,
+  },
+  // Берёза: крона-облако мельче, ствол высокий и светлый.
+  birch: {
+    shadow: '#2c3a2c', dark: '#556b45', light: '#8ba464', trunk: '#d8d4c4',
+    form: 'scallop', bumps: 9, trunkH: 0.80, wobble: 0.38, tall: 0.88,
+  },
+  // Ольха: крона-облако, тёплый жёлто-зелёный тон.
+  alder: {
+    shadow: '#2f3520', dark: '#4c5a2e', light: '#87964b', trunk: '#7a5a3a',
+    form: 'scallop', bumps: 13, trunkH: 0.52, wobble: 0.45,
+  },
+  // Тополь: узкий высокий шпиль — силуэт, отличный от кроны-облака.
+  poplar: {
+    shadow: '#1e3324', dark: '#2f4f31', light: '#547a44', trunk: '#6d5238',
+    form: 'spire', tall: 1.9, narrow: 0.62,
+  },
+  // Кипарис: ещё уже и темнее.
+  cypress: {
+    shadow: '#182b2c', dark: '#24443f', light: '#3d6b5c', trunk: '#4a3826',
+    form: 'spire', tall: 2.2, narrow: 0.48,
+  },
+  // Куст: низкая широкая крона у самой земли.
+  bush: {
+    shadow: '#263a24', dark: '#425e33', light: '#688a48', trunk: '#5a4630',
+    form: 'bush', bumps: 9, wobble: 0.44,
+  },
+};
+const TREE_KIND_IDS = Object.keys(TREE_KINDS);
+
+// Список деревьев: {x, y, kind, scale, hue}. Собирается один раз на
+// сид; при пересборке (новый сид) — заново.
+
+// Дерево ставится, если вокруг него нет иконок.
+//
+// Расстояние считаем прямо до прямоугольников иконок, а не по полю
+// расстояний: поле `s` — безразмерная величина (на иконке оно около
+// −12, в стороне 300), и порог в нём не переводится в пиксели
+// наглядно. До прямоугольника — в пикселях, и поляну видно сразу.
+function distToIcon(x, y) {
+  let best = Infinity;
+  for (const ic of icons) {
+    // Расстояние от точки до прямоугольника иконки.
+    const dx = Math.max(ic.x - x, 0, x - (ic.x + ic.w));
+    const dy = Math.max(ic.y - y, 0, y - (ic.y + ic.h));
+    const d = Math.hypot(dx, dy);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// Поляна: дерево не растёт ближе, чем на clearance пикселей к иконке.
+function treeClear(x, y, radius) {
+  return distToIcon(x, y) > radius + P.glade;
+}
+
+// Плотность леса: пятнами. Шум задаёт густые заросли и прогалины,
+// иначе деревья стоят ровным ковром и лес выглядит разровненным.
+// Значение нормировано к 0..1.
+//
+// Шум бесшовный (tileFbm): лес должен продолжаться за краями экрана, иначе
+// на границе видна полоса обрыва.
+function forestDensity(x, y) {
+  const u = x / Math.max(W, 1), v = y / Math.max(H, 1);
+  const n = tileFbm(u, v, [3, 6, 12], 91);
+  // Значение НЕ обрезается в ноль: шум задаёт густоту зарослей, а не
+  // выкашивает целые участки. Меньше 0.15 — почти пусто, больше 0.85 —
+  // заросль. Полностью пустых мест быть не должно: на референсе лес
+  // покрывает весь экран, и прогалины получаются только от иконок.
+  return Math.min(1, Math.max(0.62, (n - 0.18) * 1.2));
+}
+
+// Расстановка.
+//
+// Ключевое: у каждого дерева есть постоянный номер (индекс в списке
+// кандидатов). Номер не меняется при перестроении леса, поэтому можно
+// отслеживать, какое дерево выросло, а какое ушло под землю, и не
+// перерисовывать то, что не изменилось.
+//
+// Плотность задаётся шумом: деревья растут зарослями, а в прогалинах их
+// нет вовсе. Вокруг иконок — поляна (см. treeClear).
+//
+// Кандидаты всегда одни и те же (зависят только от сида и экрана), а
+// меняется лишь то, какие из них попадают в лес. Это позволяет при
+// перетаскивании иконки обновлять лес частично.
+const TREE_CAND = [];
+function treeCandidates() {
+  if (TREE_CAND.length && TREE_CAND.w === W && TREE_CAND.h === H) return TREE_CAND.list;
+  const rnd = mulberry32((seed ^ 0x7a3f11) >>> 0);
+  const list = [];
+  // Запас кандидатов больше, чем деревьев: часть отсеется по шуму и по
+  // взаимной близости.
+  const n = Math.max(128, Math.ceil(P.trees * 5.0));
+  for (let i = 0; i < n; i++) {
+    const x = rnd() * W;
+    const y = rnd() * (H - 60);
+    const density = forestDensity(x, y);
+    const kind = TREE_KIND_IDS[Math.floor(rnd() * TREE_KIND_IDS.length)];
+    const depth = y / (H - 60);
+    // Размер: ближе к низу экрана — крупнее (это глубина). Разброс внутри
+    // — чтобы лес не состоял из деревьев одного калибра.
+    const scale = (0.95 + depth * 1.45) * (0.76 + rnd() * 0.56);
+    list.push({ id: i, x, y, density, kind, scale, radius: 21 * scale, depth, ph: rnd() * TAU, grow: 0 });
+  }
+  TREE_CAND.list = list; TREE_CAND.w = W; TREE_CAND.h = H;
+  return list;
+}
+
+// Перестроить лес и пометить для перерисовки изменившуюся область.
+//
+// Всё, что не изменилось, остаётся на прежнем холсте: перерисовывается
+// только прямоугольник вокруг выросших и ушедших деревьев.
+function rebuildForest() {
+  const changed = buildTrees();
+  for (const st of changed) {
+    const b = treeBox(st);
+    markDirty(b.x0 - 6, b.y0 - 6, b.x1 + 6, b.y1 + 6);
+  }
+  if (changed.length) {
+    // Дерево, которое ушло под землю, освобождает место: под ним могут
+    // быть другие деревья, их тоже надо перерисовать.
+    for (const tr of trees) {
+      const b = treeBox(tr);
+      markDirty(b.x0 - 2, b.y0 - 2, b.x1 + 2, b.y1 + 2);
+    }
+  }
+}
+
+// Состояние дерева: где оно и насколько выросло (0..1).
+// grow = 0 — дерево только-только проросло или уже ушло под землю.
+const treeState = new Map();
+
+// Список видимых деревьев в порядке отрисовки (дальние сверху).
+let trees = [];
+
+// Перестроить лес под текущее положение иконок.
+//
+// Возвращает список изменившихся деревьев: те, что выросли или ушли.
+// Всё остальное остаётся на месте и не перерисовывается.
+function buildTrees() {
+  const cand = treeCandidates();
+  const out = [];
+  const changed = [];
+  const live = new Set();
+
+  // Сколько деревьев в лесу — ровно столько, сколько попросил ползунок.
+  const limit = Math.max(0, Math.round(P.trees));
+  if (limit === 0) {
+    for (const st of treeState.values()) if (st.target !== 0) { st.target = 0; changed.push(st); }
+    out.sort((a, b) => a.y - b.y);
+    trees = out;
+    return changed;
+  }
+  for (const c of cand) {
+    if (out.length >= limit) break;
+    if (c.density < 0) continue;
+    // Плотность решает, растёт ли здесь дерево вообще.
+    if (hash2(c.id, 7, 31) > c.density * 1.05) continue;
+    if (!treeClear(c.x, c.y, c.radius + 8)) continue;
+    // Не ставим два дерева впритык: иначе лес превращается в стену.
+    let tooClose = false;
+    for (const t of out) {
+      if (Math.hypot(t.x - c.x, t.y - c.y) < (t.radius + c.radius) * 0.30) { tooClose = true; break; }
+    }
+    if (tooClose) continue;
+
+    let st = treeState.get(c.id);
+    if (!st) {
+      st = { grow: 0, target: 1, x: c.x, y: c.y, kind: c.kind, scale: c.scale, radius: c.radius, depth: c.depth, ph: c.ph };
+      treeState.set(c.id, st);
+      changed.push(st);
+    } else {
+      // Дерево на месте: переносим новые координаты, но рост не трогаем.
+      st.x = c.x; st.y = c.y; st.kind = c.kind; st.scale = c.scale;
+      st.radius = c.radius; st.depth = c.depth; st.ph = c.ph;
+    }
+    st.target = 1;
+    live.add(c.id);
+    out.push(st);
+  }
+
+  // Деревья, которые были, но теперь перекрыты иконкой, — уходят под землю.
+  // Их надо оставить в списке отрисовки, иначе они исчезнут мгновенно, а
+  // не уйдут под землю.
+  for (const [id, st] of treeState) {
+    if (live.has(id)) continue;
+    if (st.target === 0) { out.push(st); continue; }   // уже уходит
+    st.target = 0;
+    changed.push(st);
+    out.push(st);
+  }
+
+  out.sort((a, b) => a.y - b.y);
+  trees = out;
+  return changed;
+}
+
+// Продвинуть рост деревьев. Возвращает те, что изменились.
+function stepTrees(dt) {
+  const changed = [];
+  for (const st of treeState.values()) {
+    if (st.grow === st.target) continue;
+    // Растут медленнее, чем уходят: дерево заметно вырастает, но уходит
+    // быстро — как будто его сдвигают.
+    // Растёт за ~0.8 с, уходит быстрее — как будто дерево убирают.
+    const rate = st.target > st.grow ? 1.3 : 2.4;
+    const d = dt * rate;
+    st.grow = st.target > st.grow ? Math.min(st.target, st.grow + d) : Math.max(st.target, st.grow - d);
+    changed.push(st);
+  }
+  return changed;
+}
+
+// Дерево целиком ушло под землю — забываем о нём и убираем из списка
+// отрисовки, иначе оно осталось бы на холсте навсегда.
+function pruneTrees() {
+  for (const [id, st] of treeState) {
+    if (st.target === 0 && st.grow <= 0) {
+      treeState.delete(id);
+      const i = trees.indexOf(st);
+      if (i >= 0) trees.splice(i, 1);
+    }
+  }
+}
+
+// Крона-облако: круг с волнистым краем.
+//
+// Край рисуется набором выпуклых дуг — так крона получает «волнистый»
+// силуэт, как на иллюстрации. Пятна внутри (светлое сверху, тёмное
+// снизу) дают объём.
+function scallopPath(g, cx, cy, r, bumps, wobble) {
+  const step = TAU / bumps;
+  g.moveTo(cx + r, cy);
+  for (let i = 0; i < bumps; i++) {
+    const a0 = i * step, a1 = a0 + step, am = (a0 + a1) / 2;
+    // Контрольная точка вынесена наружу — получается выпуклый «зуб».
+    const rm = r * (1 + wobble);
+    g.quadraticCurveTo(cx + Math.cos(am) * rm, cy + Math.sin(am) * rm,
+                       cx + Math.cos(a1) * r, cy + Math.sin(a1) * r);
+  }
+  g.closePath();
+}
+
+// Одно дерево.
+//
+// Вид сверху, но с лёгким намёком на объём. Три силуэта:
+//   conifer — конус из ярусов хвои;
+//   scallop — круглая крона с волнистым краем;
+//   spire   — узкий высокий шпиль.
+// Все размеры — в единицах дерева (s = масштаб), чтобы порода менялась
+// одним числом.
+function drawTree(g, t, sway) {
+  const k = TREE_KINDS[t.kind];
+  // Растущее дерево выходит из-под земли: крона поднимается снизу
+  // вверх, а сам ствол остаётся на месте.
+  const grow = t.grow;
+  const s = t.scale * (0.55 + 0.45 * grow);
+  const x = t.x + sway * 2.2 * s, y = t.y;
+
+  // Тень на земле: смещённое вправо-вниз тёмное пятно.
+  g.globalAlpha = 0.16;
+  g.fillStyle = k.shadow;
+  g.beginPath();
+  g.ellipse(x + 4 * s, y + 1.5 * s, 13 * s, 3.4 * s, 0, 0, TAU);
+  g.fill();
+  g.globalAlpha = 1;
+
+  if (k.form === 'conifer') {
+    // Хвойное: конус из наложенных ярусов хвои. Каждый ярус — треугольник
+    // с волнистым низом: край рисуется плавной кривой, иначе ель читается
+    // как лесенка.
+    const tiers = k.tiers, totalH = 44 * s * grow, totalW = 13.5 * s * k.narrow;
+    for (let i = 0; i < tiers; i++) {
+      const f = i / tiers;                        // 0 — нижний ярус
+      const ty = y - totalH * f * 0.88;          // верхушка яруса
+      const tw = totalW * (1 - f * 0.80);        // ширина яруса
+      const th = totalH * 0.40;
+      g.fillStyle = i % 2 ? k.dark : k.light;
+      g.beginPath();
+      g.moveTo(x, ty - th);                      // вершина яруса
+      g.quadraticCurveTo(x + tw * 0.45, ty - th * 0.10, x + tw, ty + th * 0.16);
+      const lobes = 3;
+      for (let l = 0; l < lobes; l++) {
+        const u0 = 1 - l / lobes, u1 = 1 - (l + 1) / lobes;
+        g.quadraticCurveTo(x + tw * (u0 + u1) * 0.5, ty + th * 0.52, x + tw * u1, ty + th * 0.16);
+      }
+      g.quadraticCurveTo(x - tw * 0.45, ty - th * 0.10, x - tw, ty + th * 0.16);
+      for (let l = 0; l < lobes; l++) {
+        const u0 = l / lobes, u1 = (l + 1) / lobes;
+        g.quadraticCurveTo(x - tw * (u0 + u1) * 0.5, ty + th * 0.52, x - tw * u1, ty + th * 0.16);
+      }
+      g.closePath();
+      g.fill();
+    }
+    // Ствол виден только у нижнего яруса, и то немного.
+    g.fillStyle = k.trunk;
+    g.fillRect(x - 1.7 * s, y - 5 * s, 3.4 * s, 5 * s);
+    return;
+  }
+
+  if (k.form === 'spire') {
+    // Шпиль: узкий вытянутый силуэт с волнистым краем.
+    const h = 30 * s * grow * (k.tall || 1.9), w = 8.5 * s * (k.narrow || 0.6);
+    g.fillStyle = k.dark;
+    g.beginPath();
+    g.moveTo(x, y - h);
+    g.quadraticCurveTo(x + w, y - h * 0.45, x + w * 0.72, y - 2 * s);
+    g.lineTo(x - w * 0.72, y - 2 * s);
+    g.quadraticCurveTo(x - w, y - h * 0.45, x, y - h);
+    g.closePath();
+    g.fill();
+    // Светлая полоса по краю — объём.
+    g.fillStyle = k.light;
+    g.beginPath();
+    g.moveTo(x, y - h);
+    g.quadraticCurveTo(x + w * 0.75, y - h * 0.45, x + w * 0.52, y - 2 * s);
+    g.lineTo(x + w * 0.08, y - 2 * s);
+    g.quadraticCurveTo(x + w * 0.22, y - h * 0.45, x, y - h);
+    g.closePath();
+    g.fill();
+    return;
+  }
+
+  // Лиственное и куст: ствол и крона-облако.
+  const r = 22 * s * (k.tall || 1) * (0.35 + 0.65 * grow);
+  // Ствол заметный: на референсе у лиственных деревьев ствол хорошо виден
+  // между кроной и землёй. Растёт вместе с кроной, иначе из-под земли
+  // торчал бы голый ствол.
+  const trunkH = k.form === 'bush' ? r * 0.18 : r * (k.trunkH || 0.5) * grow;
+
+  if (k.form !== 'bush') {
+    // Ствол: заметный, с лёгким расширением к земле.
+    g.fillStyle = k.trunk;
+    g.beginPath();
+    g.moveTo(x - 3.2 * s, y);
+    g.lineTo(x - 2.2 * s, y - trunkH);
+    g.lineTo(x + 2.2 * s, y - trunkH);
+    g.lineTo(x + 3.2 * s, y);
+    g.closePath();
+    g.fill();
+    if (k.trunk === '#d8d4c4') {
+      // Берёза: тёмные чёрточки на белом стволе.
+      g.fillStyle = 'rgba(60,60,55,.5)';
+      for (let kk = 0; kk < 4; kk++) {
+        g.fillRect(x - 2.4 * s, y - trunkH * (0.22 + kk * 0.21), 4.8 * s, 1.1 * s);
+      }
+    }
+  }
+
+  const cy = y - trunkH - r * 0.86;
+  // Тёмная основа кроны.
+  g.fillStyle = k.dark;
+  scallopPath(g, x, cy, r, k.bumps || 9, k.wobble || 0.15);
+  g.fill();
+  // Светлая макушка: волнистый край со сдвигом вверх — объём.
+  g.fillStyle = k.light;
+  scallopPath(g, x, cy - r * 0.20, r * 0.80, (k.bumps || 9) - 2, (k.wobble || 0.15) * 0.8);
+  g.fill();
+  // Тёмный низ — тень внутри кроны.
+  g.fillStyle = k.shadow;
+  g.globalAlpha = 0.30;
+  scallopPath(g, x, cy + r * 0.34, r * 0.72, (k.bumps || 9) - 3, (k.wobble || 0.15) * 0.7);
+  g.fill();
+  g.globalAlpha = 1;
+}
+
+// Все деревья за кадр. Сортировка уже сделана при сборке.
+function drawTrees(g, t) {
+  for (const tr of trees) {
+    // Качание от ветра: дальние деревья качаются сильнее (их видно
+    // целиком), ближние — почти неподвижны.
+    const amp = 0.5 + (1 - tr.depth) * 1.2;
+    const sway = Math.sin(t * 0.0006 + tr.ph) * amp;
+    drawTree(g, tr, sway);
+  }
+}
+
+/* ======================================================================
+   Иконки рабочего стола (DOM)
+   ====================================================================== */
+const desktop = document.getElementById('desktop');
+let icons = [], layoutKind = 'mine', selected = null, drag = null, extraIdx = 0, layoutCapacity = 0;
+const grid = { cols: 1, rows: 1 };
+let DW = innerWidth, DH = innerHeight - TASKBAR;
+const ripples = [];
+function computeGrid() {
+  DW = innerWidth; DH = innerHeight - TASKBAR;
+  grid.cols = Math.max(1, Math.floor((DW - GRID_X0) / CELL_W));
+  grid.rows = Math.max(1, Math.floor((DH - GRID_Y0) / CELL_H));
+}
+const cellPos = (c, r) => ({ x: GRID_X0 + c * CELL_W, y: GRID_Y0 + r * CELL_H });
+const occupied = (x, y, self) => icons.some(ic => ic !== self && Math.abs(ic.x - x) < CELL_W / 2 && Math.abs(ic.y - y) < CELL_H / 2);
+function nearestFreeCell(cx, cy, self) {
+  let best = null, bd = Infinity;
+  for (let c = 0; c < grid.cols; c++) for (let r = 0; r < grid.rows; r++) {
+    const pos = cellPos(c, r);
+    if (occupied(pos.x, pos.y, self)) continue;
+    const dd = Math.hypot(pos.x + CELL_W / 2 - cx, pos.y + CELL_H / 2 - cy);
+    if (dd < bd) { bd = dd; best = pos; }
+  }
+  return best;
+}
+const isWater = (x, y) => curS(x, y) > 4;
+function addRipple(x, y, str = 1) {
+  ripples.push({ x, y, t0: performance.now(), str });
+  if (ripples.length > 6) ripples.shift();
+}
+function addIcon([name, type], pos, born = false) {
+  const el = document.createElement('div');
+  el.className = 'icon' + (born ? ' born' : '');
+  el.innerHTML = `<div class="glyph"><svg viewBox="0 0 48 48">${glyphOf(name, type)}</svg></div><div class="label">${name}</div>`;
+  el.style.left = pos.x + 'px'; el.style.top = pos.y + 'px';
+  desktop.appendChild(el);
+  const ic = { name, type, x: pos.x, y: pos.y, w: el.offsetWidth, h: el.offsetHeight, el };
+  icons.push(ic); bindDrag(ic);
+  return ic;
+}
+function setPos(ic, x, y) { ic.x = x; ic.y = y; ic.el.style.left = x + 'px'; ic.el.style.top = y + 'px'; }
+function select(ic) {
+  if (selected) selected.el.classList.remove('sel');
+  selected = ic;
+  if (ic) ic.el.classList.add('sel');
+}
+function bindDrag(ic) {
+  const el = ic.el;
+  el.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); select(ic);
+    el.setPointerCapture(e.pointerId); el.classList.remove('settle');
+    drag = { ic, sx: e.clientX, sy: e.clientY, ox: ic.x, oy: ic.y, moved: false };
+  });
+  el.addEventListener('pointermove', e => {
+    if (!drag || drag.ic !== ic) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true; el.classList.add('drag');
+    el.style.left = drag.ox + dx + 'px'; el.style.top = drag.oy + dy + 'px';
+  });
+  const end = (e, cancel) => {
+    if (!drag || drag.ic !== ic) return;
+    const d = drag; drag = null;
+    el.classList.remove('drag');
+    if (!d.moved) return;
+    let nx = cancel ? d.ox : d.ox + (e.clientX - d.sx), ny = cancel ? d.oy : d.oy + (e.clientY - d.sy);
+    nx = Math.min(Math.max(nx, 0), DW - ic.w); ny = Math.min(Math.max(ny, 0), DH - ic.h);
+    if (P.snap && !cancel) { const c = nearestFreeCell(nx + ic.w / 2, ny + ic.h / 2, ic); if (c) { nx = c.x; ny = c.y; } }
+    if (Math.hypot(nx - d.ox, ny - d.oy) < 0.5) { setPos(ic, nx, ny); return; }
+    const cx = nx + ic.w / 2, cy = ny + ic.h / 2;
+    if (isWater(cx, cy)) addRipple(cx, cy, 1.3);
+    el.classList.add('settle'); setPos(ic, nx, ny);
+    commit();
+  };
+  el.addEventListener('pointerup', e => end(e, false));
+  el.addEventListener('pointercancel', e => end(e, true));
+}
+const TAU = Math.PI * 2;
+
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function applyLayout(kind) {
+  layoutKind = kind;
+  icons.forEach(ic => ic.el.remove()); icons = []; selected = null; extraIdx = 0;
+  computeGrid();
+  layoutCapacity = grid.cols * grid.rows;
+  if (kind === 'mine') {
+    for (const [c, r, name, type] of mineCells()) {
+      const pos = cellPos(Math.round(c * (grid.cols - 1) / 21), Math.round(r * (grid.rows - 1) / 9));
+      if (!occupied(pos.x, pos.y, null)) addIcon([name, type], pos);
+    }
+  } else if (kind === 'arranged') {
+    FILES.forEach((f, i) => { const c = Math.floor(i / grid.rows), r = i % grid.rows; if (c < grid.cols) addIcon(f, cellPos(c, r)); });
+  } else if (kind === 'messy') {
+    const rnd = mulberry32(20260928);
+    for (const f of FILES) for (let t = 0; t < 300; t++) {
+      const c = rnd() < 0.45 ? Math.floor(rnd() * Math.min(3, grid.cols)) : Math.floor(rnd() * grid.cols);
+      const pos = cellPos(c, Math.floor(rnd() * grid.rows));
+      if (!occupied(pos.x, pos.y, null)) { addIcon(f, pos); break; }
+    }
+  } else {
+    Array.from({ length: 10 }, (_, r) => [[0, r], [1, r]]).flat().concat([[2, 0], [2, 1], [2, 2], [3, 0], [3, 1], [3, 2], [Math.floor(grid.cols * 0.45), Math.floor(grid.rows * 0.5)]])
+      .forEach(([c, r], i) => addIcon(FILES[i], cellPos(Math.min(c, grid.cols - 1), Math.min(r, grid.rows - 1))));
+  }
+  commit(true);
+}
+
+/* ======================================================================
+   Размеры и главный цикл
+   ====================================================================== */
+function resize() {
+  W = innerWidth; H = innerHeight;
+  // Предпросмотр: страница размечается по размеру всего рабочего стола и
+  // затем уменьшается целиком, поэтому холсту хватает низкого разрешения
+  // 0.75 — предел масштаба рендера: сцена размытая и под иконками, детализация
+  // выше не видна, а пикселей вчетверо больше. Как в flat.html (см. docs/IMPROVEMENTS.md §1).
+  const scale = Math.min(devicePixelRatio || 1, P.quality, 0.75);
+  // Берём реальный размер холста, с дробной частью: при экране 2560 и
+  // масштабе 150% это 1706,67, а innerWidth округляется до 1707. Иначе
+  // холст на пиксель шире экрана, браузер масштабирует всю картинку и она
+  // становится мутной.
+  const box = cv.getBoundingClientRect();
+  cv.width = Math.round((box.width || W) * scale); cv.height = Math.round((box.height || H) * scale); cv._scale = scale;
+  Gw = Math.ceil(W / STEP) + 2; Gh = Math.ceil(H / STEP) + 2;
+  buildNoise();
+  allocField();
+}
+
+const T0 = performance.now();
+let lastT = 0, fpsEMA = 0, frameN = 0, frameMs = 0;
+const px = new Uint8Array(4);
+let paused = false;                              // программа сообщила: окно развёрнуто / во весь экран → пауза
+// В заморозке время кадра задаёт внешний код (window.__renderAt).
+let frozenT = null;
+// Один кадр: общий для живого цикла и для заморозки (window.__renderAt).
+function renderFrame(now, dt) {
+  if (lastT && !FREEZE) fpsEMA = fpsEMA ? fpsEMA * 0.9 + (1 / dt) * 0.1 : 1 / dt;
+  lastT = now;
+  // В заморозке сразу финальное состояние: полутона не нужно.
+  const e = FREEZE ? 1 : Math.min((now - morphT0) / morphDur, 1);
+  curMix = e < 0.5 ? 2 * e * e : 1 - Math.pow(-2 * e + 2, 2) / 2;
+  dtFrame = dt;
+  draw(now);
+  if (++frameN % 10 === 0) updateStats();
+}
+function frame(now) {
+  // В заморозке цикл тоже живёт: без регулярных кадров композитор не
+  // забирает содержимое WebGL-канваса, и снимок получается пустым.
+  // Меняется только время, которое рисуется.
+  requestAnimationFrame(frame);
+  if (paused) { lastT = 0; return; }
+  if (P.cap30 && !FREEZE && now - lastT < 31) return;
+  const dt = FREEZE ? 0.033 : (lastT ? Math.min((now - lastT) / 1000, 0.1) : 0.03);
+  renderFrame(FREEZE && frozenT !== null ? frozenT : now, dt);
+}
+// Длительность последнего кадра в секундах — нужна для анимации роста.
+let dtFrame = 0.033;
+
+function draw(now) {
+  const measure = frameN % 20 === 0, t0 = performance.now();
+  // Персонажей в лесу нет: только деревья и земля.
+  const render=(renderer)=>{
+    const { p, U } = renderer;
+    gl.useProgram(p);
+    gl.viewport(0, 0, cv.width, cv.height);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, noiseTex);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ftex[fromI]);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, ftex[toI]);
+    gl.uniform1i(U.uNoise, 0); gl.uniform1i(U.uFA, 1); gl.uniform1i(U.uFB, 2);
+    gl.uniform2f(U.uRes, cv.width / cv._scale, cv.height / cv._scale);   // совпадает с реальными пикселями холста (innerWidth округлён)
+    gl.uniform2f(U.uGrid, Gw, Gh);
+    gl.uniform1f(U.uScale, cv._scale);
+    gl.uniform1f(U.uSeed, (seed % 997) * 0.37);
+    gl.uniform1f(U.uStep, STEP);
+    gl.uniform1f(U.uMix, curMix);
+    gl.uniform1f(U.uTime, (now - T0) / 1000);
+    gl.uniform1f(U.uDebug, P.debug ? 1 : 0);
+    gl.uniform1f(U.uEdge, P.edge);
+    applyVariant(U);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+  render(PR,false);
+  if (measure) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); frameMs = performance.now() - t0; }
+  // Деревья рисуются после сцены: они лежат поверх земли, но под иконками.
+  drawTreeLayer((now - T0) / 1000, dtFrame);
+}
+
+// Слой деревьев: очищаем и рисуем поверх. Отдельный canvas нужен, чтобы
+// деревья не попадали в шейдер земли, но при этом шли в том же порядке,
+// что и сцена.
+// Слой деревьев.
+//
+// Ключевая мысль: перерисовывать всё на каждом кадре — дорого, а при
+// перетаскивании иконки меняется только область вокруг неё. Поэтому
+// деревья рисуются в закадровый холст, и на экран выводится готовый
+// результат целиком (одна операция drawImage), без перерисовки.
+//
+// Когда часть леса меняется (дерево выросло или ушло под землю),
+// перерисовывается только прямоугольник вокруг этих деревьев.
+const treeLayer = document.createElement('canvas');
+const layerCtx = treeLayer.getContext('2d');
+let layerScale = 1;
+
+// Прямоугольник, который надо перерисовать в следующий кадр.
+let dirty = null;
+
+function markDirty(x0, y0, x1, y1) {
+  if (!dirty) dirty = { x0, y0, x1, y1 };
+  else {
+    dirty.x0 = Math.min(dirty.x0, x0); dirty.y0 = Math.min(dirty.y0, y0);
+    dirty.x1 = Math.max(dirty.x1, x1); dirty.y1 = Math.max(dirty.y1, y1);
+  }
+}
+
+// Габариты дерева: ствол внизу, крона вверх.
+function treeBox(t) {
+  const r = t.radius;
+  return { x0: t.x - r * 1.3, y0: t.y - r * 2.6, x1: t.x + r * 1.3, y1: t.y + r * 0.4 };
+}
+
+// Перерисовать в закадровом холсте область: стереть и нарисовать заново
+// все деревья, которые её задевают, в правильном порядке.
+function repaintRegion(box) {
+  const g = layerCtx;
+  g.save();
+  g.setTransform(layerScale, 0, 0, layerScale, 0, 0);
+  g.clearRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+  g.beginPath();
+  g.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+  g.clip();
+  for (const tr of trees) {
+    const b = treeBox(tr);
+    if (b.x1 < box.x0 || b.x0 > box.x1 || b.y1 < box.y0 || b.y0 > box.y1) continue;
+    drawTree(g, tr, 0);
+  }
+  g.restore();
+}
+
+function drawTreeLayer(t, dt) {
+  const k = Math.min(window.devicePixelRatio || 1, 1.5);
+  if (treeCv.width !== Math.round(W * k) || treeCv.height !== Math.round(H * k)) {
+    treeCv.width = Math.round(W * k); treeCv.height = Math.round(H * k);
+    treeCv.style.width = W + 'px'; treeCv.style.height = H + 'px';
+    // Размер холста изменился — слой надо перерисовать целиком.
+    treeLayer.width = treeCv.width; treeLayer.height = treeCv.height;
+    layerScale = k;
+    dirty = { x0: 0, y0: 0, x1: W, y1: H };
+  }
+
+  // Деревья, которые выросли или ушли, — только их и перерисовываем.
+  const changed = stepTrees(dt);
+  for (const st of changed) {
+    const b = treeBox(st);
+    markDirty(b.x0 - 4, b.y0 - 4, b.x1 + 4, b.y1 + 4);
+  }
+  if (dirty) {
+    repaintRegion(dirty);
+    dirty = null;
+  }
+  pruneTrees();
+
+  // На экран — готовый слой целиком, одним drawImage.
+  tctx.setTransform(1, 0, 0, 1, 0, 0);
+  tctx.clearRect(0, 0, treeCv.width, treeCv.height);
+  tctx.drawImage(treeLayer, 0, 0);
+}
+
+/* ======================================================================
+   Панель
+   ====================================================================== */
+const statsEl = document.getElementById('stats');
+const GPU = (() => {
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  return name.replace(/^ANGLE \([^,]+,\s*/, '').replace(/\s*\(0x[0-9a-f]+\).*$/i, '')
+    .replace(/\s*(Direct3D|vs_|OpenGL).*$/, '').replace(/\(R\)|\(TM\)/g, '').trim();
+})();
+function updateStats() {
+  statsEl.innerHTML =
+    `<span class="live">● Анимация · ${fpsEMA.toFixed(0)} кадр/с</span><br>GPU ${GPU}<br>` +
+    `кадр ${frameMs.toFixed(1)} мс · поле суши ${fieldMs.toFixed(0)} мс<br>` +
+    `холст ${cv.width}×${cv.height} · иконок ${icons.length}`;
+}
+function syncPanel() {
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.v === layoutKind));
+  document.querySelectorAll('.toggles input').forEach(inp => { inp.checked = P[inp.dataset.key]; });
+}
+const slidersEl = document.getElementById('sliders');
+for (const s of SLIDERS) {
+  const wrap = document.createElement('div');
+  wrap.className = 'slider';
+  wrap.innerHTML = `<div class="row"><span>${s.label}</span><span></span></div><input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${P[s.key]}">`;
+  const out = wrap.querySelector('.row span:last-child'), inp = wrap.querySelector('input');
+  out.textContent = s.fmt(P[s.key]);
+  inp.addEventListener('input', () => {
+    P[s.key] = +inp.value; out.textContent = s.fmt(P[s.key]);
+    if (s.act === 'field') refresh();
+    else if (s.act === 'size') { resize(); refresh(); }
+  });
+  slidersEl.appendChild(wrap);
+}
+document.querySelector('.seg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  applyLayout(b.dataset.v); syncPanel();
+});
+document.querySelectorAll('.toggles input').forEach(inp => inp.addEventListener('change', () => {
+  P[inp.dataset.key] = inp.checked;
+}));
+document.getElementById('collapse').addEventListener('click', () => {
+  const p = document.getElementById('panel');
+  p.classList.toggle('collapsed');
+  document.getElementById('collapse').textContent = p.classList.contains('collapsed') ? '+' : '–';
+});
+// Новый пейзаж: новый сид (кнопка обновления в настройках и на панели).
+// Если иконки уже известны, проигрываем вступление заново; если страница
+// только открылась и иконок ещё нет — просто запоминаем сид и рисуем по
+// нему, когда они появятся.
+let iconsSeen = !WALL;
+// Обработчик сообщений хоста — на уровне модуля, чтобы его можно было
+// отдать наружу через window.__inject (инструменты проверки и превью).
+let hostHandle = null;
+function reseed(v) {
+  seed = v; buildNoise();
+  if (!iconsSeen) return;
+  commit(true);
+}
+document.getElementById('btnSeed').addEventListener('click', () => reseed((Math.random() * 1e6) | 0));
+document.getElementById('btnAdd').addEventListener('click', () => {
+  const f = EXTRA[extraIdx++ % EXTRA.length];
+  let pos = null;
+  for (let t = 0; t < 300 && !pos; t++) {
+    const c = cellPos(Math.floor(Math.random() * grid.cols), Math.floor(Math.random() * grid.rows));
+    if (!occupied(c.x, c.y, null)) pos = c;
+  }
+  if (!pos) return;
+  const ic = addIcon(f, pos, true);
+  select(ic);
+  if (isWater(pos.x + ic.w / 2, pos.y + ic.h / 2)) addRipple(pos.x + ic.w / 2, pos.y + ic.h / 2, 1.3);
+  commit();
+});
+desktop.addEventListener('pointerdown', e => {
+  select(null);
+  if (isWater(e.clientX, e.clientY)) addRipple(e.clientX, e.clientY);
+});
+addEventListener('keydown', e => {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
+    const ic = selected; select(null); ic.el.remove(); icons = icons.filter(x => x !== ic); commit();
+  } else if (e.key === 'h' || e.key === 'H') document.getElementById('panel').classList.toggle('hidden');
+});
+let resizeT = 0;
+addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => {
+    if (WALL) { resize(); refresh(); skyClouds.length = 0; return; }
+    resize(); computeGrid();
+    if (grid.cols * grid.rows > layoutCapacity && layoutCapacity < 40) { applyLayout(layoutKind); syncPanel(); return; }
+    for (const ic of icons) setPos(ic, Math.min(ic.x, Math.max(0, DW - ic.w)), Math.min(ic.y, Math.max(0, DH - ic.h)));
+    refresh();
+  }, 100);
+});
+function tickClock() {
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  document.getElementById('clock').innerHTML = `${z(d.getHours())}:${z(d.getMinutes())}<br>${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+setInterval(tickClock, 15000); tickClock();
+
+/* ---------- Запуск ---------- */
+window.__dbg = {
+  P, applyLayout,
+  bench() {
+    const ts = [];
+    for (let i = 0; i < 10; i++) { const a = performance.now(); draw(performance.now()); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); ts.push(performance.now() - a); }
+    ts.sort((a, b) => a - b);
+    return { frame: +ts[5].toFixed(1), canvas: cv.width + 'x' + cv.height, gpu: GPU };
+  },
+};
+resize();
+buildNoiseTex();
+if (WALL) startHostedMode();
+else { applyLayout('mine'); syncPanel(); }
+
+// Хуки для инструментов (tools/capture-theme.py, tools/test-theme.py):
+//   __renderAt(t) — нарисовать кадр на момент t мс и остановиться;
+//   __inject(msg) — доставить сообщение хоста (icons/settings/pause).
+// Кадр обязательно идёт через requestAnimationFrame: иначе WebKit не
+// забирает содержимое WebGL-канваса в снимок, и превью получается пустым.
+window.__renderAt = function (t) {
+  frozenT = t;
+  requestAnimationFrame(frame);
+};
+window.__inject = function (m) { if (hostHandle) hostHandle(m); };
+
+if (!FREEZE) requestAnimationFrame(frame);
+
+/* ======================================================================
+   Управляемый режим: кадром управляет извне
+   - обои (?wallpaper=1): сообщения приходят от процесса рабочего стола
+   Сообщения: icons (прямоугольники настоящих иконок в физических
+   пикселях) / settings (параметры, можно частично) / reset (значения по
+   умолчанию) / pause
+   ====================================================================== */
+// Применение настроек: берём только параметры с панели; размер облака
+// требует пересчёта поля
+function applySettings(v) {
+  // Вариант темы: имя таблицы из VARIANTS. Меняется на лету.
+  if (typeof v.variant === 'string' && VARIANTS[v.variant] && v.variant !== variantId) {
+    variantId = v.variant;
+    if (!FREEZE) draw(performance.now());
+  }
+  // Кнопка обновления в настройках: новый пейзаж. Рабочий стол и
+  // предпросмотр используют один и тот же сид.
+  if (typeof v.seed === 'number' && v.seed !== seed) reseed(v.seed);
+  let field = false, adaptiveChanged = false, forestChanged = false;
+  for (const k in v) {
+    if ((!SLIDERS.some(s => s.key === k) && !DISPLAY_KEYS.includes(k)) || typeof v[k] !== typeof P[k] || P[k] === v[k]) continue;
+    if (DISPLAY_KEYS.includes(k) && v[k] !== 0 && v[k] !== 1) continue;
+    P[k] = v[k];
+    if (k === 'adaptive') adaptiveChanged = true;
+    if (k === 'sigma') field = true;
+    // Число деревьев и размер поляны меняют сам лес: его надо собрать
+    // заново, иначе ползунок не делает ничего.
+    if (k === 'trees' || k === 'glade') forestChanged = true;
+  }
+  if (adaptiveChanged && FB) commit();
+  else if (field && FB) refresh();
+  if (forestChanged) rebuildForest();
+
+}
+
+function startHostedMode() {
+  document.body.classList.add('wall');
+  icons = [];
+  commit(true);                                   // сначала просто луг: где иконки, ещё неизвестно
+  let first = true;
+  const handle = m => {
+    if (m.t === 'pause') { paused = m.v; return; }
+    if (m.t === 'settings') { applySettings(m.v || {}); return; }
+    if (m.t === 'reset') { applySettings(Object.assign({}, DEFAULTS, m.v || {})); return; }
+    if (m.t !== 'icons') return;
+    const k = window.devicePixelRatio || 1;       // физические пиксели → CSS-пиксели
+    icons = m.vis ? m.r.map(([l, t, r, b]) => ({ x: l / k, y: t / k, w: (r - l) / k, h: (b - t) / k })) : [];
+    iconsSeen = true;
+    commit(first);                                // в первый раз облака медленно вырастают, дальше плавно идут за иконками
+    first = false;
+  };
+  hostHandle = handle;
+  const host = window.chrome && window.chrome.webview;
+  if (!host) return;
+  host.addEventListener('message', ev => handle(JSON.parse(ev.data)));
+  host.postMessage('ready');
+}
+</script>
+</body>
+</html>
