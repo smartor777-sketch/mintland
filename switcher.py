@@ -194,16 +194,36 @@ class AnimatedThumb(Gtk.DrawingArea):
         super().__init__()
         self.width = width
         self.height = height
-        self.anim = GdkPixbuf.PixbufAnimation.new_from_file(str(path))
-        self.iter = self.anim.get_iter(None)
+        self.path = None
+        self.anim = None
+        self.iter = None
         self.scaled = None
         self.timer = None
         self.set_size_request(width, height)
         self.connect("draw", self._on_draw)
         self.connect("destroy", self._on_destroy)
+        self.load(path)
         self.timer = GLib.timeout_add(100, self._tick)
 
+    def load(self, path):
+        """Подменить превью, не пересоздавая виджет.
+
+        Нужно для вариантов темы: одна карточка, но у каждого варианта
+        своя анимация. Пересоздавать виджет пришлось бы вместе с
+        раскладкой, а так меняется только источник кадров.
+        """
+        path = Path(path)
+        if self.path == path:
+            return
+        self.path = path
+        self.anim = GdkPixbuf.PixbufAnimation.new_from_file(str(path))
+        self.iter = self.anim.get_iter(None)
+        self.scaled = None
+        self.queue_draw()
+
     def _tick(self):
+        if self.iter is None:
+            return True
         changed = self.iter.advance(None)
         if not changed:
             self.iter = self.anim.get_iter(None)
@@ -255,6 +275,7 @@ class Switcher(Gtk.Window):
         self.state = load_state(themes)
         self.theme_id = self.state["theme"]
         self.cards = {}
+        self.thumbs = {}
         self.value_labels = {}
         self._save_timer = None
         self._busy_until = 0.0
@@ -378,6 +399,7 @@ class Switcher(Gtk.Window):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         thumb = self._make_thumb(tid)
         thumb.set_halign(Gtk.Align.CENTER)
+        self.thumbs[tid] = thumb
         box.pack_start(thumb, True, False, 0)
         name = Gtk.Label(label=info.get("name", tid))
         name.set_xalign(0.5)
@@ -393,10 +415,24 @@ class Switcher(Gtk.Window):
         self.cards[tid] = card
         return card
 
+    def _thumb_path(self, tid, variant=None):
+        """Файл превью для темы и её варианта.
+
+        У варианта может быть своё превью (поле `thumb` в записи варианта,
+        путь от корня репозитория). Нет своего — берём превью темы.
+        """
+        theme = self.theme_by_id.get(tid) or {}
+        if variant:
+            for v in theme.get("variants", []):
+                if v["id"] == variant and v.get("thumb"):
+                    return HERE / v["thumb"]
+        info = THEME_INFO.get(tid, {})
+        return HERE / info.get("thumb", "prototype/thumbs/%s.webp" % tid)
+
     def _make_thumb(self, tid):
         info = THEME_INFO.get(tid, {})
         width, height = 208, 117
-        path = HERE / info.get("thumb", "prototype/thumbs/%s.webp" % tid)
+        path = self._thumb_path(tid, self.state["params"].get(tid, {}).get("variant"))
         try:
             return AnimatedThumb(path, width, height)
         except Exception:
@@ -507,8 +543,38 @@ class Switcher(Gtk.Window):
             if v["id"] == vid:
                 params.update(v.get("params", {}))
                 break
+        self._sync_thumb(self.theme_id)
         self._rebuild_settings()
         self._schedule_persist()
+
+    def _sync_thumb(self, tid):
+        """Показать в карточке превью текущего варианта.
+
+        Карточка одна, вариантов у неё может быть несколько: превью
+        подменяется, чтобы карточка показывала то, что сейчас на столе.
+        """
+        thumb = self.thumbs.get(tid)
+        if thumb is None:
+            return
+        path = self._thumb_path(tid, self.state["params"].get(tid, {}).get("variant"))
+        if isinstance(thumb, AnimatedThumb):
+            try:
+                thumb.load(path)
+                return
+            except Exception:
+                pass
+        if not path.is_file():
+            return
+        parent = thumb.get_parent()
+        if parent is None:
+            return
+        new_thumb = self._make_thumb(tid)
+        new_thumb.set_halign(Gtk.Align.CENTER)
+        parent.remove(thumb)
+        parent.pack_start(new_thumb, True, False, 0)
+        parent.reorder_child(new_thumb, 0)
+        new_thumb.show()
+        self.thumbs[tid] = new_thumb
 
     @staticmethod
     def _param_applies(p, variant):

@@ -198,7 +198,8 @@
             "moon": 0,
             "mist": 0.28,
             "fireflies": 40
-          }
+          },
+          "thumb": "docs/night-fireflies.gif"
         }
       ],
       "defaultVariant": "polar"
