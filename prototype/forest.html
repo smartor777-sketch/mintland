@@ -200,8 +200,8 @@ const DEFAULTS = Object.assign({}, P);
 const DISPLAY_KEYS = ['adaptive'];
 const SLIDERS = [
   { key: 'trees',  label: 'Деревья', min: 0, max: 900, step: 10, fmt: v => v + ' шт' },
-  { key: 'glade',  label: 'Поляна', min: 0, max: 200, step: 2, fmt: v => v + ' px' },
-  { key: 'sigma',  label: 'Ореол вокруг иконок', min: 40, max: 200, step: 1, fmt: v => v + ' px', act: 'field' },
+  { key: 'glade',  label: 'Поляна', min: 0, max: 80, step: 2, fmt: v => v + ' px' },
+  { key: 'sigma',  label: 'Ореол вокруг иконок', min: 20, max: 260, step: 2, fmt: v => v + ' px' },
 ];
 
 /* ======================================================================
@@ -376,7 +376,10 @@ const FS = `#version 300 es
 precision highp float;
 uniform sampler2D uNoise, uFA, uFB;
 uniform vec2 uRes, uGrid;
-uniform float uScale, uSeed, uStep, uMix, uTime, uDebug, uEdge;
+uniform float uScale, uSeed, uStep, uMix, uTime, uDebug;
+uniform float uGlade, uHalo;    // радиус поляны и ореола, px
+uniform int uIconN;             // сколько иконок
+uniform vec4 uIcon[32];         // прямоугольники иконок: x, y, ширина, высота
 // Палитра приходит извне, как и у Пляжа: это основа вариантов темы.
 uniform vec3 uGLight, uGMid, uGDeep, uInk, uShadow;
 out vec4 o;
@@ -425,6 +428,23 @@ float grassInk(vec2 p) {
   return ink;
 }
 
+// Расстояние от точки до ближайшего прямоугольника иконки, в пикселях.
+// 0 внутри иконки, растёт наружу. Так «Ореол» и «Поляна» задаются в px и
+// ведут себя предсказуемо.
+float iconDist(vec2 p) {
+  float best = 1e6;
+  for (int i = 0; i < 32; i++) {
+    if (i >= uIconN) break;
+    vec4 r = uIcon[i];
+    float dx = max(r.x - p.x, 0.0);
+    dx = max(dx, p.x - (r.x + r.z));
+    float dy = max(r.y - p.y, 0.0);
+    dy = max(dy, p.y - (r.y + r.w));
+    best = min(best, sqrt(dx * dx + dy * dy));
+  }
+  return best;
+}
+
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uRes.y * uScale - gl_FragCoord.y) / uScale;
 
@@ -437,15 +457,19 @@ void main() {
   // Тёмно-зелёные штрихи травы
   col = mix(col, uInk, grassInk(p) * 0.75);
 
-  // ---------- Поляна вокруг иконок ----------
-  // В лесу облаков нет: там, где стоит иконка, должна быть голая земля.
-  // Поле расстояний (как и в теме «Луг») показывает, где иконки; в этих
-  // местах траву режем и слегка высветляем — читается как вытоптанный
-  // участок. Деревья там тоже не растут (см. buildTrees).
-  float field = mix(fieldS(uFA, p), fieldS(uFB, p), uMix);
-  float glade = ss(uEdge + 46.0, uEdge + 4.0, field);
-  col = mix(col, mix(col, vec3(0.92, 0.95, 0.80), 0.35), glade * 0.75);
-  col = mix(col, col * uGDeep, glade * 0.18);
+  // ---------- Поляна и ореол вокруг иконок ----------
+  //
+  // Оба считаются в ПИКСЕЛЯХ от прямоугольника иконки, а не по полю
+  // расстояний: то поле безразмерное (на самой иконке около 170, в двухста
+  // пикселях — 320), поэтому ползунок «Ореол» почти ничего не менял.
+  //
+  // Ореол — мягкое светлое пятно под иконкой, поляна — вытоптанная земля
+  // радиусом побольше. Деревья в поляне не растут (см. buildTrees).
+  float di = iconDist(p);
+  float halo = ss(uHalo, uHalo * 0.25, di);              // 1 под иконкой, 0 на краю
+  float glade = ss(uGlade, uGlade * 0.35, di);
+  col = mix(col, mix(col, vec3(0.94, 0.96, 0.84), 0.42), halo * 0.55);   // светлый ореол
+  col = mix(col, col * uGDeep, glade * 0.22);                            // вытоптанная земля
 
   if (uDebug > 0.5) col = mix(col, vec3(0.9, 0.15, 0.15), glade);
   o = vec4(col, 1.0);
@@ -1102,7 +1126,6 @@ const desktop = document.getElementById('desktop');
 let icons = [], layoutKind = 'mine', selected = null, drag = null, extraIdx = 0, layoutCapacity = 0;
 const grid = { cols: 1, rows: 1 };
 let DW = innerWidth, DH = innerHeight - TASKBAR;
-const ripples = [];
 function computeGrid() {
   DW = innerWidth; DH = innerHeight - TASKBAR;
   grid.cols = Math.max(1, Math.floor((DW - GRID_X0) / CELL_W));
@@ -1119,11 +1142,6 @@ function nearestFreeCell(cx, cy, self) {
     if (dd < bd) { bd = dd; best = pos; }
   }
   return best;
-}
-const isWater = (x, y) => curS(x, y) > 4;
-function addRipple(x, y, str = 1) {
-  ripples.push({ x, y, t0: performance.now(), str });
-  if (ripples.length > 6) ripples.shift();
 }
 function addIcon([name, type], pos, born = false) {
   const el = document.createElement('div');
@@ -1166,7 +1184,6 @@ function bindDrag(ic) {
     if (P.snap && !cancel) { const c = nearestFreeCell(nx + ic.w / 2, ny + ic.h / 2, ic); if (c) { nx = c.x; ny = c.y; } }
     if (Math.hypot(nx - d.ox, ny - d.oy) < 0.5) { setPos(ic, nx, ny); return; }
     const cx = nx + ic.w / 2, cy = ny + ic.h / 2;
-    if (isWater(cx, cy)) addRipple(cx, cy, 1.3);
     el.classList.add('settle'); setPos(ic, nx, ny);
     commit();
   };
@@ -1274,7 +1291,10 @@ function draw(now) {
     gl.uniform1f(U.uMix, curMix);
     gl.uniform1f(U.uTime, (now - T0) / 1000);
     gl.uniform1f(U.uDebug, P.debug ? 1 : 0);
-    gl.uniform1f(U.uEdge, P.edge);
+    gl.uniform1f(U.uGlade, P.glade);
+    gl.uniform1f(U.uHalo, P.sigma);
+    gl.uniform1i(U.uIconN, packIcons());
+    gl.uniform4fv(U.uIcon, iconBuf);
     applyVariant(U);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
@@ -1282,6 +1302,18 @@ function draw(now) {
   if (measure) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); frameMs = performance.now() - t0; }
   // Деревья рисуются после сцены: они лежат поверх земли, но под иконками.
   drawTreeLayer((now - T0) / 1000, dtFrame);
+}
+
+// Прямоугольники иконок для шейдера: x, y, ширина, высота.
+const iconBuf = new Float32Array(32 * 4);
+function packIcons() {
+  const n = Math.min(icons.length, 32);
+  for (let i = 0; i < n; i++) {
+    const ic = icons[i];
+    iconBuf[i * 4] = ic.x; iconBuf[i * 4 + 1] = ic.y;
+    iconBuf[i * 4 + 2] = ic.w; iconBuf[i * 4 + 3] = ic.h;
+  }
+  return n;
 }
 
 // Слой деревьев: очищаем и рисуем поверх. Отдельный canvas нужен, чтобы
@@ -1434,12 +1466,10 @@ document.getElementById('btnAdd').addEventListener('click', () => {
   if (!pos) return;
   const ic = addIcon(f, pos, true);
   select(ic);
-  if (isWater(pos.x + ic.w / 2, pos.y + ic.h / 2)) addRipple(pos.x + ic.w / 2, pos.y + ic.h / 2, 1.3);
   commit();
 });
 desktop.addEventListener('pointerdown', e => {
   select(null);
-  if (isWater(e.clientX, e.clientY)) addRipple(e.clientX, e.clientY);
 });
 addEventListener('keydown', e => {
   if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
@@ -1509,19 +1539,17 @@ function applySettings(v) {
   // Кнопка обновления в настройках: новый пейзаж. Рабочий стол и
   // предпросмотр используют один и тот же сид.
   if (typeof v.seed === 'number' && v.seed !== seed) reseed(v.seed);
-  let field = false, adaptiveChanged = false, forestChanged = false;
+  let adaptiveChanged = false, forestChanged = false;
   for (const k in v) {
     if ((!SLIDERS.some(s => s.key === k) && !DISPLAY_KEYS.includes(k)) || typeof v[k] !== typeof P[k] || P[k] === v[k]) continue;
     if (DISPLAY_KEYS.includes(k) && v[k] !== 0 && v[k] !== 1) continue;
     P[k] = v[k];
     if (k === 'adaptive') adaptiveChanged = true;
-    if (k === 'sigma') field = true;
-    // Число деревьев и размер поляны меняют сам лес: его надо собрать
-    // заново, иначе ползунок не делает ничего.
-    if (k === 'trees' || k === 'glade') forestChanged = true;
+    // Деревья, поляна и ореол видны сразу: лес надо собрать заново,
+    // иначе ползунок не делает ничего.
+    if (k === 'trees' || k === 'glade' || k === 'sigma') forestChanged = true;
   }
   if (adaptiveChanged && FB) commit();
-  else if (field && FB) refresh();
   if (forestChanged) rebuildForest();
 
 }
