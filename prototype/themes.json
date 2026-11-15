@@ -75,7 +75,15 @@
             }
           ]
         }
-      ]
+      ],
+      "variants": [
+        {
+          "id": "meadow",
+          "name": "Лето",
+          "desc": "Светло-зелёный луг, облака и персонажи"
+        }
+      ],
+      "defaultVariant": "meadow"
     },
     {
       "id": "night",
@@ -296,7 +304,14 @@
           ]
         }
       ],
-      "preset": "beach"
+      "variants": [
+        {
+          "id": "beach",
+          "name": "День",
+          "desc": "Светлый день: бирюзовая вода, тёплый песок"
+        }
+      ],
+      "defaultVariant": "beach"
     },
     {
       "id": "beach-turquoise",

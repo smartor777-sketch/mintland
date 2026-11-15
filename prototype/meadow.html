@@ -157,7 +157,9 @@ const MORPH_MS = 1800;
 
 const QS = new URLSearchParams(location.search);
 const WALL = QS.has('wallpaper');      // режим обоев: страницу открывает рабочий стол
-const FREEZE = QS.has('freeze');       // заморозка: не крутим requestAnimationFrame, кадр задаётся снаружи (tools/capture-theme.py)
+const FREEZE = QS.has('freeze');
+// ?variant=… — вариант темы для записи превью и прямых ссылок.
+const URL_VARIANT = QS.get('variant');       // заморозка: не крутим requestAnimationFrame, кадр задаётся снаружи (tools/capture-theme.py)
 // Значения по умолчанию должны совпадать с полем default темы «Луг»
 // в themes.json. Параметры grain и quality не настраиваются.
 const P = {
@@ -165,6 +167,34 @@ const P = {
   debug: false, snap: true, cap30: true,
   showBoy: 1, showCat: 1, adaptive: 1,
 };
+/* Варианты темы. Пока один — `meadow`, повторяющий прежние цвета, поэтому
+   вид темы не меняется. Дальше вариант должен менять форму (осень, зима),
+   а не только палитру: иначе он читается клоном — проверено на Пляже. */
+const VARIANTS = {
+  meadow: {
+    gLight: [0.76, 0.83, 0.52], gMid: [0.62, 0.75, 0.42],
+    gDeep:  [0.52, 0.68, 0.36], ink:  [0.24, 0.38, 0.18],
+    shadow: [0.56, 0.66, 0.52],
+    cloudHi: [1.0, 1.0, 0.99],
+    cloudBody: [0.90, 0.93, 0.96], cloudSh: [0.80, 0.85, 0.90],
+  },
+};
+let variantId = 'meadow';
+if (URL_VARIANT && VARIANTS[URL_VARIANT]) variantId = URL_VARIANT;
+
+// Цвета варианта в шейдерные uniforms.
+function applyVariant(U) {
+  const v = VARIANTS[variantId] || VARIANTS.meadow;
+  gl.uniform3fv(U.uGLight, v.gLight);
+  gl.uniform3fv(U.uGMid, v.gMid);
+  gl.uniform3fv(U.uGDeep, v.gDeep);
+  gl.uniform3fv(U.uInk, v.ink);
+  gl.uniform3fv(U.uShadow, v.shadow);
+  gl.uniform3fv(U.uCloudHi, v.cloudHi);
+  gl.uniform3fv(U.uCloudBody, v.cloudBody);
+  gl.uniform3fv(U.uCloudSh, v.cloudSh);
+}
+
 const DEFAULTS = Object.assign({}, P);
 const DISPLAY_KEYS = ['showBoy', 'showCat', 'adaptive'];
 const SLIDERS = [
@@ -359,15 +389,13 @@ uniform float uCatTail;
 uniform highp sampler2D uCirc;   // круги облаков, посчитанные на CPU и разложенные по ячейкам: до CIRC_K на ячейку, (x, y, радиус, оттенок), радиус 0 = пусто
 uniform vec2 uCGrid;             // число ячеек
 uniform float uCellG;            // размер ячейки, px
+// Палитра приходит извне, как и у Пляжа: это основа вариантов темы.
+uniform vec3 uGLight, uGMid, uGDeep, uInk, uShadow;
+uniform vec3 uCloudHi, uCloudBody, uCloudSh;
 out vec4 o;
 
 // ---- Палитра ----
-const vec3 G_LIGHT = vec3(0.76, 0.83, 0.52), G_MID = vec3(0.62, 0.75, 0.42);  // луг: светлый жёлто-зелёный и зелёный (крупные акварельные заливки)
-const vec3 G_DEEP = vec3(0.52, 0.68, 0.36);                                   // более тёмные участки луга
-const vec3 INK = vec3(0.24, 0.38, 0.18);                                      // тёмно-зелёные штрихи травы
-const vec3 SHADOW = vec3(0.56, 0.66, 0.52);                                   // тень облака: делает траву тёмно-зелёной
-const vec3 CLOUD_HI = vec3(1.0, 1.0, 0.99);                                   // облако: яркий белый край со стороны света
-const vec3 CLOUD_BODY = vec3(0.90, 0.93, 0.96), CLOUD_SH = vec3(0.80, 0.85, 0.90); // облако: тело и затенённые круги (синевы меньше, чем в теме «Океан»; тело не должно быть слишком белым, иначе белые подписи иконок не читаются)
+// Цвета — в uniforms uGLight…uCloudSh; значения задаёт VARIANTS в JS.
 const vec2 LIGHT = vec2(-0.6, -0.8);                                          // солнце слева сверху
 const vec2 SHADOW_OFF = vec2(115.0, 156.0);                                    // тень ложится вправо-вниз, далеко от облака — значит, облако плывёт высоко
 const int CIRC_K = 36;
@@ -453,12 +481,12 @@ void main() {
 
   // ---------- Луг: крупные акварельные заливки жёлто-зелёного и зелёного, несколько участков темнее, верхний левый (к свету) чуть светлее; зерно бумаги ----------
   float w1 = N(p, 1900.0).b, w2 = N(p + 311.0, 650.0).g;
-  vec3 col = mix(G_MID, G_LIGHT, ss(0.3, 0.75, w1 * 0.7 + w2 * 0.3));
-  col = mix(col, G_DEEP, ss(0.45, 0.85, N(p + 977.0, 1300.0).r) * 0.4);       // порог размыт: шум растянут сильно, резкий порог дал бы ступенчатые квадраты
+  vec3 col = mix(uGMid, uGLight, ss(0.3, 0.75, w1 * 0.7 + w2 * 0.3));
+  col = mix(col, uGDeep, ss(0.45, 0.85, N(p + 977.0, 1300.0).r) * 0.4);       // порог размыт: шум растянут сильно, резкий порог дал бы ступенчатые квадраты
   col *= 1.0 + 0.05 * (0.5 - (p.x + p.y) / (uRes.x + uRes.y));
   col *= 1.0 + (hash2(floor(p * (0.8 * max(uScale, 1.0)))) - 0.5) * 0.035;   // зерно в реальных пикселях экрана
   // Тёмно-зелёные штрихи травы
-  col = mix(col, INK, grassInk(p) * 0.75);
+  col = mix(col, uInk, grassInk(p) * 0.75);
 
 #ifdef MEADOW_ACTOR
   // Мальчик, змей и полная тень сначала ложатся на траву, затем их
@@ -468,7 +496,7 @@ void main() {
   float inActor=step(0.0,actorUV.x)*step(0.0,actorUV.y)*step(actorUV.x,1.0)*step(actorUV.y,1.0);
   vec4 actor=texture(uActor,actorUV);
   float actorShadow=texture(uActorShadow,actorUV).r*inActor;
-  col=mix(col,col*SHADOW,actorShadow*0.85);
+  col=mix(col,col*uShadow,actorShadow*0.85);
   col=mix(col,actor.rgb,actor.a*inActor);
 #endif
 
@@ -481,13 +509,13 @@ void main() {
   float catShadow=catColor(catShadowUV).a;
   float inCat=step(0.,catUV.x)*step(0.,catUV.y)*step(catUV.x,1.)*step(catUV.y,1.);
   float inShadow=step(0.,catShadowUV.x)*step(0.,catShadowUV.y)*step(catShadowUV.x,1.)*step(catShadowUV.y,1.);
-  col=mix(col,col*SHADOW,catShadow*inShadow*.78);
+  col=mix(col,col*uShadow,catShadow*inShadow*.78);
   col=mix(col,cat.rgb,cat.a*inCat);
 #endif
 
   // ---------- Тень облака на траве (справа внизу): сплошное тёмно-зелёное пятно ----------
   float sd = cloudDist(p - SHADOW_OFF);
-  col = mix(col, col * SHADOW, ss(3.0, -3.0, sd) * 0.85);
+  col = mix(col, col * uShadow, ss(3.0, -3.0, sd) * 0.85);
 
   // ---------- Облако: мультяшный приём, как в теме «Океан» — несколько
   //             кругов, у каждого свой оттенок; светлый только внешний
@@ -499,8 +527,8 @@ void main() {
     // Небольшой шаг к свету уже выводит за пределы облака — значит, это
     // внешний край со стороны света (дальше 21 px от контура не считаем)
     float hi = d > -21.0 ? ss(-1.0, 1.0, cloudDist(p + LIGHT * 20.0)) : 0.0;
-    vec3 cc = fc.y > -1e8 ? mix(CLOUD_BODY, CLOUD_SH, fc.w * 0.6) : mix(CLOUD_BODY, CLOUD_SH, 0.45);
-    cc = mix(cc, CLOUD_HI, hi);
+    vec3 cc = fc.y > -1e8 ? mix(uCloudBody, uCloudSh, fc.w * 0.6) : mix(uCloudBody, uCloudSh, 0.45);
+    cc = mix(cc, uCloudHi, hi);
     col = mix(col, cc, ss(1.0, -1.0, d));
   }
   if (uDebug > 0.5) col = mix(col, vec3(0.9, 0.15, 0.15), 1.0 - ss(0.0, 1.5, abs(d)));
@@ -524,7 +552,7 @@ function program(fs) {
   gl.attachShader(p, mk(gl.VERTEX_SHADER, VS));
   gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
   gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  if (!gl.getProgramParameter(p, gl.LuInk_STATUS)) console.error(gl.getProgramInfoLog(p));
   const U = {};
   const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
   for (let i = 0; i < n; i++) { const nm = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, ''); U[nm] = gl.getUniformLocation(p, nm); }
@@ -1004,6 +1032,7 @@ function draw(now) {
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, circTex); gl.uniform1i(U.uCirc, 3);
     gl.uniform2f(U.uCGrid, cgW, cgH); gl.uniform1f(U.uCellG, CELL_G);
     gl.uniform1f(U.uEdge, P.edge);
+    applyVariant(U);
     if(actor){
       gl.activeTexture(gl.TEXTURE5);gl.bindTexture(gl.TEXTURE_2D,actor.actor);gl.uniform1i(U.uActor,5);
       gl.activeTexture(gl.TEXTURE6);gl.bindTexture(gl.TEXTURE_2D,actor.shadow);gl.uniform1i(U.uActorShadow,6);
@@ -1166,6 +1195,11 @@ if (!FREEZE) requestAnimationFrame(frame);
 // Применение настроек: берём только параметры с панели; размер облака
 // требует пересчёта поля
 function applySettings(v) {
+  // Вариант темы: имя таблицы из VARIANTS. Меняется на лету.
+  if (typeof v.variant === 'string' && VARIANTS[v.variant] && v.variant !== variantId) {
+    variantId = v.variant;
+    if (!FREEZE) draw(performance.now());
+  }
   // Кнопка обновления в настройках: новый пейзаж. Рабочий стол и
   // предпросмотр используют один и тот же сид.
   if (typeof v.seed === 'number' && v.seed !== seed) reseed(v.seed);

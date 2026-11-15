@@ -159,10 +159,6 @@ def write_control(state, theme_id, themes):
     if theme is None:
         return
     params = dict(state["params"].get(theme_id, {}))
-    # Тема-пресет: та же страница, другая палитра. Страница читает это
-    # значение из settings и переключает таблицу цветов без перезагрузки.
-    if theme.get("preset"):
-        params["palette"] = theme["preset"]
     data = {
         "seq": time.time_ns(),
         "theme": theme_id,

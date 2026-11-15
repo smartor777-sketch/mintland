@@ -162,8 +162,8 @@ const MORPH_MS = 1800;
 const QS = new URLSearchParams(location.search);
 const WALL = QS.has('wallpaper');      // режим обоев: страницу открывает рабочий стол
 const FREEZE = QS.has('freeze');       // заморозка: не крутим requestAnimationFrame, кадр задаётся снаружи (tools/capture-theme.py)
-// ?preset=maldives — вариант палитры для той же сцены (см. PALETTES).
-const URL_PRESET = QS.get('preset');
+// ?variant=… — вариант темы для записи превью и прямых ссылок.
+const URL_VARIANT = QS.get('variant');
 // Значения по умолчанию должны совпадать с полем default темы «Пляж»
 // в themes.json. Параметры волн (speed, runup, wave, spacing, waves), а
 // также grain и quality больше не настраиваются и закреплены здесь.
@@ -1146,16 +1146,20 @@ function draw(now) {
   if (measure) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); frameMs = performance.now() - t0; }
 }
 /* ======================================================================
-   Пресеты темы
+   Варианты темы
    ======================================================================
-   Тема-пресет — это таблица цветов над одной и той же сценой. Такой пресет
-   не требует новой HTML-страницы: Мальдивы, Лагуна и Пляж — одна сцена с
-   разной палитрой. Добавить вариант = дописать сюда несколько строк.
+   Вариант — это таблица значений над одной и той же сценой. Он не требует
+   новой HTML-страницы: у Пляжа пока один вариант, `beach`, и он повторяет
+   цвета, которые раньше были зашиты в шейдер, поэтому вид не меняется.
 
-   Первый пресет (beach) повторяет цвета, которые раньше были зашиты в
-   шейдер, поэтому вид темы не меняется.
+   Дальше вариант должен менять не только цвет, но и форму: свет, тени,
+   набор объектов. Иначе он читается как клон — проверено на Мальдивах и
+   Лагуне, которые были убраны именно поэтому (см. IMPROVEMENTS.md §9).
+
+   Значения параметров варианта лежат в themes.json, рядом с его описанием,
+   и switcher.py подставляет их при переключении. Здесь — только вид.
    ====================================================================== */
-const PALETTES = {
+const VARIANTS = {
   beach: {
     // море: у берега → вдали
     sea: [[0.74, 0.93, 0.87], [0.47, 0.87, 0.84], [0.17, 0.76, 0.81],
@@ -1166,36 +1170,19 @@ const PALETTES = {
     foam: [0.98, 0.99, 0.98],
     wet:  [0.93, 0.86, 0.72],
   },
-  // Мальдивы: бирюзовая вода, почти белый песок, светлая пена.
-  maldives: {
-    sea: [[0.93, 0.97, 0.92], [0.62, 0.95, 0.92], [0.20, 0.88, 0.87],
-          [0.10, 0.79, 0.82], [0.07, 0.70, 0.75]],
-    sand: [[0.99, 0.97, 0.92], [0.96, 0.92, 0.86],
-           [0.90, 0.85, 0.80], [0.82, 0.77, 0.72]],
-    foam: [1.00, 1.00, 0.99],
-    wet:  [0.96, 0.92, 0.84],
-  },
-  // Лагуна: глубокий синий, холодный песок.
-  lagoon: {
-    sea: [[0.78, 0.90, 0.94], [0.52, 0.80, 0.90], [0.22, 0.62, 0.84],
-          [0.10, 0.45, 0.74], [0.05, 0.31, 0.60]],
-    sand: [[0.93, 0.92, 0.89], [0.86, 0.84, 0.83],
-           [0.77, 0.75, 0.78], [0.66, 0.64, 0.71]],
-    foam: [0.97, 0.99, 1.00],
-    wet:  [0.87, 0.84, 0.78],
-  },
 };
 
-// Какой пресет активен. Меняется через настройки (?preset=… или control.json).
-let paletteId = 'beach';
-if (URL_PRESET && PALETTES[URL_PRESET]) paletteId = URL_PRESET;
+// Какой вариант активен (?variant=… или поле variant в настройках).
+let variantId = 'beach';
+if (URL_VARIANT && VARIANTS[URL_VARIANT]) variantId = URL_VARIANT;
 
-function applyPalette(U) {
-  const pal = PALETTES[paletteId] || PALETTES.beach;
-  for (let i = 0; i < 5; i++) gl.uniform3fv(U['uSea' + i], pal.sea[i]);
-  for (let i = 0; i < 4; i++) gl.uniform3fv(U['uSand' + i], pal.sand[i]);
-  gl.uniform3fv(U.uFoam, pal.foam);
-  gl.uniform3fv(U.uWetSand, pal.wet);
+// Цвета варианта в шейдерные uniforms.
+function applyVariant(U) {
+  const v = VARIANTS[variantId] || VARIANTS.beach;
+  for (let i = 0; i < 5; i++) gl.uniform3fv(U['uSea' + i], v.sea[i]);
+  for (let i = 0; i < 4; i++) gl.uniform3fv(U['uSand' + i], v.sand[i]);
+  gl.uniform3fv(U.uFoam, v.foam);
+  gl.uniform3fv(U.uWetSand, v.wet);
 }
 
 function configureBeachPass(now, pass) {
@@ -1218,7 +1205,7 @@ function configureBeachPass(now, pass) {
   gl.uniform1f(U.uWave, P.wave); gl.uniform1f(U.uSigma, P.sigma);
   gl.uniform1f(U.uSpacing, P.spacing); gl.uniform1f(U.uWaves, P.waves);
   gl.uniform1f(U.uDebug, P.debug ? 1 : 0);
-  applyPalette(U);
+  applyVariant(U);
   gl.uniform1f(U.uKayN, kayaks.length);
   gl.uniform4fv(U.uKay, kayBuf);
   gl.uniform4fv(U.uRip, ripBuf);
@@ -1370,10 +1357,10 @@ function applySettings(v) {
   // Кнопка обновления в настройках: новый пейзаж. Рабочий стол и
   // предпросмотр используют один и тот же сид.
   if (typeof v.seed === 'number' && v.seed !== seed) reseed(v.seed);
-  // Пресет палитры: имя таблицы из PALETTES. Меняется на лету — перезагрузка
+  // Вариант темы: имя таблицы из VARIANTS. Меняется на лету — перезагрузка
   // страницы не нужна, достаточно поменять uniforms в следующем кадре.
-  if (typeof v.palette === 'string' && PALETTES[v.palette] && v.palette !== paletteId) {
-    paletteId = v.palette;
+  if (typeof v.variant === 'string' && VARIANTS[v.variant] && v.variant !== variantId) {
+    variantId = v.variant;
     if (!FREEZE) draw(performance.now());
   }
   // Принимаем только параметры, которые есть на панели: убранные опции
