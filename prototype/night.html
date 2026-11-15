@@ -35,6 +35,8 @@
 
   var QS = new URLSearchParams(location.search);
   var FREEZE = QS.has('freeze');
+  // ?variant=… — вариант для записи превью и прямых ссылок.
+  var URL_VARIANT = QS.get('variant');
 
   /* Параметры темы. Ключи, типы и значения по умолчанию должны совпадать
      с prototype/themes.json: страница принимает только значения того же
@@ -45,10 +47,45 @@
     aurora: 0.7,   // яркость полярного сияния, 0..1
     shoot: 2,      // сколько метеоров одновременно
     moon: 1,       // 0/1 — показывать луну
+    fireflies: 0,  // сколько светлячков в воздухе, 0 — выключены
+    variant: 'polar',  // вариант темы: см. VARIANTS
     cap30: true    // ограничение 30 fps
   };
+  /* Варианты темы. Каждый задаёт своё небо и стартовые значения ползунков.
+     Небо — не ползунок: градиент задаётся только здесь, поэтому вариант
+     нельзя полностью повторить, покрутив настройки. */
+  var VARIANTS = {
+    polar: {
+      sky: ['#04060d', '#071127', '#0d2140', '#173152'],
+      // Холмы: холодный синий, как под полярным сиянием.
+      hills: [
+        { base: 0.855, amp: 0.042, top: '#0b1a2e', bot: '#081120', k: 1.7, ph: 1.2 },
+        { base: 0.935, amp: 0.030, top: '#070f1d', bot: '#04080f', k: 2.6, ph: 4.1 }
+      ],
+      aurora: 0.7, mist: 0.5, moon: 1, fireflies: 0, shoot: 2, halo: 96
+    },
+    fireflies: {
+      // Летняя ночь над тёплым полем: у горизонта небо уходит в оливковое,
+      // холмы скорее травянистые, чем каменные.
+      sky: ['#05070f', '#141626', '#2c2a24', '#5a4a34'],
+      hills: [
+        { base: 0.845, amp: 0.050, top: '#2a3324', bot: '#141a12', k: 1.4, ph: 0.4 },
+        { base: 0.930, amp: 0.034, top: '#1b2318', bot: '#0a0e08', k: 2.2, ph: 3.2 }
+      ],
+      aurora: 0, mist: 0.28, moon: 0, fireflies: 40, shoot: 1, halo: 82
+    }
+  };
+
+  // Вариант из адреса применяем сразу, до первого кадра.
+  if (URL_VARIANT && VARIANTS[URL_VARIANT]) {
+    P.variant = URL_VARIANT;
+    var _pre = VARIANTS[URL_VARIANT];
+    P.aurora = _pre.aurora; P.mist = _pre.mist; P.moon = _pre.moon;
+    P.fireflies = _pre.fireflies; P.shoot = _pre.shoot; P.halo = _pre.halo;
+  }
+
   var DEFAULTS = Object.assign({}, P);
-  var SLIDERS = ['halo', 'mist', 'aurora', 'shoot'];
+  var SLIDERS = ['halo', 'mist', 'aurora', 'shoot', 'fireflies'];
   var DISPLAY_KEYS = ['moon'];
 
   var cv = document.getElementById('art');
@@ -73,7 +110,7 @@
 
   /* ---------- спрайты (один раз на размер окна) ---------- */
 
-  var fogSprite = null, haloSprite = null, mistBlobs = [];
+  var fogSprite = null, haloSprite = null, fireflySprite = null, mistBlobs = [];
 
   function buildSprites() {
     // Туман: мягкое облако из нескольких радиальных пятен.
@@ -118,6 +155,21 @@
     hg2.fillRect(0, 0, HS, HS);
     haloSprite = hc;
 
+    // Светлячок: маленькое тёплое ядро и мягкое свечение вокруг.
+    var FS = 64;
+    var fc = document.createElement('canvas');
+    fc.width = fc.height = FS;
+    var fg = fc.getContext('2d');
+    var fgrad = fg.createRadialGradient(FS / 2, FS / 2, 0, FS / 2, FS / 2, FS / 2);
+    fgrad.addColorStop(0.00, 'rgba(255,252,214,1.00)');
+    fgrad.addColorStop(0.10, 'rgba(255,240,150,0.95)');
+    fgrad.addColorStop(0.26, 'rgba(226,232,110,0.42)');
+    fgrad.addColorStop(0.55, 'rgba(180,214,86,0.13)');
+    fgrad.addColorStop(1.00, 'rgba(150,200,70,0)');
+    fg.fillStyle = fgrad;
+    fg.fillRect(0, 0, FS, FS);
+    fireflySprite = fc;
+
     mistBlobs = [];
     var r2 = mulberry32(9137);
     for (var k = 0; k < 9; k++) {
@@ -137,11 +189,12 @@
     var g = c.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    var skyCols = (VARIANTS[P.variant] || VARIANTS.polar).sky;
     var grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0.00, '#04060d');
-    grad.addColorStop(0.42, '#071127');
-    grad.addColorStop(0.74, '#0d2140');
-    grad.addColorStop(1.00, '#173152');
+    grad.addColorStop(0.00, skyCols[0]);
+    grad.addColorStop(0.42, skyCols[1]);
+    grad.addColorStop(0.74, skyCols[2]);
+    grad.addColorStop(1.00, skyCols[3]);
     g.fillStyle = grad;
     g.fillRect(0, 0, W, H);
 
@@ -222,10 +275,7 @@
   }
 
   function hills(g) {
-    var layers = [
-      { base: 0.855, amp: 0.042, top: '#0b1a2e', bot: '#081120', k: 1.7, ph: 1.2 },
-      { base: 0.935, amp: 0.030, top: '#070f1d', bot: '#04080f', k: 2.6, ph: 4.1 }
-    ];
+    var layers = (VARIANTS[P.variant] || VARIANTS.polar).hills;
     var step = Math.max(4, W / 160);
     for (var li = 0; li < layers.length; li++) {
       var L = layers[li];
@@ -399,6 +449,61 @@
     ctx.restore();
   }
 
+  /* Светлячки. Каждый живёт в своей области над холмами и медленно ходит
+     по замкнутой кривой: две синусоиды с несоизмеримыми периодами дают
+     неповторяющийся, но плавный путь. Яркость дышит так же — у каждого
+     свой ритм, поэтому рой не мигает в такт.
+
+     Положение считается от W и H, а не от готового списка: при смене
+     размера окна рой пересобирается, и точки остаются на своих местах
+     относительно кадра. */
+  var fireflies = [], fireflySeed = 4711;
+
+  function buildFireflies() {
+    var n = Math.round(P.fireflies);
+    fireflies = [];
+    if (n <= 0) return;
+    var rnd = mulberry32(fireflySeed);
+    for (var i = 0; i < n; i++) {
+      fireflies.push({
+        // Холмы занимают нижнюю треть, поэтому светлячки — над ними,
+        // но с запасом вниз: ближе к траве их больше.
+        x: rnd(),
+        y: 0.44 + rnd() * 0.48,
+        ax: 0.010 + rnd() * 0.030,      // размах по горизонтали, доля ширины
+        ay: 0.008 + rnd() * 0.022,      // размах по вертикали, доля высоты
+        // Скорость обхода и ритм дыхания поделены на три: на исходных
+        // значениях рой мельтешил, как гирлянда, а не летал.
+        sp: (0.00016 + rnd() * 0.00030) / 3,   // один круг за 6–19 с
+        ph: rnd() * TAU,                // сдвиг фазы пути
+        bp: (0.0009 + rnd() * 0.0022) / 3,     // дыхание раз в 1–3 с
+        bph: rnd() * TAU,
+        size: 0.55 + rnd() * 0.75       // относительный размер
+      });
+    }
+  }
+
+  function drawFireflies(t) {
+    if (!fireflies.length || !fireflySprite) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < fireflies.length; i++) {
+      var f = fireflies[i];
+      var a = t * f.sp * TAU + f.ph;
+      var x = (f.x + Math.sin(a) * f.ax) * W;
+      var y = (f.y + Math.cos(a * 0.73) * f.ay) * H;
+
+      // Дыхание: яркость гуляет от 0.25 до 1, никогда не гаснет совсем —
+      // иначе рой выглядит мигающей гирляндой.
+      var breathe = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * f.bp * TAU + f.bph));
+
+      var s = (7 + 9 * f.size) * breathe;
+      ctx.globalAlpha = 0.55 * breathe + 0.20;
+      ctx.drawImage(fireflySprite, x - s / 2, y - s / 2, s, s);
+    }
+    ctx.restore();
+  }
+
   function drawShooting(t) {
     var n = Math.round(P.shoot);
     if (n <= 0) return;
@@ -463,6 +568,7 @@
     drawMoon(t);
     drawTwinkle(t);
     drawMist(t);
+    drawFireflies(t);
     drawHalos(t);
     drawShooting(t);
   }
@@ -504,13 +610,31 @@
 
   addEventListener('resize', function () {
     resize();
+    buildFireflies();
     render(performance.now());
   });
 
   /* ---------- протокол ---------- */
 
   function applySettings(v) {
-    var needSky = false;
+    var needSky = false, needFlies = false;
+
+    /* Вариант задаёт небо, холмы и стартовые значения. Значения параметров
+       едут из реестра (switcher.py подставляет их при переключении), поэтому
+       здесь выставляем только то, чего в сообщении нет. Иначе вариант
+       перекрыл бы свежие значения с ползунков, а старые из того же
+       сообщения перекрыли бы вариант. */
+    if (typeof v.variant === 'string' && VARIANTS[v.variant] && v.variant !== P.variant) {
+      P.variant = v.variant;
+      var pre = VARIANTS[v.variant];
+      var keys = ['aurora', 'mist', 'moon', 'fireflies', 'shoot', 'halo'];
+      for (var ki = 0; ki < keys.length; ki++) {
+        var kk = keys[ki];
+        if (typeof v[kk] === 'undefined') P[kk] = pre[kk];
+      }
+      needSky = true; needFlies = true;
+    }
+
     for (var k in v) {
       var known = SLIDERS.indexOf(k) >= 0 || DISPLAY_KEYS.indexOf(k) >= 0;
       if (!known) continue;
@@ -519,8 +643,10 @@
       if (P[k] === v[k]) continue;
       P[k] = v[k];
       if (k === 'moon') needSky = true;
+      if (k === 'fireflies') needFlies = true;
     }
     if (needSky && sky) buildSky();
+    if (needFlies) buildFireflies();
   }
 
   function handle(m) {
@@ -547,10 +673,20 @@
 
   buildSprites();
   resize();
+  buildFireflies();
 
   // Хуки для тестов и записи GIF-превью (на работу сцены не влияют).
   window.__renderAt = function (t) { render(t); };
   window.__inject = handle;
+  // Состояние для тестов и отладки: снаружи P не виден, он в замыкании.
+  window.__state = function () {
+    return {
+      variant: P.variant,
+      aurora: P.aurora, mist: P.mist, moon: P.moon,
+      fireflies: P.fireflies, shoot: P.shoot, halo: P.halo,
+      flies: fireflies.length
+    };
+  };
 
   if (FREEZE) {
     render(0);

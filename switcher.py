@@ -55,7 +55,7 @@ THEME_INFO = {
 GROUP_LABELS = {
     "beach": ["Берег", "Вода", "Элементы"],
     "meadow": ["Вокруг иконок", "Облака", "Персонажи"],
-    "night": ["Иконки", "Небо", "Туман"],
+    "night": ["Иконки", "Небо", "Туман", "Воздух"],
 }
 
 PARAM_LABELS = {
@@ -81,6 +81,7 @@ PARAM_LABELS = {
         "shoot": "Метеоры",
         "moon": "Луна",
         "mist": "Плотность тумана",
+        "fireflies": "Светлячки",
     },
 }
 
@@ -97,7 +98,7 @@ THEME_ORDER = {"beach": 0, "meadow": 1, "night": 2}
 UNIT_LABELS = {
     "beach": {"sigma": "px", "shoal": "px", "shallow": "px"},
     "meadow": {"sigma": "px"},
-    "night": {"halo": "px", "shoot": "шт"},
+    "night": {"halo": "px", "shoot": "шт", "fireflies": "шт"},
 }
 
 
@@ -114,6 +115,11 @@ def theme_defaults(theme):
     for group in theme.get("groups", []):
         for p in group.get("params", []):
             out[p["key"]] = p.get("default")
+    # Вариант темы (см. variants в themes.json): обычная строка среди
+    # параметров, но страница понимает её особо — переключает сразу
+    # небо, холмы и набор значений.
+    if theme.get("variants"):
+        out["variant"] = theme.get("defaultVariant") or theme["variants"][0]["id"]
     out.update(DEFAULT_OVERRIDES.get(theme.get("id", ""), {}))
     return out
 
@@ -435,18 +441,87 @@ class Switcher(Gtk.Window):
             self.value_labels.clear()
             theme = self.theme_by_id[self.theme_id]
             group_labels = GROUP_LABELS.get(self.theme_id, [])
+            if theme.get("variants"):
+                self.settings_box.pack_start(self._make_variant_row(theme), False, False, 0)
+            current = self.state["params"][self.theme_id].get("variant")
             for gi, group in enumerate(theme.get("groups", [])):
+                # Группа может состоять целиком из параметров другого
+                # варианта — тогда заголовок тоже не нужен.
+                shown = [p for p in group.get("params", [])
+                         if self._param_applies(p, current)]
+                if not shown:
+                    continue
                 title = Gtk.Label(label=group_labels[gi] if gi < len(group_labels) else "Параметры")
                 title.set_xalign(0)
                 title.get_style_context().add_class("group-title")
                 self.settings_box.pack_start(title, False, False, 0)
-                for p in group.get("params", []):
+                for p in shown:
                     row = self._make_param_row(p)
                     if row is not None:
                         self.settings_box.pack_start(row, False, False, 0)
             self.settings_box.show_all()
         finally:
             self._updating = False
+
+    def _make_variant_row(self, theme):
+        """Переключатель вариантов темы: сегментированные кнопки.
+
+        Вариант — это не отдельная карточка в списке тем, а подвид внутри
+        неё. Так список не растёт, а пользователь видит, что перед ним одна
+        тема в двух видах, а не две похожие темы.
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        title = Gtk.Label(label="Вариант")
+        title.set_xalign(0)
+        title.get_style_context().add_class("group-title")
+        box.pack_start(title, False, False, 0)
+
+        row = Gtk.Box(spacing=6)
+        row.get_style_context().add_class("linked")
+        current = self.state["params"][self.theme_id].get("variant")
+        buttons = {}
+        for v in theme["variants"]:
+            btn = Gtk.ToggleButton(label=v.get("name", v["id"]))
+            btn.set_tooltip_text(v.get("desc", ""))
+            if v["id"] == current:
+                btn.set_active(True)
+            btn.connect("clicked", lambda b, vid=v["id"]: self._on_variant(vid, buttons))
+            buttons[v["id"]] = btn
+            row.pack_start(btn, True, True, 0)
+        box.pack_start(row, False, False, 0)
+        return box
+
+    def _on_variant(self, vid, buttons):
+        if self._updating:
+            return
+        for bid, btn in buttons.items():
+            btn.set_active(bid == vid)
+        params = self.state["params"][self.theme_id]
+        params["variant"] = vid
+        # У варианта свои значения параметров: подставляем их, чтобы и
+        # ползунки, и сцена показывали одно и то же. Без этого страница
+        # получала новый вариант вместе со старыми числами и перекрывала
+        # ими то, что вариант только что выставил.
+        theme = self.theme_by_id[self.theme_id]
+        for v in theme.get("variants", []):
+            if v["id"] == vid:
+                params.update(v.get("params", {}))
+                break
+        self._rebuild_settings()
+        self._schedule_persist()
+
+    @staticmethod
+    def _param_applies(p, variant):
+        """Показывать ли параметр в текущем варианте темы.
+
+        Поле `variants` у параметра перечисляет варианты, где он имеет
+        смысл: ползунок сияния бессмыслен там, где сияния нет, а число
+        светлячков — там, где их нет. Нет поля — параметр общий.
+        """
+        allowed = p.get("variants")
+        if not allowed or not variant:
+            return True
+        return variant in allowed
 
     def _param_label(self, p):
         labels = PARAM_LABELS.get(self.theme_id, {})

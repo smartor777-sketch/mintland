@@ -112,7 +112,10 @@
               "max": 1,
               "step": 0.01,
               "default": 0.7,
-              "format": "percent"
+              "format": "percent",
+              "variants": [
+                "polar"
+              ]
             },
             {
               "key": "shoot",
@@ -150,8 +153,55 @@
               "format": "percent"
             }
           ]
+        },
+        {
+          "name": "Воздух",
+          "params": [
+            {
+              "key": "fireflies",
+              "label": "Светлячки",
+              "hint": "сколько светлячков летает над холмами; 0 — скрыть",
+              "min": 0,
+              "max": 80,
+              "step": 1,
+              "default": 0,
+              "unit": "шт",
+              "variants": [
+                "fireflies"
+              ]
+            }
+          ]
         }
-      ]
+      ],
+      "variants": [
+        {
+          "id": "polar",
+          "name": "Полярная",
+          "desc": "Сияние, луна и холодные холмы",
+          "params": {
+            "halo": 96,
+            "aurora": 0.7,
+            "shoot": 2,
+            "moon": 1,
+            "mist": 0.5,
+            "fireflies": 0
+          }
+        },
+        {
+          "id": "fireflies",
+          "name": "Светлячки",
+          "desc": "Тёплый горизонт, рой светлячков над полем",
+          "params": {
+            "halo": 82,
+            "aurora": 0,
+            "shoot": 1,
+            "moon": 0,
+            "mist": 0.28,
+            "fireflies": 40
+          }
+        }
+      ],
+      "defaultVariant": "polar"
     },
     {
       "id": "beach",
