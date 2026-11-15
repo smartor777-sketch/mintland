@@ -221,8 +221,8 @@ icons = m.r.map(([l, t, r, b]) => ({
 
 ## 4. Запись в `themes.json`
 
-Файл лежит в `prototype/themes.json`. Русские имена, описания и подписи
-параметров хранятся прямо в нём; английские — в `prototype/i18n/en.json`.
+Файл лежит в `prototype/themes.json`. Имена, описания и подписи параметров
+хранятся прямо в нём, на русском.
 
 ```json
 {
@@ -233,8 +233,6 @@ icons = m.r.map(([l, t, r, b]) => ({
   "page": "night.html",
   "status": "ready",
   "product": "free",
-  "thumb": "url(thumbs/night.webp) center / cover no-repeat, linear-gradient(...)",
-  "thumbSource": "custom",
   "groups": [
     {
       "name": "Иконки",
@@ -261,8 +259,6 @@ icons = m.r.map(([l, t, r, b]) => ({
 - **Переключатель** — параметр с `options` из двух строк и `default: 0|1`.
   `switcher.py` покажет `Gtk.Switch`.
 - **`format`**: `"percent"` (0..1 → «70%»), `"times"` (→ «×0.65»).
-- **`thumb`** — запасная миниатюра для `themes.json`; в самом приложении
-  используется GIF из `switcher.py`.
 
 ---
 
@@ -474,9 +470,7 @@ wmctrl -k off                     # вернуть окна
 полях `name`, `desc`, `label`, `hint`, `unit`, `options`. `switcher.py` берёт
 их оттуда, а `THEME_INFO` задаёт только описания карточек и путь к превью.
 
-Английские тексты — в `prototype/i18n/en.json` (раздел `themes`), интерфейс
-редактора — в `prototype/i18n/ru.json` и `en.json` (раздел `ui`). Китайского
-в проекте нет: комментарии в коде наследия переведены на русский.
+Китайского в проекте нет: комментарии в коде наследия переведены на русский.
 
 ---
 

@@ -70,7 +70,7 @@ WebGL-iframe, а не видеофайл.*
   После запуска `deskwall -u` поднимает окно `nemo-desktop`, поэтому иконки
   оказываются поверх сцены и остаются кликабельными. Протокол Mintland:
   хост отправляет `{t:'icons', vis, r:[[l,t,r,b],...]}` и `{t:'pause', v}`;
-  страница также понимает `settings`/`reset` (задел под `settings.html`).
+  страница также понимает `settings`/`reset`.
 - `deskwall.c` → `bin/deskwall` (собирается локально): X11-утилита.
   Сейчас используется только `-u` — поднять `nemo-desktop` поверх слоя.
   Остальные режимы оставлены как экспериментальные: `-r 0xWINID` (restack
@@ -135,7 +135,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 | `iconsource.py` | Позиции иконок: `gio` + `desktop-metadata`, сетка `desktop-grid-adjust` |
 | `themehost.py` | GTK3+WebKit2 хост: окно DESKTOP, WebKit, протокол `icons`/`pause`/`settings` |
 | `switcher.py` | GTK3-переключатель тем и параметров, вкл/выкл слоя |
-| `prototype/` | Темы и ассеты: `flat.html` (пляж), `meadow.html` (луг), `night.html` (ночь, без ассетов), `themes.json`, `assets/`, `i18n/`, `thumbs/` |
+| `prototype/` | Темы и ассеты: `flat.html` (пляж), `meadow.html` (луг), `night.html` (ночь, без ассетов), `themes.json`, `assets/`, `thumbs/` |
 | `start-layer.sh` | Запуск хоста (тема по умолчанию `flat.html`; выбор — в `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Служебные запуск/остановка (вызывает `switcher.py`); перезапуск nemo после снятия слоя |
 | `README.md` | Эта документация (единственный `.md` в корне) |
@@ -219,7 +219,7 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 - [x] Шаг 5: иконки поверх сцены и кликабельны; цикл вкл/выкл/вкл — проверено
 - [x] Шаг 6: графический переключатель тем (Пляж/Луг/Ночь), вкл/выкл и параметры — MVP
 - [x] Шаг 7: контракт темы, инструменты проверки и записи превью (`THEMES.md`, `tools/`)
-- [ ] Шаг 8: расширенный редактор (settings.html), пресеты, автозапуск, трей, .deb/AppImage
+- [ ] Шаг 8: автозапуск, трей, .deb/AppImage
 - [ ] Шаг 9: передний кликопрозрачный слой (бонус над иконками)
 
 ## Известные ограничения

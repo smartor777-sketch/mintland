@@ -74,14 +74,6 @@
   /* Режим обоев (?wallpaper=1, страницу загружает рабочий стол):
      настоящие иконки и панель рисует система, не страница */
   body.wall #panel, body.wall #taskbar, body.wall #desktop { display: none; }
-  /* Режим предпросмотра (?preview=1, в окне настроек): настоящие иконки
-     показаны полупрозрачными плашками */
-  #ghosts { position: fixed; inset: 0; pointer-events: none; display: none; }
-  body.preview #ghosts { display: block; }
-  .ghost { position: absolute; }
-  .ghost i { position: absolute; left: 50%; top: 4px; width: 48px; height: 48px; margin-left: -24px; border-radius: 9px;
-    background: rgba(255,255,255,.88); box-shadow: 3px 6px 8px rgba(40,60,90,.28); }
-  .ghost b { position: absolute; left: 14%; right: 14%; top: 60px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.75); }
   #panel header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; }
   #panel header b { font-size: 14px; letter-spacing: .06em; }
   #panel header span { margin-left: 8px; opacity: .55; }
@@ -169,7 +161,6 @@ const MORPH_MS = 1800;
 
 const QS = new URLSearchParams(location.search);
 const WALL = QS.has('wallpaper');      // режим обоев: страницу открывает рабочий стол
-const PREVIEW = QS.has('preview');     // режим предпросмотра: iframe в окне настроек
 const FREEZE = QS.has('freeze');       // заморозка: не крутим requestAnimationFrame, кадр задаётся снаружи (tools/capture-theme.py)
 // ?preset=maldives — вариант палитры для той же сцены (см. PALETTES).
 const URL_PRESET = QS.get('preset');
@@ -1092,7 +1083,7 @@ function resize() {
   W = innerWidth; H = innerHeight;
   // Предпросмотр: страница размечается по размеру всего рабочего стола и
   // затем уменьшается целиком, поэтому холсту хватает низкого разрешения
-  const scale = PREVIEW ? 0.45 : Math.min(devicePixelRatio || 1, P.quality, 0.75);
+  const scale = Math.min(devicePixelRatio || 1, P.quality, 0.75);
   // Берём реальный размер холста, с дробной частью: при экране 2560 и
   // масштабе 150% это 1706,67, а innerWidth округляется до 1707. Иначе
   // холст на пиксель шире экрана, браузер масштабирует всю картинку и она
@@ -1286,7 +1277,7 @@ document.getElementById('collapse').addEventListener('click', () => {
 // Если иконки уже известны, проигрываем вступление заново; если страница
 // только открылась и иконок ещё нет — просто запоминаем сид и рисуем по
 // нему, когда они появятся.
-let iconsSeen = !(WALL || PREVIEW);
+let iconsSeen = !WALL;
 // Обработчик сообщений хоста — на уровне модуля, чтобы его можно было
 // отдать наружу через window.__inject (инструменты проверки и превью).
 let hostHandle = null;
@@ -1323,7 +1314,7 @@ let resizeT = 0;
 addEventListener('resize', () => {
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
-    if (WALL || PREVIEW) { resize(); refresh(); kayaks.length = 0; syncKayaks(); return; }
+    if (WALL) { resize(); refresh(); kayaks.length = 0; syncKayaks(); return; }
     resize(); computeGrid();
     if (grid.cols * grid.rows > layoutCapacity && layoutCapacity < 40) { applyLayout(layoutKind); syncPanel(); return; }
     for (const ic of icons) setPos(ic, Math.min(ic.x, Math.max(0, DW - ic.w)), Math.min(ic.y, Math.max(0, DH - ic.h)));
@@ -1349,7 +1340,7 @@ window.__dbg = {
 };
 resize();
 buildNoiseTex();
-if (WALL || PREVIEW) startHostedMode();
+if (WALL) startHostedMode();
 else { applyLayout('mine'); syncPanel(); }
 
 // Хуки для инструментов (tools/capture-theme.py, tools/test-theme.py):
@@ -1368,8 +1359,6 @@ if (!FREEZE) scheduleFrame();
 /* ======================================================================
    Управляемый режим: кадром управляет извне
    - обои (?wallpaper=1): сообщения приходят от процесса рабочего стола
-   - предпросмотр (?preview=1): окно настроек (settings.html) шлёт их
-     через postMessage в iframe
    Сообщения: icons (прямоугольники настоящих иконок в физических
    пикселях) / settings (параметры, можно частично) / reset (значения по
    умолчанию) / pause
@@ -1403,17 +1392,8 @@ function applySettings(v) {
   if (bird) syncBirds();
 }
 
-function drawGhosts() {
-  const box = document.getElementById('ghosts');
-  box.innerHTML = icons.map(ic => `<div class="ghost" style="left:${ic.x}px;top:${ic.y}px;width:${ic.w}px;height:${ic.h}px"><i></i><b></b></div>`).join('');
-}
-
 function startHostedMode() {
   document.body.classList.add('wall');
-  if (PREVIEW) {
-    document.body.classList.add('preview');
-    const g = document.createElement('div'); g.id = 'ghosts'; document.body.appendChild(g);
-  }
   icons = [];
   commit(true);                                   // сначала только море
   syncBirds(false);
@@ -1425,7 +1405,7 @@ function startHostedMode() {
   };
   const handle = m => {
     if (m.t === 'pause') {
-      paused = PREVIEW ? false : m.v;
+      paused = m.v;
       settlePaused();
       if (!paused) scheduleFrame();               // возобновляем цикл после паузы
       return;
@@ -1435,24 +1415,17 @@ function startHostedMode() {
     if (m.t !== 'icons') return;
     const k = window.devicePixelRatio || 1;       // физические пиксели → CSS-пиксели
     icons = m.vis ? m.r.map(([l, t, r, b]) => ({ x: l / k, y: t / k, w: (r - l) / k, h: (b - t) / k })) : [];
-    if (PREVIEW) drawGhosts();
     iconsSeen = true;
     commit(first);                                // в первый раз суша «прорастает» из моря, дальше берег плавно сдвигается
     if (first) { curMix = 1; kayaks.length = 0; syncKayaks(); curMix = 0; first = false; }
     settlePaused();
   };
   hostHandle = handle;
-  if (PREVIEW) {
-    addEventListener('message', ev => { if (ev.source === parent) handle(typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data); });
-    parent.postMessage(JSON.stringify({ t: 'ready' }), '*');
-    return;
-  }
   const host = window.chrome && window.chrome.webview;
   if (!host) return;
   host.addEventListener('message', ev => handle(JSON.parse(ev.data)));
   host.postMessage('ready');
 }
 </script>
-<script src="share.js"></script>   <!-- публикация снимка и видео: иконки-образцы, имена плашками -->
 </body>
 </html>

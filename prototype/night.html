@@ -12,7 +12,6 @@
 
   Контракт хоста (см. THEMES.md):
     ?wallpaper=1  — режим обоев, страницу грузит themehost.py
-    ?preview=1    — предпросмотр, сообщения приходят через window.postMessage
     ?freeze=1     — без requestAnimationFrame; кадр задаётся window.__renderAt(t)
                     (нужно только для записи GIF-превью)
 
@@ -35,7 +34,6 @@
   'use strict';
 
   var QS = new URLSearchParams(location.search);
-  var PREVIEW = QS.has('preview');
   var FREEZE = QS.has('freeze');
 
   /* Параметры темы. Ключи, типы и значения по умолчанию должны совпадать
@@ -528,7 +526,7 @@
   function handle(m) {
     if (!m || !m.t) return;
     if (m.t === 'pause') {
-      paused = PREVIEW ? false : !!m.v;
+      paused = !!m.v;
       if (!paused) schedule();
       return;
     }
@@ -559,13 +557,6 @@
   } else {
     render(performance.now());
     schedule();
-  }
-
-  if (PREVIEW) {
-    addEventListener('message', function (ev) {
-      if (ev.source !== parent) return;
-      handle(typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data);
-    });
   }
 
   var host = window.chrome && window.chrome.webview;
