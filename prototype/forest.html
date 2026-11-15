@@ -170,7 +170,7 @@ const P = {
   sigma: 72, warp: 40, edge: 10, cover: 0.3, flow: 1, grain: 1, quality: 2,   // quality 2: рисуем в реальных пикселях экрана — при масштабе 150% картинка не растягивается и остаётся чёткой
   debug: false, snap: true, cap30: true,
   adaptive: 1,
-  trees: 300,             // сколько деревьев в лесу
+  trees: 700,             // сколько деревьев в лесу
   glade: 46,              // на сколько пикселей от иконки деревья не растут
 };
 /* Варианты темы. Пока один — `meadow`, повторяющий прежние цвета, поэтому
@@ -577,54 +577,87 @@ const curS = (x, y) => FB ? sampleArr(FA.s, x, y) * (1 - curMix) + sampleArr(FB.
 // Породы. У каждой свой силуэт и своя палитра: на референсе деревья
 // отличаются не только формой, но и оттенком — от тёмно-сине-зелёных
 // елей до жёлто-зелёных дубов.
+// Формы сняты с подборки плоских деревьев. Там шесть силуэтов, и у всех
+// есть ствол — без него дерево читается как пятно:
+//
+//   cone    — ёлка: треугольные ярусы, острый верх;
+//   drop    — капля: овал, суженный кверху;
+//   leaf    — лист: овал с прожилками, острый верх;
+//   dome    — купол: широкая крона, плоский низ;
+//   cloud   — облако: несколько кругов в одно пятно;
+//   column  — колонна: узкий вытянутый овал.
+//
+// Цвета из подборки: тёмно-зелёный, бирюзовый, синий, мятный, оливковый.
 const TREE_KINDS = {
-  // Ель: ярусы хвои, конус, тёмно-сине-зелёная.
+  // Ёлка тёмно-зелёная.
   spruce: {
-    shadow: '#16302a', dark: '#1f4438', light: '#33604a', trunk: '#3e3024',
-    form: 'conifer', tiers: 5, narrow: 0.78,
+    tones: ['#2d5f45', '#3d7a56', '#4f9468'], trunk: '#a97b52',
+    form: 'cone', tiers: 5, ratio: 1.75,
   },
-  // Сосна: ярусы реже, крона шире, оттенок теплее.
-  pine: {
-    shadow: '#1b2f2a', dark: '#2a4a38', light: '#4d7145', trunk: '#463526',
-    form: 'conifer', tiers: 4, narrow: 1.0,
+  // Ёлка бирюзовая.
+  teal: {
+    tones: ['#2c5f68', '#3a7d85', '#4a9aa0'], trunk: '#a97b52',
+    form: 'cone', tiers: 5, ratio: 1.85,
   },
-  // Ель голубая: тот же конус, но холоднее и светлее.
-  fir: {
-    shadow: '#18313a', dark: '#254a56', light: '#4a7c85', trunk: '#3e3024',
-    form: 'conifer', tiers: 6, narrow: 0.68,
+  // Ёлка синяя.
+  blue: {
+    tones: ['#2f5670', '#3c6f8f', '#4c8aa8'], trunk: '#a97b52',
+    form: 'cone', tiers: 5, ratio: 1.80,
   },
-  // Дуб: крона-облако с волнистым краем и заметный ствол.
-  oak: {
-    shadow: '#243a26', dark: '#3a5a30', light: '#5d8043', trunk: '#7a5a3a',
-    form: 'scallop', bumps: 11, trunkH: 0.62, wobble: 0.42,
+  // Капля тёмная — крона сужена кверху.
+  drop: {
+    tones: ['#1f4a37', '#2a5f48', '#356f56'], trunk: '#a97b52',
+    form: 'drop', ratio: 1.55,
   },
-  // Берёза: крона-облако мельче, ствол высокий и светлый.
-  birch: {
-    shadow: '#2c3a2c', dark: '#556b45', light: '#8ba464', trunk: '#d8d4c4',
-    form: 'scallop', bumps: 9, trunkH: 0.80, wobble: 0.38, tall: 0.88,
+  // Капля светлая мятная.
+  mintdrop: {
+    tones: ['#8aa87e', '#a0bd93', '#b5cfa8'], trunk: '#b98a5e',
+    form: 'drop', ratio: 1.35,
   },
-  // Ольха: крона-облако, тёплый жёлто-зелёный тон.
-  alder: {
-    shadow: '#2f3520', dark: '#4c5a2e', light: '#87964b', trunk: '#7a5a3a',
-    form: 'scallop', bumps: 13, trunkH: 0.52, wobble: 0.45,
+  // Лист с прожилками.
+  leaf: {
+    tones: ['#4a7d4a', '#5a9159', '#6ba46a'], trunk: '#a97b52',
+    form: 'leaf', ratio: 1.75,
   },
-  // Тополь: узкий высокий шпиль — силуэт, отличный от кроны-облака.
-  poplar: {
-    shadow: '#1e3324', dark: '#2f4f31', light: '#547a44', trunk: '#6d5238',
-    form: 'spire', tall: 1.9, narrow: 0.62,
+  // Купол широкий.
+  dome: {
+    tones: ['#2a5a42', '#356f52', '#428663'], trunk: '#a97b52',
+    form: 'dome', ratio: 1.05,
   },
-  // Кипарис: ещё уже и темнее.
-  cypress: {
-    shadow: '#182b2c', dark: '#24443f', light: '#3d6b5c', trunk: '#4a3826',
-    form: 'spire', tall: 2.2, narrow: 0.48,
+  // Купол оливковый.
+  olive: {
+    tones: ['#6b7f3a', '#7d9445', '#8fa952'], trunk: '#a97b52',
+    form: 'dome', ratio: 1.15,
   },
-  // Куст: низкая широкая крона у самой земли.
-  bush: {
-    shadow: '#263a24', dark: '#425e33', light: '#688a48', trunk: '#5a4630',
-    form: 'bush', bumps: 9, wobble: 0.44,
+  // Облако из нескольких кругов.
+  cloud: {
+    tones: ['#3a6b4a', '#478159', '#589768'], trunk: '#a97b52',
+    form: 'cloud', ratio: 1.10,
+  },
+  // Облако светло-мятное.
+  lightcloud: {
+    tones: ['#7ba36a', '#8fb87c', '#a3ca90'], trunk: '#b98a5e',
+    form: 'cloud', ratio: 1.0,
+  },
+  // Колонна: узкий вытянутый овал.
+  column: {
+    tones: ['#35624a', '#427a5c', '#519170'], trunk: '#a97b52',
+    form: 'column', ratio: 3.0,
   },
 };
 const TREE_KIND_IDS = Object.keys(TREE_KINDS);
+
+// На референсе ёлок примерно столько же, сколько лиственных, но они
+// заметнее. Хвойные попадаются чуть чаще: список для розыгрыша повторяет
+// их дважды.
+const CONIFER_IDS = ['spruce', 'teal', 'blue'];
+const TREE_DRAW = [];
+for (const id of TREE_KIND_IDS) {
+  TREE_DRAW.push(id);
+  // Хвойные повторяются трижды: в лесу Deskland их около 40%, и они
+  // задают характер — без них получается роща из куполов.
+  if (CONIFER_IDS.includes(id)) { TREE_DRAW.push(id); TREE_DRAW.push(id); }
+}
 
 // Список деревьев: {x, y, kind, scale, hue}. Собирается один раз на
 // сид; при пересборке (новый сид) — заново.
@@ -665,7 +698,7 @@ function forestDensity(x, y) {
   // выкашивает целые участки. Меньше 0.15 — почти пусто, больше 0.85 —
   // заросль. Полностью пустых мест быть не должно: на референсе лес
   // покрывает весь экран, и прогалины получаются только от иконок.
-  return Math.min(1, Math.max(0.62, (n - 0.18) * 1.2));
+  return Math.min(1, Math.max(0.85, (n - 0.10) * 0.9));
 }
 
 // Расстановка.
@@ -693,11 +726,18 @@ function treeCandidates() {
     const x = rnd() * W;
     const y = rnd() * (H - 60);
     const density = forestDensity(x, y);
-    const kind = TREE_KIND_IDS[Math.floor(rnd() * TREE_KIND_IDS.length)];
+    const kind = TREE_DRAW[Math.floor(rnd() * TREE_DRAW.length)];
     const depth = y / (H - 60);
     // Размер: ближе к низу экрана — крупнее (это глубина). Разброс внутри
     // — чтобы лес не состоял из деревьев одного калибра.
-    const scale = (0.95 + depth * 1.45) * (0.76 + rnd() * 0.56);
+    // Размер снят с референса: крона изолированного дерева занимает
+    // 4–5% ширины экрана. Деревья крупнее не должны появляться ни при
+    // каком значении ползунка — иначе лес читается неправильно.
+    // Высота дерева по замеру референса: 18–33% высоты экрана. Значит
+    // s ≈ 2.6…4.8 при H = 46*s. Деревья мельче дают «рассаду», крупнее —
+    // неправильный лес.
+    // Деревья небольшие: втрое меньше, чем давал прежний масштаб.
+    const scale = (0.77 + depth * 0.53) * (0.88 + rnd() * 0.26);
     list.push({ id: i, x, y, density, kind, scale, radius: 21 * scale, depth, ph: rnd() * TAU, grow: 0 });
   }
   TREE_CAND.list = list; TREE_CAND.w = W; TREE_CAND.h = H;
@@ -753,12 +793,12 @@ function buildTrees() {
     if (out.length >= limit) break;
     if (c.density < 0) continue;
     // Плотность решает, растёт ли здесь дерево вообще.
-    if (hash2(c.id, 7, 31) > c.density * 1.05) continue;
+    if (hash2(c.id, 7, 31) > c.density) continue;
     if (!treeClear(c.x, c.y, c.radius + 8)) continue;
     // Не ставим два дерева впритык: иначе лес превращается в стену.
     let tooClose = false;
     for (const t of out) {
-      if (Math.hypot(t.x - c.x, t.y - c.y) < (t.radius + c.radius) * 0.30) { tooClose = true; break; }
+      if (Math.hypot(t.x - c.x, t.y - c.y) < (t.radius + c.radius) * 0.14) { tooClose = true; break; }
     }
     if (tooClose) continue;
 
@@ -796,6 +836,16 @@ function buildTrees() {
 // Продвинуть рост деревьев. Возвращает те, что изменились.
 function stepTrees(dt) {
   const changed = [];
+  // В заморозке (запись превью, снимок) время не идёт: деревья должны
+  // быть уже выросшими, иначе на превью получается рассада.
+  if (FREEZE) {
+    for (const st of treeState.values()) {
+      if (st.grow === st.target) continue;
+      st.grow = st.target;
+      changed.push(st);
+    }
+    return changed;
+  }
   for (const st of treeState.values()) {
     if (st.grow === st.target) continue;
     // Растут медленнее, чем уходят: дерево заметно вырастает, но уходит
@@ -821,145 +871,161 @@ function pruneTrees() {
   }
 }
 
-// Крона-облако: круг с волнистым краем.
-//
-// Край рисуется набором выпуклых дуг — так крона получает «волнистый»
-// силуэт, как на иллюстрации. Пятна внутри (светлое сверху, тёмное
-// снизу) дают объём.
-function scallopPath(g, cx, cy, r, bumps, wobble) {
-  const step = TAU / bumps;
-  g.moveTo(cx + r, cy);
-  for (let i = 0; i < bumps; i++) {
-    const a0 = i * step, a1 = a0 + step, am = (a0 + a1) / 2;
-    // Контрольная точка вынесена наружу — получается выпуклый «зуб».
-    const rm = r * (1 + wobble);
-    g.quadraticCurveTo(cx + Math.cos(am) * rm, cy + Math.sin(am) * rm,
-                       cx + Math.cos(a1) * r, cy + Math.sin(a1) * r);
-  }
-  g.closePath();
-}
-
 // Одно дерево.
 //
-// Вид сверху, но с лёгким намёком на объём. Три силуэта:
-//   conifer — конус из ярусов хвои;
-//   scallop — круглая крона с волнистым краем;
-//   spire   — узкий высокий шпиль.
-// Все размеры — в единицах дерева (s = масштаб), чтобы порода менялась
-// одним числом.
+// Шесть силуэтов по подборке плоских деревьев. У всех есть ствол: без него
+// крона читается пятном, а не деревом. Крона не «шар»: это или овал,
+// суженный кверху (капля, лист), или несколько кругов в одно пятно
+// (облако), или купол с плоским низом.
+//
+// Свет — не отдельный круг внутри кроны, а заливка, обрезанная по её
+// форме: иначе получается мяч в мяче.
 function drawTree(g, t, sway) {
   const k = TREE_KINDS[t.kind];
-  // Растущее дерево выходит из-под земли: крона поднимается снизу
-  // вверх, а сам ствол остаётся на месте.
   const grow = t.grow;
   const s = t.scale * (0.55 + 0.45 * grow);
-  const x = t.x + sway * 2.2 * s, y = t.y;
+  const x = t.x + sway * 1.8 * s, y = t.y;
+  const [dark, mid, light] = k.tones;
 
-  // Тень на земле: смещённое вправо-вниз тёмное пятно.
-  g.globalAlpha = 0.16;
-  g.fillStyle = k.shadow;
+  // Тень на земле.
+  g.globalAlpha = 0.13;
+  g.fillStyle = '#3a5a35';
   g.beginPath();
-  g.ellipse(x + 4 * s, y + 1.5 * s, 13 * s, 3.4 * s, 0, 0, TAU);
+  g.ellipse(x + 3.5 * s, y + 1.2 * s, 10 * s, 2.8 * s, 0, 0, TAU);
   g.fill();
   g.globalAlpha = 1;
 
-  if (k.form === 'conifer') {
-    // Хвойное: конус из наложенных ярусов хвои. Каждый ярус — треугольник
-    // с волнистым низом: край рисуется плавной кривой, иначе ель читается
-    // как лесенка.
-    const tiers = k.tiers, totalH = 44 * s * grow, totalW = 13.5 * s * k.narrow;
-    for (let i = 0; i < tiers; i++) {
-      const f = i / tiers;                        // 0 — нижний ярус
-      const ty = y - totalH * f * 0.88;          // верхушка яруса
-      const tw = totalW * (1 - f * 0.80);        // ширина яруса
-      const th = totalH * 0.40;
-      g.fillStyle = i % 2 ? k.dark : k.light;
-      g.beginPath();
-      g.moveTo(x, ty - th);                      // вершина яруса
-      g.quadraticCurveTo(x + tw * 0.45, ty - th * 0.10, x + tw, ty + th * 0.16);
-      const lobes = 3;
-      for (let l = 0; l < lobes; l++) {
-        const u0 = 1 - l / lobes, u1 = 1 - (l + 1) / lobes;
-        g.quadraticCurveTo(x + tw * (u0 + u1) * 0.5, ty + th * 0.52, x + tw * u1, ty + th * 0.16);
+  // Хвойные чуть крупнее лиственных: на референсе они выше и заметнее.
+  const H = 46 * s * grow * (k.form === 'cone' ? 1.12 : 1);
+  // Ствол короткий и толстый: на подборке он занимает около десятой части
+  // высоты. Длинный тонкий ствол превращает дерево в «ножку».
+  const trunkH = H * 0.09;
+  const trunkW = Math.max(2.0, 3.0 * s);
+
+  // Ствол рисуется первым и всегда виден под кроной.
+  g.fillStyle = k.trunk;
+  g.fillRect(x - trunkW / 2, y - trunkH - H * 0.02, trunkW, trunkH + H * 0.02);
+
+  // Крона: центр и размеры зависят от формы.
+  const crownH = H - trunkH;
+  const crownW = crownH / (k.ratio || 1.6);
+  const cy = y - trunkH - crownH / 2;
+
+  // Контур кроны — одна функция, чтобы свет можно было по ней обрезать.
+  const crown = () => {
+    g.beginPath();
+    if (k.form === 'cone') {
+      // Ёлка: ярусы-треугольники снизу вверх с сильным перекрытием.
+      //
+      // Каждый ярус — треугольник высотой почти в два шага, поэтому они
+      // налезают друг на друга и ёлка читается цельной, а не набором
+      // отдельных треугольников с просветами.
+      const tiers = k.tiers || 4;
+      const bottom = cy + crownH / 2;
+      const halfW = crownW / 2;
+      const step = crownH / (tiers + 0.35);
+      const tierH = step * 1.95;
+      for (let tier = 0; tier < tiers; tier++) {
+        const yb = bottom - step * tier;
+        const w = halfW * (1 - tier / (tiers + 1.1));
+        // Чередование тона: ярусы различимы, но не полосатые.
+        g.fillStyle = tier % 2 ? dark : mid;
+        g.beginPath();
+        g.moveTo(x, yb - tierH);
+        // Правая сторона с зубцом.
+        g.lineTo(x + w * 0.52, yb - tierH * 0.22);
+        g.lineTo(x + w * 0.66, yb + tierH * 0.02);
+        g.lineTo(x + w, yb - tierH * 0.10);
+        g.lineTo(x + w * 0.40, yb + tierH * 0.06);
+        g.lineTo(x, yb);
+        // Левая сторона зеркально.
+        g.lineTo(x - w * 0.40, yb + tierH * 0.06);
+        g.lineTo(x - w, yb - tierH * 0.10);
+        g.lineTo(x - w * 0.66, yb + tierH * 0.02);
+        g.lineTo(x - w * 0.52, yb - tierH * 0.22);
+        g.closePath();
+        g.fill();
       }
-      g.quadraticCurveTo(x - tw * 0.45, ty - th * 0.10, x - tw, ty + th * 0.16);
-      for (let l = 0; l < lobes; l++) {
-        const u0 = l / lobes, u1 = (l + 1) / lobes;
-        g.quadraticCurveTo(x - tw * (u0 + u1) * 0.5, ty + th * 0.52, x - tw * u1, ty + th * 0.16);
-      }
+      return;
+    }
+    if (k.form === 'dome') {
+      // Купол: широкая крона, низ плоский.
+      const r = crownW / 2;
+      g.moveTo(x - r, cy + crownH * 0.42);
+      g.quadraticCurveTo(x - r * 1.02, cy - crownH * 0.52, x, cy - crownH * 0.50);
+      g.quadraticCurveTo(x + r * 1.02, cy - crownH * 0.52, x + r, cy + crownH * 0.42);
+      g.quadraticCurveTo(x + r * 0.5, cy + crownH * 0.56, x, cy + crownH * 0.52);
+      g.quadraticCurveTo(x - r * 0.5, cy + crownH * 0.56, x - r, cy + crownH * 0.42);
       g.closePath();
-      g.fill();
+      return;
     }
-    // Ствол виден только у нижнего яруса, и то немного.
-    g.fillStyle = k.trunk;
-    g.fillRect(x - 1.7 * s, y - 5 * s, 3.4 * s, 5 * s);
-    return;
-  }
-
-  if (k.form === 'spire') {
-    // Шпиль: узкий вытянутый силуэт с волнистым краем.
-    const h = 30 * s * grow * (k.tall || 1.9), w = 8.5 * s * (k.narrow || 0.6);
-    g.fillStyle = k.dark;
-    g.beginPath();
-    g.moveTo(x, y - h);
-    g.quadraticCurveTo(x + w, y - h * 0.45, x + w * 0.72, y - 2 * s);
-    g.lineTo(x - w * 0.72, y - 2 * s);
-    g.quadraticCurveTo(x - w, y - h * 0.45, x, y - h);
-    g.closePath();
-    g.fill();
-    // Светлая полоса по краю — объём.
-    g.fillStyle = k.light;
-    g.beginPath();
-    g.moveTo(x, y - h);
-    g.quadraticCurveTo(x + w * 0.75, y - h * 0.45, x + w * 0.52, y - 2 * s);
-    g.lineTo(x + w * 0.08, y - 2 * s);
-    g.quadraticCurveTo(x + w * 0.22, y - h * 0.45, x, y - h);
-    g.closePath();
-    g.fill();
-    return;
-  }
-
-  // Лиственное и куст: ствол и крона-облако.
-  const r = 22 * s * (k.tall || 1) * (0.35 + 0.65 * grow);
-  // Ствол заметный: на референсе у лиственных деревьев ствол хорошо виден
-  // между кроной и землёй. Растёт вместе с кроной, иначе из-под земли
-  // торчал бы голый ствол.
-  const trunkH = k.form === 'bush' ? r * 0.18 : r * (k.trunkH || 0.5) * grow;
-
-  if (k.form !== 'bush') {
-    // Ствол: заметный, с лёгким расширением к земле.
-    g.fillStyle = k.trunk;
-    g.beginPath();
-    g.moveTo(x - 3.2 * s, y);
-    g.lineTo(x - 2.2 * s, y - trunkH);
-    g.lineTo(x + 2.2 * s, y - trunkH);
-    g.lineTo(x + 3.2 * s, y);
-    g.closePath();
-    g.fill();
-    if (k.trunk === '#d8d4c4') {
-      // Берёза: тёмные чёрточки на белом стволе.
-      g.fillStyle = 'rgba(60,60,55,.5)';
-      for (let kk = 0; kk < 4; kk++) {
-        g.fillRect(x - 2.4 * s, y - trunkH * (0.22 + kk * 0.21), 4.8 * s, 1.1 * s);
-      }
+    if (k.form === 'cloud') {
+      // Облако: несколько кругов в одно пятно.
+      const r = crownW / 2;
+      g.ellipse(x, cy + r * 0.16, r * 0.82, crownH * 0.34, 0, 0, TAU);
+      g.ellipse(x - r * 0.46, cy + r * 0.02, r * 0.56, crownH * 0.26, 0, 0, TAU);
+      g.ellipse(x + r * 0.44, cy + r * 0.04, r * 0.54, crownH * 0.25, 0, 0, TAU);
+      g.ellipse(x - r * 0.20, cy - r * 0.30, r * 0.52, crownH * 0.26, 0, 0, TAU);
+      g.ellipse(x + r * 0.22, cy - r * 0.26, r * 0.46, crownH * 0.23, 0, 0, TAU);
+      return;
     }
-  }
+    // drop, leaf и column — овал; drop и leaf сужены кверху.
+    const r = crownW / 2, hh = crownH / 2;
+    if (k.form === 'column') {
+      g.ellipse(x, cy, r, hh, 0, 0, TAU);
+      return;
+    }
+    // Сужение кверху: верхняя половина уже.
+    const topW = r * (k.form === 'leaf' ? 0.22 : 0.42);
+    g.moveTo(x - topW, cy - hh);
+    g.quadraticCurveTo(x - r * 0.98, cy - hh * 0.15, x - r, cy + hh * 0.30);
+    g.quadraticCurveTo(x - r * 0.80, cy + hh, x, cy + hh);
+    g.quadraticCurveTo(x + r * 0.80, cy + hh, x + r, cy + hh * 0.30);
+    g.quadraticCurveTo(x + r * 0.98, cy - hh * 0.15, x + topW, cy - hh);
+    g.quadraticCurveTo(x, cy - hh * 1.10, x - topW, cy - hh);
+    g.closePath();
+  };
 
-  const cy = y - trunkH - r * 0.86;
-  // Тёмная основа кроны.
-  g.fillStyle = k.dark;
-  scallopPath(g, x, cy, r, k.bumps || 9, k.wobble || 0.15);
+  // Тело кроны.
+  g.fillStyle = mid;
+  crown();
   g.fill();
-  // Светлая макушка: волнистый край со сдвигом вверх — объём.
-  g.fillStyle = k.light;
-  scallopPath(g, x, cy - r * 0.20, r * 0.80, (k.bumps || 9) - 2, (k.wobble || 0.15) * 0.8);
+
+  // Свет сверху и тень снизу — заливки, обрезанные по кроне.
+  g.save();
+  crown();
+  g.clip();
+  g.fillStyle = light;
+  g.beginPath();
+  g.ellipse(x - crownW * 0.06, cy - crownH * 0.34, crownW * 0.60, crownH * 0.46, 0, 0, TAU);
   g.fill();
-  // Тёмный низ — тень внутри кроны.
-  g.fillStyle = k.shadow;
-  g.globalAlpha = 0.30;
-  scallopPath(g, x, cy + r * 0.34, r * 0.72, (k.bumps || 9) - 3, (k.wobble || 0.15) * 0.7);
+  g.fillStyle = dark;
+  g.globalAlpha = 0.55;
+  g.beginPath();
+  g.ellipse(x + crownW * 0.08, cy + crownH * 0.62, crownW * 0.62, crownH * 0.38, 0, 0, TAU);
   g.fill();
   g.globalAlpha = 1;
+
+  // Прожилки у листа.
+  if (k.form === 'leaf') {
+    g.strokeStyle = dark;
+    g.globalAlpha = 0.45;
+    g.lineWidth = Math.max(0.7, 0.9 * s);
+    g.beginPath();
+    g.moveTo(x, cy + crownH * 0.42);
+    g.lineTo(x, cy - crownH * 0.34);
+    for (let n = 0; n < 4; n++) {
+      const vy = cy + crownH * 0.22 - n * crownH * 0.16;
+      const vw = crownW * (0.26 - n * 0.045);
+      g.moveTo(x, vy);
+      g.lineTo(x - vw, vy - crownH * 0.10);
+      g.moveTo(x, vy);
+      g.lineTo(x + vw, vy - crownH * 0.10);
+    }
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+  g.restore();
 }
 
 // Все деревья за кадр. Сортировка уже сделана при сборке.

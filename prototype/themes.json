@@ -359,7 +359,7 @@
               "min": 0,
               "max": 900,
               "step": 10,
-              "default": 300,
+              "default": 700,
               "unit": "шт"
             },
             {
