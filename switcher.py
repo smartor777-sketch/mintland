@@ -102,6 +102,120 @@ UNIT_LABELS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Язык интерфейса
+# ---------------------------------------------------------------------------
+# Русский — основной язык разработки, английский — перевод. Строки собраны
+# в одном месте, а не разбросаны по вызовам: иначе при добавлении языка
+# приходится искать их по всему файлу.
+#
+# Названия тем и подписи параметров берутся из themes.json, где лежит
+# русский текст; английский — в UI["en"]["themes"] ниже.
+
+UI = {
+    "ru": {
+        "app_title": "Mintland",
+        "checking": "Проверка…",
+        "layer_on": "Включить слой",
+        "layer_off": "Выключить слой",
+        "themes": "Тема",
+        "params": "Параметры",
+        "params_of": "Параметры темы «%s»",
+        "params_fallback": "Параметры",
+        "variant": "Вариант",
+        "reset": "Сбросить тему",
+        "saved": "Сохранено",
+        "note": "Слой продолжает работать после закрытия окна.",
+        "starting": "Запуск слоя…",
+        "stopping": "Остановка слоя…",
+        "on": "Слой включён",
+        "off": "Слой выключен",
+        "language": "Язык",
+        "lang_auto": "Как в системе",
+        "themes_en": {},
+    },
+    "en": {
+        "app_title": "Mintland",
+        "checking": "Checking…",
+        "layer_on": "Turn layer on",
+        "layer_off": "Turn layer off",
+        "themes": "Theme",
+        "params": "Settings",
+        "params_of": "Settings for “%s”",
+        "params_fallback": "Settings",
+        "variant": "Variant",
+        "reset": "Reset theme",
+        "saved": "Saved",
+        "note": "The layer keeps running after you close this window.",
+        "starting": "Starting layer…",
+        "stopping": "Stopping layer…",
+        "on": "Layer is on",
+        "off": "Layer is off",
+        "language": "Language",
+        "lang_auto": "System default",
+        # Английские названия тем, описания и подписи параметров.
+        # Русские лежат в themes.json — он остаётся источником истины.
+        "themes_en": {
+            "beach": {
+                "name": "Beach",
+                "desc": "Sand, water, palms, kayaks and gulls.",
+                "groups": ["Shore", "Water", "Elements"],
+                "params": {
+                    "sigma": "Distance to shore", "warp": "Winding shore",
+                    "shoal": "Clear shallows", "shallow": "Shallow sea",
+                    "palms": "Coconut palms", "kayaks": "Kayaks", "birds": "Gulls",
+                },
+                "variants": {"beach": "Day"},
+            },
+            "meadow": {
+                "name": "Meadow",
+                "desc": "Clouds, a boy with a kite, and a black kitten.",
+                "groups": ["Around icons", "Clouds", "Characters"],
+                "params": {
+                    "sigma": "Cloud around icons", "cover": "Clouds over the meadow",
+                    "flow": "Drift speed", "showBoy": "Boy with a kite",
+                    "showCat": "Black kitten",
+                },
+                "variants": {"meadow": "Summer"},
+            },
+            "night": {
+                "name": "Night",
+                "desc": "A starry sky with aurora and mist; icons sit in a soft halo.",
+                "groups": ["Icons", "Sky", "Mist", "Air"],
+                "params": {
+                    "halo": "Halo around icons", "aurora": "Aurora",
+                    "shoot": "Shooting stars", "moon": "Moon", "mist": "Mist density",
+                    "fireflies": "Fireflies",
+                },
+                "variants": {"polar": "Polar", "fireflies": "Fireflies"},
+            },
+        },
+    },
+}
+
+SETTINGS_LANG = CONFIG_DIR / "lang"
+
+
+def detect_lang():
+    """Язык интерфейса: сохранённый выбор, иначе — из системы.
+
+    Русский основной, поэтому при незнакомой локали показываем его, а не
+    английский: проект русскоязычный, и для его основной аудитории это
+    верное поведение.
+    """
+    try:
+        saved = SETTINGS_LANG.read_text(encoding="utf-8").strip()
+        if saved in UI:
+            return saved
+    except Exception:
+        pass
+    loc = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES")
+           or os.environ.get("LANG") or "").lower()
+    if loc.startswith("en"):
+        return "en"
+    return "ru"
+
+
 def load_registry():
     data = json.loads(THEMES_JSON.read_text(encoding="utf-8"))
     themes = [t for t in data.get("themes", [])
@@ -244,7 +358,51 @@ class AnimatedThumb(Gtk.DrawingArea):
             self.timer = None
 
 
-def fmt_value(p, value, theme_id):
+def t(lang, key):
+    """Одна надпись интерфейса."""
+    return UI.get(lang, UI["ru"]).get(key, UI["ru"].get(key, key))
+
+
+def theme_text(lang, tid, field, default=None):
+    """Название, описание или подписи темы на выбранном языке.
+
+    Русский текст — в themes.json, английский — в UI["en"]["themes_en"].
+    Если перевода нет, возвращаем русский: пустая карточка хуже, чем
+    карточка с непереведённым названием.
+    """
+    if lang != "ru":
+        tr = UI["en"]["themes_en"].get(tid, {})
+        if field in tr:
+            return tr[field]
+    return default
+
+
+def param_text(lang, tid, key, default):
+    """Подпись параметра: русская из themes.json, английская из словаря."""
+    if lang != "ru":
+        tr = UI["en"]["themes_en"].get(tid, {}).get("params", {})
+        if key in tr:
+            return tr[key]
+    return default
+
+
+def group_text(lang, tid, gi, default):
+    if lang != "ru":
+        tr = UI["en"]["themes_en"].get(tid, {}).get("groups", [])
+        if gi < len(tr):
+            return tr[gi]
+    return default
+
+
+def variant_text(lang, tid, vid, default):
+    if lang != "ru":
+        tr = UI["en"]["themes_en"].get(tid, {}).get("variants", {})
+        if vid in tr:
+            return tr[vid]
+    return default
+
+
+def fmt_value(p, value, theme_id, lang="ru"):
     fmt = p.get("format")
     if fmt == "percent":
         return "%d%%" % round(float(value) * 100)
@@ -260,12 +418,18 @@ def fmt_value(p, value, theme_id):
         unit = p.get("unit") or ""
         if any("\u4e00" <= ch <= "\u9fff" for ch in unit):
             unit = ""
+    # Счётчики в английском идут без единицы: «1 pcs» неверно, а «1 pc»
+    # ради одного слова не стоит формы множественного числа. В русском
+    # единицу тоже не показываем — см. комментарий у UNIT_LABELS.
+    if lang == "en" and unit == "шт":
+        unit = ""
     return (text + " " + unit) if unit else text
 
 
 class Switcher(Gtk.Window):
     def __init__(self, themes):
         super().__init__(title="Mintland")
+        self.lang = detect_lang()
         self.themes = themes
         self.theme_by_id = {t["id"]: t for t in themes}
         self.state = load_state(themes)
@@ -323,23 +487,34 @@ class Switcher(Gtk.Window):
 
         # статус + кнопки
         status_row = Gtk.Box(spacing=8)
-        self.status_label = Gtk.Label(label="Проверка…")
+        self.status_label = Gtk.Label(label=t(self.lang, "checking"))
         self.status_label.set_xalign(0)
         status_row.pack_start(self.status_label, True, True, 0)
 
-        self.start_btn = Gtk.Button(label="Включить слой")
-        self.stop_btn = Gtk.Button(label="Выключить слой")
+        self.start_btn = Gtk.Button(label=t(self.lang, "layer_on"))
+        self.stop_btn = Gtk.Button(label=t(self.lang, "layer_off"))
         self.start_btn.connect("clicked", self._on_start)
         self.stop_btn.connect("clicked", self._on_stop)
         status_row.pack_end(self.stop_btn, False, False, 0)
         status_row.pack_end(self.start_btn, False, False, 0)
+
+        # Язык интерфейса. Стоит справа в строке состояния: это редкая
+        # настройка, и она не должна отнимать место у главного.
+        self.lang_btn = Gtk.ComboBoxText()
+        self.lang_btn.append("ru", "Русский")
+        self.lang_btn.append("en", "English")
+        self.lang_btn.set_active_id(self.lang)
+        self.lang_btn.set_tooltip_text(t(self.lang, "language"))
+        self.lang_btn.connect("changed", self._on_lang)
+        status_row.pack_end(self.lang_btn, False, False, 0)
+
         outer.pack_start(status_row, False, False, 0)
 
         # карточки тем
-        theme_title = Gtk.Label(label="Тема")
-        theme_title.set_xalign(0)
-        theme_title.get_style_context().add_class("group-title")
-        outer.pack_start(theme_title, False, False, 0)
+        self.theme_title = Gtk.Label(label=t(self.lang, "themes"))
+        self.theme_title.set_xalign(0)
+        self.theme_title.get_style_context().add_class("group-title")
+        outer.pack_start(self.theme_title, False, False, 0)
 
         # Карточки в горизонтальном скроллере: тем может быть сколько угодно,
         # а минимальная ширина окна остаётся разумной. Полоса прокрутки
@@ -356,7 +531,7 @@ class Switcher(Gtk.Window):
         outer.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
         # параметры
-        self.settings_title = Gtk.Label(label="Параметры")
+        self.settings_title = Gtk.Label(label=t(self.lang, "params"))
         self.settings_title.set_xalign(0)
         self.settings_title.get_style_context().add_class("group-title")
         outer.pack_start(self.settings_title, False, False, 0)
@@ -369,7 +544,7 @@ class Switcher(Gtk.Window):
         outer.pack_start(scroll, True, True, 0)
 
         footer = Gtk.Box(spacing=8)
-        self.reset_btn = Gtk.Button(label="Сбросить тему")
+        self.reset_btn = Gtk.Button(label=t(self.lang, "reset"))
         self.reset_btn.connect("clicked", self._on_reset)
         footer.pack_start(self.reset_btn, False, False, 0)
         self.saved_label = Gtk.Label(label="")
@@ -377,10 +552,11 @@ class Switcher(Gtk.Window):
         footer.pack_end(self.saved_label, True, True, 0)
         outer.pack_start(footer, False, False, 0)
 
-        note = Gtk.Label(label="Слой продолжает работать после закрытия окна.")
-        note.set_xalign(0)
-        note.get_style_context().add_class("hint")
-        outer.pack_start(note, False, False, 0)
+        # Подпись внизу тоже переводится: держим ссылку на неё.
+        self.note_label = Gtk.Label(label=t(self.lang, "note"))
+        self.note_label.set_xalign(0)
+        self.note_label.get_style_context().add_class("hint")
+        outer.pack_start(self.note_label, False, False, 0)
 
         self.show_all()
 
@@ -390,17 +566,17 @@ class Switcher(Gtk.Window):
         card = Gtk.Button()
         card.set_relief(Gtk.ReliefStyle.NONE)
         card.get_style_context().add_class("theme-card")
-        card.set_tooltip_text(info.get("desc", ""))
+        card.set_tooltip_text(theme_text(self.lang, tid, "desc", info.get("desc", "")))
         card.set_hexpand(True)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         thumb = self._make_thumb(tid)
         thumb.set_halign(Gtk.Align.CENTER)
         self.thumbs[tid] = thumb
         box.pack_start(thumb, True, False, 0)
-        name = Gtk.Label(label=info.get("name", tid))
+        name = Gtk.Label(label=theme_text(self.lang, tid, "name", info.get("name", tid)))
         name.set_xalign(0.5)
         box.pack_start(name, False, False, 0)
-        desc = Gtk.Label(label=info.get("desc", ""))
+        desc = Gtk.Label(label=theme_text(self.lang, tid, "desc", info.get("desc", "")))
         desc.set_xalign(0.5)
         desc.set_line_wrap(True)
         desc.set_max_width_chars(32)
@@ -458,7 +634,8 @@ class Switcher(Gtk.Window):
             else:
                 ctx.remove_class("selected")
         info = THEME_INFO.get(tid, {})
-        self.settings_title.set_text("Параметры темы «%s»" % info.get("name", tid))
+        name = theme_text(self.lang, tid, "name", info.get("name", tid))
+        self.settings_title.set_text(t(self.lang, "params_of") % name)
         self._rebuild_settings()
         if not initial:
             self._schedule_persist()
@@ -483,7 +660,8 @@ class Switcher(Gtk.Window):
                          if self._param_applies(p, current)]
                 if not shown:
                     continue
-                title = Gtk.Label(label=group_labels[gi] if gi < len(group_labels) else "Параметры")
+                glabel = group_labels[gi] if gi < len(group_labels) else t(self.lang, "params")
+                title = Gtk.Label(label=group_text(self.lang, self.theme_id, gi, glabel))
                 title.set_xalign(0)
                 title.get_style_context().add_class("group-title")
                 self.settings_box.pack_start(title, False, False, 0)
@@ -503,7 +681,7 @@ class Switcher(Gtk.Window):
         тема в двух видах, а не две похожие темы.
         """
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        title = Gtk.Label(label="Вариант")
+        title = Gtk.Label(label=t(self.lang, "variant"))
         title.set_xalign(0)
         title.get_style_context().add_class("group-title")
         box.pack_start(title, False, False, 0)
@@ -513,7 +691,8 @@ class Switcher(Gtk.Window):
         current = self.state["params"][self.theme_id].get("variant")
         buttons = {}
         for v in theme["variants"]:
-            btn = Gtk.ToggleButton(label=v.get("name", v["id"]))
+            btn = Gtk.ToggleButton(label=variant_text(self.lang, self.theme_id,
+                                                      v["id"], v.get("name", v["id"])))
             btn.set_tooltip_text(v.get("desc", ""))
             if v["id"] == current:
                 btn.set_active(True)
@@ -587,7 +766,8 @@ class Switcher(Gtk.Window):
 
     def _param_label(self, p):
         labels = PARAM_LABELS.get(self.theme_id, {})
-        return labels.get(p["key"], p["key"])
+        return param_text(self.lang, self.theme_id, p["key"],
+                          labels.get(p["key"], p["key"]))
 
     def _make_param_row(self, p):
         key = p["key"]
@@ -627,7 +807,7 @@ class Switcher(Gtk.Window):
         scale.set_value(float(value))
         scale.set_draw_value(False)
         scale.set_hexpand(True)
-        val_label = Gtk.Label(label=fmt_value(p, value, self.theme_id))
+        val_label = Gtk.Label(label=fmt_value(p, value, self.theme_id, self.lang))
         val_label.set_xalign(1)
         val_label.set_size_request(74, -1)
         val_label.get_style_context().add_class("value-label")
@@ -647,7 +827,7 @@ class Switcher(Gtk.Window):
         self.state["params"][tid][key] = value
         label = self.value_labels.get(key)
         if label is not None:
-            label.set_text(fmt_value(p, value, tid))
+            label.set_text(fmt_value(p, value, tid, self.lang))
         self._schedule_persist()
 
     def _on_switch(self, _switch, state, tid, key):
@@ -679,7 +859,7 @@ class Switcher(Gtk.Window):
     def _persist(self):
         self._save_timer = None
         self._persist_now()
-        self.saved_label.set_text("Сохранено")
+        self.saved_label.set_text(t(self.lang, "saved"))
         GLib.timeout_add(1200, self._clear_saved)
         return False
 
@@ -691,13 +871,50 @@ class Switcher(Gtk.Window):
         self.saved_label.set_text("")
         return False
 
+    def _on_lang(self, combo):
+        """Смена языка: сохраняем выбор и перестраиваем надписи.
+
+        Пересобирать всё окно дорого и рискованно (потеряется фокус), поэтому
+        обновляем только текст: карточки и панель параметров строятся
+        заново из тех же данных.
+        """
+        code = combo.get_active_id()
+        if not code or code == self.lang or code not in UI:
+            return
+        self.lang = code
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            SETTINGS_LANG.write_text(code + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+        self.start_btn.set_label(t(self.lang, "layer_on"))
+        self.stop_btn.set_label(t(self.lang, "layer_off"))
+        self.reset_btn.set_label(t(self.lang, "reset"))
+        self.theme_title.set_text(t(self.lang, "themes"))
+        self.note_label.set_text(t(self.lang, "note"))
+        self.lang_btn.set_tooltip_text(t(self.lang, "language"))
+
+        # Карточки: имя, описание, подсказка.
+        for tid, card in self.cards.items():
+            info = THEME_INFO.get(tid, {})
+            card.set_tooltip_text(theme_text(self.lang, tid, "desc", info.get("desc", "")))
+            box = card.get_child()
+            labels = [w for w in box.get_children() if isinstance(w, Gtk.Label)]
+            if len(labels) >= 2:
+                labels[0].set_text(theme_text(self.lang, tid, "name", info.get("name", tid)))
+                labels[1].set_text(theme_text(self.lang, tid, "desc", info.get("desc", "")))
+
+        self._select_theme(self.theme_id, initial=True)
+        self._refresh_status()
+
     def _on_start(self, _btn):
         self._persist_now()
         # wall-on.sh теперь ждёт фактической готовности (обычно 2-3 с),
         # а не спит фиксированные паузы. Держим кнопки заблокированными
         # чуть дольше, чтобы не поймать промежуточное состояние.
         self._busy_until = time.monotonic() + 5
-        self.status_label.set_text("Запуск слоя…")
+        self.status_label.set_text(t(self.lang, "starting"))
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(False)
         subprocess.Popen(["bash", str(HERE / "wall-on.sh")],
@@ -706,7 +923,7 @@ class Switcher(Gtk.Window):
 
     def _on_stop(self, _btn):
         self._busy_until = time.monotonic() + 4
-        self.status_label.set_text("Остановка слоя…")
+        self.status_label.set_text(t(self.lang, "stopping"))
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(False)
         subprocess.Popen(["bash", str(HERE / "wall-off.sh")],
@@ -717,7 +934,7 @@ class Switcher(Gtk.Window):
         if time.monotonic() < self._busy_until:
             return True
         running = is_running()
-        self.status_label.set_text("Слой включён" if running else "Слой выключен")
+        self.status_label.set_text(t(self.lang, "on") if running else t(self.lang, "off"))
         self.start_btn.set_sensitive(not running)
         self.stop_btn.set_sensitive(running)
         return True
