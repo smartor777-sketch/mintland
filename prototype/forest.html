@@ -915,34 +915,39 @@ function drawTree(g, t, sway) {
   const crown = () => {
     g.beginPath();
     if (k.form === 'cone') {
-      // Ёлка: ярусы-треугольники снизу вверх с сильным перекрытием.
+      // Ёлка: ярусы-«юбки» снизу вверх.
       //
-      // Каждый ярус — треугольник высотой почти в два шага, поэтому они
-      // налезают друг на друга и ёлка читается цельной, а не набором
-      // отдельных треугольников с просветами.
+      // На листе-подборке низ яруса не зубчатая пила, а мягкая волна:
+      // три-четыре округлых выступа. Острые зубцы читались гребёнкой,
+      // поэтому низ рисуется дугами.
       const tiers = k.tiers || 4;
       const bottom = cy + crownH / 2;
       const halfW = crownW / 2;
-      const step = crownH / (tiers + 0.35);
-      const tierH = step * 1.95;
+      const step = crownH / (tiers + 0.30);
+      const tierH = step * 1.85;
       for (let tier = 0; tier < tiers; tier++) {
-        const yb = bottom - step * tier;
-        const w = halfW * (1 - tier / (tiers + 1.1));
-        // Чередование тона: ярусы различимы, но не полосатые.
-        g.fillStyle = tier % 2 ? dark : mid;
+        const yb = bottom - step * tier;               // низ юбки
+        const w = halfW * (1 - tier / (tiers + 1.25));
+        const h = tierH * (1 - tier * 0.06);
+        g.fillStyle = tier === 0 ? dark : (tier % 2 ? mid : dark);
         g.beginPath();
-        g.moveTo(x, yb - tierH);
-        // Правая сторона с зубцом.
-        g.lineTo(x + w * 0.52, yb - tierH * 0.22);
-        g.lineTo(x + w * 0.66, yb + tierH * 0.02);
-        g.lineTo(x + w, yb - tierH * 0.10);
-        g.lineTo(x + w * 0.40, yb + tierH * 0.06);
-        g.lineTo(x, yb);
+        g.moveTo(x, yb - h);                            // вершина яруса
+        // Правая сторона — прямая до края юбки.
+        g.lineTo(x + w, yb - h * 0.10);
+        // Низ юбки: три круглых выступа от края к центру.
+        const lobes = 3;
+        for (let l = 0; l < lobes; l++) {
+          const u0 = 1 - l / lobes, u1 = 1 - (l + 1) / lobes;
+          const mx = x + w * (u0 + u1) * 0.5;
+          g.quadraticCurveTo(mx + w * 0.05, yb + h * 0.30, x + w * u1, yb - h * 0.10);
+        }
         // Левая сторона зеркально.
-        g.lineTo(x - w * 0.40, yb + tierH * 0.06);
-        g.lineTo(x - w, yb - tierH * 0.10);
-        g.lineTo(x - w * 0.66, yb + tierH * 0.02);
-        g.lineTo(x - w * 0.52, yb - tierH * 0.22);
+        for (let l = 0; l < lobes; l++) {
+          const u0 = l / lobes, u1 = (l + 1) / lobes;
+          const mx = x - w * (u0 + u1) * 0.5;
+          g.quadraticCurveTo(mx - w * 0.05, yb + h * 0.30, x - w * u1, yb - h * 0.10);
+        }
+        g.lineTo(x - w, yb - h * 0.10);
         g.closePath();
         g.fill();
       }
@@ -975,14 +980,36 @@ function drawTree(g, t, sway) {
       g.ellipse(x, cy, r, hh, 0, 0, TAU);
       return;
     }
-    // Сужение кверху: верхняя половина уже.
-    const topW = r * (k.form === 'leaf' ? 0.22 : 0.42);
-    g.moveTo(x - topW, cy - hh);
-    g.quadraticCurveTo(x - r * 0.98, cy - hh * 0.15, x - r, cy + hh * 0.30);
-    g.quadraticCurveTo(x - r * 0.80, cy + hh, x, cy + hh);
-    g.quadraticCurveTo(x + r * 0.80, cy + hh, x + r, cy + hh * 0.30);
-    g.quadraticCurveTo(x + r * 0.98, cy - hh * 0.15, x + topW, cy - hh);
-    g.quadraticCurveTo(x, cy - hh * 1.10, x - topW, cy - hh);
+    // Капля: замкнутая кривая — макушка, правый бок, низ, левый бок.
+    //
+    // Кривая начинается и заканчивается на макушке. Раньше она начиналась
+    // сбоку ниже вершины, и на макушке оставался разрыв, а верх кроны
+    // срезался плоско.
+    //
+    // Коэффициент 0.5523 — стандартная аппроксимация круга безье: низ и
+    // макушка выходят круглыми, а не угловатыми.
+    const K = 0.5523;
+    const bw = r * (k.form === 'leaf' ? 0.94 : 1.0);       // полуширина
+    const topW = bw * (k.form === 'leaf' ? 0.34 : 0.46);   // ширина макушки
+    const apexY = cy - hh;                                  // вершина
+    const midY = cy - hh * 0.12;                            // самая широкая часть
+    g.moveTo(x, apexY);
+    // Верх справа: от макушки к широкой части.
+    g.bezierCurveTo(x + topW * 0.62, apexY,
+                    x + bw, midY - hh * 0.52,
+                    x + bw, midY);
+    // Низ справа: настоящая четверть эллипса до нижней точки.
+    g.bezierCurveTo(x + bw, midY + hh * 0.50,
+                    x + bw * K, cy + hh,
+                    x, cy + hh);
+    // Низ слева.
+    g.bezierCurveTo(x - bw * K, cy + hh,
+                    x - bw, midY + hh * 0.50,
+                    x - bw, midY);
+    // Верх слева: обратно к макушке.
+    g.bezierCurveTo(x - bw, midY - hh * 0.52,
+                    x - topW * 0.62, apexY,
+                    x, apexY);
     g.closePath();
   };
 
