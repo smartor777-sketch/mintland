@@ -954,24 +954,40 @@ function drawTree(g, t, sway) {
       return;
     }
     if (k.form === 'dome') {
-      // Купол: широкая крона, низ плоский.
-      const r = crownW / 2;
-      g.moveTo(x - r, cy + crownH * 0.42);
-      g.quadraticCurveTo(x - r * 1.02, cy - crownH * 0.52, x, cy - crownH * 0.50);
-      g.quadraticCurveTo(x + r * 1.02, cy - crownH * 0.52, x + r, cy + crownH * 0.42);
-      g.quadraticCurveTo(x + r * 0.5, cy + crownH * 0.56, x, cy + crownH * 0.52);
-      g.quadraticCurveTo(x - r * 0.5, cy + crownH * 0.56, x - r, cy + crownH * 0.42);
+      // Купол: широкая крона с округлым верхом и округлым низом.
+      //
+      // Раньше низ задавался почти прямой линией, и крона получалась
+      // колоколом с плоским дном. Теперь это широкая капля: тот же
+      // замкнутый контур, что у drop, но приземистее.
+      const K = 0.5523;
+      const r = crownW / 2, hh = crownH / 2;
+      const apexY = cy - hh, midY = cy - hh * 0.06;
+      g.moveTo(x, apexY);
+      g.bezierCurveTo(x + r * 0.56, apexY, x + r, midY - hh * 0.58, x + r, midY);
+      g.bezierCurveTo(x + r, midY + hh * 0.56, x + r * K, cy + hh, x, cy + hh);
+      g.bezierCurveTo(x - r * K, cy + hh, x - r, midY + hh * 0.56, x - r, midY);
+      g.bezierCurveTo(x - r, midY - hh * 0.58, x - r * 0.56, apexY, x, apexY);
       g.closePath();
       return;
     }
     if (k.form === 'cloud') {
-      // Облако: несколько кругов в одно пятно.
-      const r = crownW / 2;
-      g.ellipse(x, cy + r * 0.16, r * 0.82, crownH * 0.34, 0, 0, TAU);
-      g.ellipse(x - r * 0.46, cy + r * 0.02, r * 0.56, crownH * 0.26, 0, 0, TAU);
-      g.ellipse(x + r * 0.44, cy + r * 0.04, r * 0.54, crownH * 0.25, 0, 0, TAU);
-      g.ellipse(x - r * 0.20, cy - r * 0.30, r * 0.52, crownH * 0.26, 0, 0, TAU);
-      g.ellipse(x + r * 0.22, cy - r * 0.26, r * 0.46, crownH * 0.23, 0, 0, TAU);
+      // Облако: несколько кругов, сбитых в одно пятно.
+      //
+      // Круги идут симметрично и с запасом внутрь: крайний справа раньше
+      // вылезал за общий контур и оставлял «пузырь» сбоку.
+      const r = crownW / 2, hh = crownH / 2;
+      // Каждый круг начинается со своего moveTo. Без него canvas соединяет
+      // эллипсы прямыми линиями от конца предыдущего к началу следующего —
+      // сбоку кроны появлялся светлый «клюв».
+      const lobe = (lx, ly, rx, ry) => {
+        g.moveTo(lx + rx, ly);
+        g.ellipse(lx, ly, rx, ry, 0, 0, TAU);
+      };
+      lobe(x, cy + hh * 0.16, r * 0.80, hh * 0.62);
+      lobe(x - r * 0.42, cy + hh * 0.04, r * 0.52, hh * 0.50);
+      lobe(x + r * 0.42, cy + hh * 0.04, r * 0.52, hh * 0.50);
+      lobe(x - r * 0.18, cy - hh * 0.34, r * 0.50, hh * 0.48);
+      lobe(x + r * 0.18, cy - hh * 0.34, r * 0.50, hh * 0.48);
       return;
     }
     // drop, leaf и column — овал; drop и leaf сужены кверху.
