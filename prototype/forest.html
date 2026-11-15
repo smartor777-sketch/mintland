@@ -617,17 +617,17 @@ const TREE_KINDS = {
   // Лист с прожилками.
   leaf: {
     tones: ['#4a7d4a', '#5a9159', '#6ba46a'], trunk: '#a97b52',
-    form: 'leaf', ratio: 1.75,
+    form: 'leaf', ratio: 1.50,
   },
   // Купол широкий.
   dome: {
     tones: ['#2a5a42', '#356f52', '#428663'], trunk: '#a97b52',
-    form: 'dome', ratio: 1.05,
+    form: 'leaf', ratio: 1.36, wide: true,
   },
   // Купол оливковый.
   olive: {
     tones: ['#6b7f3a', '#7d9445', '#8fa952'], trunk: '#a97b52',
-    form: 'dome', ratio: 1.15,
+    form: 'leaf', ratio: 1.46, wide: true,
   },
   // Облако из нескольких кругов.
   cloud: {
@@ -1049,23 +1049,36 @@ function drawTree(g, t, sway) {
   g.fill();
   g.globalAlpha = 1;
 
-  // Прожилки у листа.
+  // Прожилки листа.
+  //
+  // Как на картинке-образце: одна заметная центральная жила от ствола почти
+  // до макушки и четыре пары боковых, идущих вниз под углом к краю. Раньше
+  // жилы были короткие и бледные — на тёмной кроне их не было видно.
   if (k.form === 'leaf') {
+    const hh = crownH / 2;
     g.strokeStyle = dark;
-    g.globalAlpha = 0.45;
-    g.lineWidth = Math.max(0.7, 0.9 * s);
+    g.globalAlpha = 0.55;
+    g.lineCap = 'round';
+    // Центральная жила — от ствола почти до макушки. На образце она
+    // заметная и толстая, иначе при мелком размере не читается вовсе.
+    g.lineWidth = Math.max(1.2, 1.9 * s);
     g.beginPath();
-    g.moveTo(x, cy + crownH * 0.42);
-    g.lineTo(x, cy - crownH * 0.34);
-    for (let n = 0; n < 4; n++) {
-      const vy = cy + crownH * 0.22 - n * crownH * 0.16;
-      const vw = crownW * (0.26 - n * 0.045);
-      g.moveTo(x, vy);
-      g.lineTo(x - vw, vy - crownH * 0.10);
-      g.moveTo(x, vy);
-      g.lineTo(x + vw, vy - crownH * 0.10);
-    }
+    g.moveTo(x, cy + hh * 0.96);
+    g.lineTo(x, cy - hh * 0.90);
     g.stroke();
+    // Боковые: три пары, плавно вниз-наружу, короче к макушке.
+    g.lineWidth = Math.max(0.9, 1.25 * s);
+    for (let n = 0; n < 3; n++) {
+      const vy = cy - hh * 0.10 + n * hh * 0.26;
+      const len = crownW * (0.30 - n * 0.055);
+      g.beginPath();
+      g.moveTo(x, vy);
+      g.quadraticCurveTo(x - len * 0.6, vy + hh * 0.06, x - len, vy + hh * 0.16);
+      g.moveTo(x, vy);
+      g.quadraticCurveTo(x + len * 0.6, vy + hh * 0.06, x + len, vy + hh * 0.16);
+      g.stroke();
+    }
+    g.lineCap = 'butt';
     g.globalAlpha = 1;
   }
   g.restore();
