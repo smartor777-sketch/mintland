@@ -61,7 +61,7 @@ GROUP_LABELS = {
     "beach": ["Берег", "Вода", "Элементы"],
     "meadow": ["Вокруг иконок", "Облака", "Персонажи"],
     "night": ["Иконки", "Небо", "Туман", "Воздух"],
-    "forest": ["Лес", "Земля"],
+    "forest": ["Лес"],
 }
 
 PARAM_LABELS = {
@@ -92,7 +92,6 @@ PARAM_LABELS = {
     "forest": {
         "trees": "Деревья",
         "glade": "Поляна",
-        "sigma": "Ореол вокруг иконок",
     },
 }
 
@@ -110,7 +109,7 @@ UNIT_LABELS = {
     "beach": {"sigma": "px", "shoal": "px", "shallow": "px"},
     "meadow": {"sigma": "px"},
     "night": {"halo": "px", "shoot": "шт", "fireflies": "шт"},
-    "forest": {"trees": "шт", "glade": "px", "sigma": "px"},
+    "forest": {"trees": "шт", "glade": "px"},
 }
 
 
@@ -208,7 +207,6 @@ UI = {
                 "params": {
                     "trees": "Trees",
                     "glade": "Clearing",
-                    "sigma": "Halo around icons",
                 },
                 "variants": {"forest": "Forest"},
             },

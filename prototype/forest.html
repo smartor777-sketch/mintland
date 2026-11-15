@@ -167,7 +167,7 @@ const URL_VARIANT = QS.get('variant');       // заморозка: не кру�
 // Значения по умолчанию должны совпадать с полем default темы «Лес»
 // в themes.json. Параметры grain и quality не настраиваются.
 const P = {
-  sigma: 72, warp: 40, edge: 10, cover: 0.3, flow: 1, grain: 1, quality: 2,   // quality 2: рисуем в реальных пикселях экрана — при масштабе 150% картинка не растягивается и остаётся чёткой
+  warp: 40, edge: 10, cover: 0.3, flow: 1, grain: 1, quality: 2,   // quality 2: рисуем в реальных пикселях экрана — при масштабе 150% картинка не растягивается и остаётся чёткой
   debug: false, snap: true, cap30: true,
   adaptive: 1,
   trees: 700,             // сколько деревьев в лесу
@@ -201,7 +201,6 @@ const DISPLAY_KEYS = ['adaptive'];
 const SLIDERS = [
   { key: 'trees',  label: 'Деревья', min: 0, max: 900, step: 10, fmt: v => v + ' шт' },
   { key: 'glade',  label: 'Поляна', min: 0, max: 80, step: 2, fmt: v => v + ' px' },
-  { key: 'sigma',  label: 'Ореол вокруг иконок', min: 20, max: 260, step: 2, fmt: v => v + ' px' },
 ];
 
 /* ======================================================================
@@ -331,7 +330,10 @@ let fieldMs = 0;
 function computeField(rects) {
   const t0 = performance.now();
   const N = Gw * Gh, f1 = new Float32Array(N);
-  const sig = P.sigma, is1 = 1 / (sig * sig);
+  // Размах поля — внутренняя величина, ползунка у неё нет: она задаёт,
+  // насколько плавно лес перестраивается при перемещении иконки. На вид
+  // поляны это не влияет — её радиус считается в пикселях отдельно.
+  const sig = 72, is1 = 1 / (sig * sig);
   const wa = P.warp * 2.2, wmax = wa * 0.5;
   for (const r of rects) {
     const R = 5.5 * sig + Math.max(r.hw, r.hh) * 0.5 + wmax;
@@ -377,7 +379,7 @@ precision highp float;
 uniform sampler2D uNoise, uFA, uFB;
 uniform vec2 uRes, uGrid;
 uniform float uScale, uSeed, uStep, uMix, uTime, uDebug;
-uniform float uGlade, uHalo;    // радиус поляны и ореола, px
+uniform float uGlade;           // радиус поляны, px
 uniform int uIconN;             // сколько иконок
 uniform vec4 uIcon[32];         // прямоугольники иконок: x, y, ширина, высота
 // Палитра приходит извне, как и у Пляжа: это основа вариантов темы.
@@ -457,19 +459,18 @@ void main() {
   // Тёмно-зелёные штрихи травы
   col = mix(col, uInk, grassInk(p) * 0.75);
 
-  // ---------- Поляна и ореол вокруг иконок ----------
+  // ---------- Поляна вокруг иконок ----------
   //
-  // Оба считаются в ПИКСЕЛЯХ от прямоугольника иконки, а не по полю
-  // расстояний: то поле безразмерное (на самой иконке около 170, в двухста
-  // пикселях — 320), поэтому ползунок «Ореол» почти ничего не менял.
+  // В лесу нет ни ореолов, ни подсветки под иконками: просто лес, в
+  // котором для иконок оставлено место. Поэтому земля в поляне чуть
+  // светлее и мягче — как вытоптанная, без прямоугольных границ и без
+  // тёмной подложки под самой иконкой.
   //
-  // Ореол — мягкое светлое пятно под иконкой, поляна — вытоптанная земля
-  // радиусом побольше. Деревья в поляне не растут (см. buildTrees).
-  float di = iconDist(p);
-  float halo = ss(uHalo, uHalo * 0.25, di);              // 1 под иконкой, 0 на краю
-  float glade = ss(uGlade, uGlade * 0.35, di);
-  col = mix(col, mix(col, vec3(0.94, 0.96, 0.84), 0.42), halo * 0.55);   // светлый ореол
-  col = mix(col, col * uGDeep, glade * 0.22);                            // вытоптанная земля
+  // Расстояние — в пикселях от прямоугольника иконки (uIcon), а не по
+  // полю расстояний: то поле безразмерное и порог в нём не переводится
+  // в пиксели.
+  float glade = ss(uGlade, 0.0, iconDist(p));
+  col = mix(col, mix(col, vec3(0.93, 0.95, 0.82), 0.30), glade * 0.55);
 
   if (uDebug > 0.5) col = mix(col, vec3(0.9, 0.15, 0.15), glade);
   o = vec4(col, 1.0);
@@ -1292,7 +1293,6 @@ function draw(now) {
     gl.uniform1f(U.uTime, (now - T0) / 1000);
     gl.uniform1f(U.uDebug, P.debug ? 1 : 0);
     gl.uniform1f(U.uGlade, P.glade);
-    gl.uniform1f(U.uHalo, P.sigma);
     gl.uniform1i(U.uIconN, packIcons());
     gl.uniform4fv(U.uIcon, iconBuf);
     applyVariant(U);
@@ -1547,7 +1547,7 @@ function applySettings(v) {
     if (k === 'adaptive') adaptiveChanged = true;
     // Деревья, поляна и ореол видны сразу: лес надо собрать заново,
     // иначе ползунок не делает ничего.
-    if (k === 'trees' || k === 'glade' || k === 'sigma') forestChanged = true;
+    if (k === 'trees' || k === 'glade') forestChanged = true;
   }
   if (adaptiveChanged && FB) commit();
   if (forestChanged) rebuildForest();
