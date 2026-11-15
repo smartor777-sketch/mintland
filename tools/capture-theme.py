@@ -48,7 +48,8 @@ def sample_icons(width, height, dpr=1):
     return rects
 
 
-def render_frames(html, width, height, frames, period_ms, warmup_ms, icons=None):
+def render_frames(html, width, height, frames, period_ms, warmup_ms, icons=None,
+                  preset=None):
     win = Gtk.OffscreenWindow()
     win.set_default_size(width, height)
     view = WebKit2.WebView()
@@ -129,6 +130,8 @@ def render_frames(html, width, height, frames, period_ms, warmup_ms, icons=None)
 
     view.connect("load-changed", on_load)
     uri = "file://" + str(html.resolve()) + "?wallpaper=1&freeze=1"
+    if preset:
+        uri += "&preset=" + preset
     view.load_uri(uri)
 
     def on_timeout():
@@ -179,11 +182,14 @@ def main():
     ap.add_argument("--width", type=int, default=400, help="ширина GIF")
     ap.add_argument("--warmup", type=int, default=0, help="сдвиг времени первого кадра, мс")
     ap.add_argument("--icons", default="grid", help="grid | нет — тестовая раскладка иконок")
+    ap.add_argument("--preset", default=None,
+                    help="пресет палитры для тем-пресетов (maldives, lagoon, …)")
     args = ap.parse_args()
 
     w, h = (int(x) for x in args.size.lower().split("x"))
     icons = sample_icons(w, h) if args.icons != "нет" else None
-    frames = render_frames(args.html, w, h, args.frames, args.period, args.warmup, icons)
+    frames = render_frames(args.html, w, h, args.frames, args.period, args.warmup,
+                           icons, args.preset)
     save_gif(frames, args.out, args.width, args.period)
     print("%s: %d кадров, %dx%d → %s (%d КБ)" % (
         args.html.name, len(frames), args.width,

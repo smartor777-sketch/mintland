@@ -250,16 +250,17 @@
             }
           ]
         }
-      ]
+      ],
+      "preset": "beach"
     },
     {
       "id": "beach-turquoise",
       "name": "马尔代夫",
       "desc": "青绿色海水与浅米黄沙滩，暗色珊瑚礁间的小鱼成群游动",
       "status": "locked",
-      "locked": true,
       "thumb": "url(thumbs/maldives.webp?v=4ebfbc8e82) center / cover no-repeat, linear-gradient(160deg, #fcf3e1 0%, #fcf3e1 34%, #b8eee0 36%, #26dad1 55%, #1cc6c3 78%, #19b3b5 100%)",
-      "thumbSource": "custom"
+      "thumbSource": "custom",
+      "locked": true
     },
     {
       "id": "lake",

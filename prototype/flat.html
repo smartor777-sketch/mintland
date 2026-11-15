@@ -160,6 +160,8 @@ const QS = new URLSearchParams(location.search);
 const WALL = QS.has('wallpaper');      // 壁纸模式：桌面宿主加载，消息来自宿主
 const PREVIEW = QS.has('preview');     // 预览模式：设置窗口里的缩略预览（iframe），消息来自父页面
 const FREEZE = QS.has('freeze');       // заморозка: не крутим requestAnimationFrame, кадр задаётся снаружи (tools/capture-theme.py)
+// ?preset=maldives — вариант палитры для той же сцены (см. PALETTES).
+const URL_PRESET = QS.get('preset');
 // 默认值要和 themes.json 里海边主题的 default 保持一致
 // 海浪（speed、runup、wave、spacing、waves）和 grain、quality 不再开放调节，固定为这里的值
 const P = {
@@ -351,20 +353,18 @@ uniform vec2 uRes, uGrid;
 uniform float uScale, uSeed, uStep, uMix, uTime, uSpeed, uRunup, uShallow, uShoal, uGrain, uDebug, uWave, uSigma, uSpacing, uWaves;
 uniform float uKayN;
 uniform vec4 uKay[4];          // x, y, 朝向, 划桨相位
+// Палитра темы приходит извне, а не зашита в шейдер: это основа пресетов.
+// Мальдивы, Лагуна и прочие варианты — те же сцены с другой таблицей цветов.
+uniform vec3 uSea0, uSea1, uSea2, uSea3, uSea4;
+uniform vec3 uSand0, uSand1, uSand2, uSand3;
+uniform vec3 uFoam, uWetSand;
 uniform vec4 uRip[6];
 uniform float uBirdN;
 uniform vec4 uBird[8];         // x, y, 朝向, 翅膀展开程度
 out vec4 o;
 
-// ---- 调色板（sRGB）----
-// 海：近岸 → 远处
-const vec3 SEA0 = vec3(0.74, 0.93, 0.87), SEA1 = vec3(0.47, 0.87, 0.84), SEA2 = vec3(0.17, 0.76, 0.81);
-const vec3 SEA3 = vec3(0.03, 0.66, 0.79), SEA4 = vec3(0.00, 0.56, 0.73);
-// 沙：干 → 最湿（淡紫灰）
-const vec3 SAND0 = vec3(0.97, 0.93, 0.88), SAND1 = vec3(0.91, 0.85, 0.84), SAND2 = vec3(0.82, 0.76, 0.79), SAND3 = vec3(0.71, 0.67, 0.75);
-const vec3 FOAM = vec3(0.98, 0.99, 0.98);
-// 湿沙：被水泡过的沙子，比干沙深一点、偏黄（岸边那一圈都往这个颜色靠）
-const vec3 WETSAND = vec3(0.93, 0.86, 0.72);
+// Палитра — в uniforms uSea0..uSea4, uSand0..uSand3, uFoam, uWetSand.
+// Значения по умолчанию задаются в JS (PRESETS), см. configureBeachPass.
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 // 颗粒和反光点用的随机数（Dave Hoskins 的 hash12）：对整数格子坐标也足够"乱"，不会排成行列
@@ -379,16 +379,16 @@ float fieldS(sampler2D t, vec2 p) { return texture(t, (p / uStep + 0.5) / uGrid)
 
 vec3 seaRamp(float v) {
   v = clamp(v, 0.0, 1.0) * 4.0;
-  if (v < 1.0) return mix(SEA0, SEA1, v);
-  if (v < 2.0) return mix(SEA1, SEA2, v - 1.0);
-  if (v < 3.0) return mix(SEA2, SEA3, v - 2.0);
-  return mix(SEA3, SEA4, v - 3.0);
+  if (v < 1.0) return mix(uSea0, uSea1, v);
+  if (v < 2.0) return mix(uSea1, uSea2, v - 1.0);
+  if (v < 3.0) return mix(uSea2, uSea3, v - 2.0);
+  return mix(uSea3, uSea4, v - 3.0);
 }
 vec3 sandRamp(float v) {
   v = clamp(v, 0.0, 1.0) * 3.0;
-  if (v < 1.0) return mix(SAND0, SAND1, v);
-  if (v < 2.0) return mix(SAND1, SAND2, v - 1.0);
-  return mix(SAND2, SAND3, v - 2.0);
+  if (v < 1.0) return mix(uSand0, uSand1, v);
+  if (v < 2.0) return mix(uSand1, uSand2, v - 1.0);
+  return mix(uSand2, uSand3, v - 2.0);
 }
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
 // Worley（细胞）噪声：x = F1，y = F2。F2 - F1 很小的地方是细胞边界 → 用来画光网、碎沫网
@@ -519,7 +519,7 @@ void main() {
       col = mix(bed * tint, col, k);
     }
     // 贴岸的一段水底是湿沙：从岸线处的湿沙色慢慢过渡到浅滩的沙底色，和沙滩那边接得上，水里没有一道边
-    col = mix(col, mix(sandRamp((g1 - 0.5) * 0.1 * gAmt), WETSAND, 0.6), 1.0 - ss(2.0, 38.0, s));
+    col = mix(col, mix(sandRamp((g1 - 0.5) * 0.1 * gAmt), uWetSand, 0.6), 1.0 - ss(2.0, 38.0, s));
 
     // 皮划艇的影子（清澈的水，影子落在海底）
     float shadow = 0.0;
@@ -542,7 +542,7 @@ void main() {
       rip = max(rip, (1.0 - ss(0.8, 2.0, abs(dist - rad))) * exp(-r.z * 1.4) * r.w);
       rip = max(rip, (1.0 - ss(0.6, 1.6, abs(dist - rad * 0.6))) * exp(-r.z * 1.8) * r.w * 0.6);
     }
-    col = mix(col, FOAM, step(g2, rip * 0.95));
+    col = mix(col, uFoam, step(g2, rip * 0.95));
 
     // ---------- 海里的浪 ----------
     float dd = s - 2.0;
@@ -562,11 +562,11 @@ void main() {
     float burst = exp(-fu * 4.5) * ss(0.0, 0.04, fu);
     float spray = exp(-dd / (6.0 * wv)) * burst * energy * 0.45;
     float foam = max(crest, step(g2, max(spray, crestSpray)));
-    col = mix(col, FOAM, foam);
+    col = mix(col, uFoam, foam);
   } else {
     // ---------- 沙滩（干沙 + 靠水的一窄条常湿带）----------
     float wet = ss(-7.0 - 3.0 * shoreE, 1.0, s) * 0.2;
-    col = mix(sandRamp((g1 - 0.5) * 0.1 * gAmt), WETSAND, wet * 3.0);
+    col = mix(sandRamp((g1 - 0.5) * 0.1 * gAmt), uWetSand, wet * 3.0);
     col *= 1.0 - 0.03 * ss(0.4, 0.8, N(p, 900.0).r) * (1.0 - wet);               // 干沙上极轻的大块明暗
   }
 
@@ -578,7 +578,7 @@ void main() {
   // 薄水、湿痕不在岸线处一刀切：往海里再延伸一段、慢慢淡出（开阔岸边才有，小水塘里没有浪）
   float wk = (1.0 - ss(2.0, 38.0, s)) * mix(1.0, energy, ss(2.0, 10.0, s));
   if ((s < 4.0 && reachBase > 0.5) || (s >= 4.0 && wk > 0.01)) {
-    const vec3 FILM = WETSAND, MARK = WETSAND * 0.97;
+    vec3 FILM = uWetSand, MARK = uWetSand * 0.97;
     float onSand = step(s, 4.0);                                                  // 前沿白边只画在沙滩上
     // 薄水退去时留下的网状碎沫（跟着回流的水往海里漂）
     vec2 wl = worley((p - nrm * fu * 8.0) / 7.0);
@@ -610,12 +610,12 @@ void main() {
       float front = layers[j].x, a = layers[j].y, amp = layers[j].z;
       float cov = ss(front - 1.0, front + layers[j].w, sW);
       float lace = laceNet * cov * ss(0.4, 0.6, a) * (1.0 - ss(0.7, 1.4, a)) * wk;
-      col = mix(col, FOAM, lace * 0.75);
+      col = mix(col, uFoam, lace * 0.75);
       float edgeK = a < 0.45 ? 1.0 : 1.0 - ss(0.45, 1.05, a);
       float d = sW - front;
       float lineE = (1.0 - ss(0.8 * wv, 1.9 * wv, abs(d - 0.9 * wv))) * edgeK * onSand;    // 前沿白边
       float sprayE = exp(-max(d, 0.0) / (5.0 * wv)) * cov * edgeK * 0.5 * onSand;         // 白边身后的颗粒水雾
-      col = mix(col, FOAM, max(lineE * 0.95, step(g1, sprayE)));
+      col = mix(col, uFoam, max(lineE * 0.95, step(g1, sprayE)));
     }
   }
 
@@ -1086,6 +1086,59 @@ function draw(now) {
   drawMaldivesPalms(now, palmPR, configureBeachPass);
   if (measure) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); frameMs = performance.now() - t0; }
 }
+/* ======================================================================
+   Пресеты темы
+   ======================================================================
+   Тема-пресет — это таблица цветов над одной и той же сценой. Такой пресет
+   не требует новой HTML-страницы: Мальдивы, Лагуна и Пляж — одна сцена с
+   разной палитрой. Добавить вариант = дописать сюда несколько строк.
+
+   Первый пресет (beach) повторяет цвета, которые раньше были зашиты в
+   шейдер, поэтому вид темы не меняется.
+   ====================================================================== */
+const PALETTES = {
+  beach: {
+    // море: у берега → вдали
+    sea: [[0.74, 0.93, 0.87], [0.47, 0.87, 0.84], [0.17, 0.76, 0.81],
+          [0.03, 0.66, 0.79], [0.00, 0.56, 0.73]],
+    // песок: сухой → самый мокрый
+    sand: [[0.97, 0.93, 0.88], [0.91, 0.85, 0.84],
+           [0.82, 0.76, 0.79], [0.71, 0.67, 0.75]],
+    foam: [0.98, 0.99, 0.98],
+    wet:  [0.93, 0.86, 0.72],
+  },
+  // Мальдивы: бирюзовая вода, почти белый песок, светлая пена.
+  maldives: {
+    sea: [[0.93, 0.97, 0.92], [0.62, 0.95, 0.92], [0.20, 0.88, 0.87],
+          [0.10, 0.79, 0.82], [0.07, 0.70, 0.75]],
+    sand: [[0.99, 0.97, 0.92], [0.96, 0.92, 0.86],
+           [0.90, 0.85, 0.80], [0.82, 0.77, 0.72]],
+    foam: [1.00, 1.00, 0.99],
+    wet:  [0.96, 0.92, 0.84],
+  },
+  // Лагуна: глубокий синий, холодный песок.
+  lagoon: {
+    sea: [[0.78, 0.90, 0.94], [0.52, 0.80, 0.90], [0.22, 0.62, 0.84],
+          [0.10, 0.45, 0.74], [0.05, 0.31, 0.60]],
+    sand: [[0.93, 0.92, 0.89], [0.86, 0.84, 0.83],
+           [0.77, 0.75, 0.78], [0.66, 0.64, 0.71]],
+    foam: [0.97, 0.99, 1.00],
+    wet:  [0.87, 0.84, 0.78],
+  },
+};
+
+// Какой пресет активен. Меняется через настройки (?preset=… или control.json).
+let paletteId = 'beach';
+if (URL_PRESET && PALETTES[URL_PRESET]) paletteId = URL_PRESET;
+
+function applyPalette(U) {
+  const pal = PALETTES[paletteId] || PALETTES.beach;
+  for (let i = 0; i < 5; i++) gl.uniform3fv(U['uSea' + i], pal.sea[i]);
+  for (let i = 0; i < 4; i++) gl.uniform3fv(U['uSand' + i], pal.sand[i]);
+  gl.uniform3fv(U.uFoam, pal.foam);
+  gl.uniform3fv(U.uWetSand, pal.wet);
+}
+
 function configureBeachPass(now, pass) {
   const { p, U } = pass;
   gl.useProgram(p);
@@ -1106,6 +1159,7 @@ function configureBeachPass(now, pass) {
   gl.uniform1f(U.uWave, P.wave); gl.uniform1f(U.uSigma, P.sigma);
   gl.uniform1f(U.uSpacing, P.spacing); gl.uniform1f(U.uWaves, P.waves);
   gl.uniform1f(U.uDebug, P.debug ? 1 : 0);
+  applyPalette(U);
   gl.uniform1f(U.uKayN, kayaks.length);
   gl.uniform4fv(U.uKay, kayBuf);
   gl.uniform4fv(U.uRip, ripBuf);
@@ -1250,6 +1304,12 @@ if (!FREEZE) scheduleFrame();
 // 应用设置：只处理认识的参数；岸线相关的要重算陆地场，精度要重建画布，皮划艇要增减
 function applySettings(v) {
   if (typeof v.seed === 'number' && v.seed !== seed) reseed(v.seed);   // 设置窗口的"刷新"：换一张（桌面和预览用同一个种子）
+  // Пресет палитры: имя таблицы из PALETTES. Меняется на лету — перезагрузка
+  // страницы не нужна, достаточно поменять uniforms в следующем кадре.
+  if (typeof v.palette === 'string' && PALETTES[v.palette] && v.palette !== paletteId) {
+    paletteId = v.palette;
+    if (!FREEZE) draw(performance.now());
+  }
   // 只接受面板上有的参数：已经去掉的选项（颗粒感、渲染精度）即使旧的设置文件里还存着也不生效
   let field = false, kay = false, bird = false;
   for (const k in v) {
