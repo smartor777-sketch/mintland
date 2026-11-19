@@ -175,6 +175,8 @@ committed. Build instructions are below.
 
 - installed package: **Mintland** in the applications menu → `/usr/bin/mintland` →
   `switcher.py`;
+- on first launch the installed version also creates a **Mintland** shortcut on
+  the desktop;
 - from the repository: `python3 switcher.py`.
 
 `wall-on.sh` / `wall-off.sh` are the service scripts the app calls when the

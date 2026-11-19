@@ -178,6 +178,8 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 
 - в установленном пакете: **Mintland** в меню приложений → `/usr/bin/mintland` →
   `switcher.py`;
+- при первом запуске установленная версия кладёт ярлык **Mintland** на
+  рабочий стол;
 - из репозитория: `python3 switcher.py`.
 
 `wall-on.sh` / `wall-off.sh` — служебные скрипты, которые приложение вызывает

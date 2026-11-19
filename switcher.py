@@ -81,6 +81,80 @@ def script_env():
     return env
 
 
+def ensure_desktop_shortcut():
+    """Положить ярлык Mintland на рабочий стол (один раз).
+
+    Нужен именно файл .desktop в каталоге рабочего стола, а не ссылка на
+    /usr/share/applications: Nemo показывает на рабочем столе только такие
+    файлы. Копируем установленный ярлык, чтобы описание и иконка совпадали
+    с меню приложений.
+
+    Отметка в ~/.config/mintland/desktop-shortcut не даёт создать ярлык
+    повторно: если пользователь его удалил или переименовал, при следующем
+    запуске мы не навязываем его снова.
+    """
+    marker = CONFIG_DIR / "desktop-shortcut"
+    if marker.exists():
+        return
+
+    try:
+        desktop = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)
+    except Exception:
+        desktop = None
+    if not desktop:
+        return
+    target = Path(desktop) / "Mintland.desktop"
+    if target.exists():
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("created\n", encoding="utf-8")
+        except Exception:
+            pass
+        return
+
+    source = Path("/usr/share/applications/mintland.desktop")
+    if source.is_file():
+        try:
+            text = source.read_text(encoding="utf-8")
+        except Exception:
+            return
+    else:
+        # Запасной вариант для запуска из дерева исходников.
+        text = """[Desktop Entry]
+Type=Application
+Name=Mintland
+Comment=Animated clickable desktop wallpaper for Cinnamon
+Comment[ru]=Живые обои с кликабельными иконками для Cinnamon
+Exec=mintland
+Icon=mintland
+Terminal=false
+Categories=Settings;DesktopSettings;
+OnlyShowIn=X-Cinnamon;
+StartupNotify=true
+StartupWMClass=Mintland
+"""
+    try:
+        target.write_text(text, encoding="utf-8")
+        target.chmod(0o755)
+    except Exception:
+        return
+
+    # Nemo в некоторых версиях требует отметку «доверенный ярлык».
+    # metadata::trusted — это gvfs-метаданные, не gsettings/dconf.
+    try:
+        subprocess.run(
+            ["gio", "set", str(target), "metadata::trusted", "true"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except Exception:
+        pass
+
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("created\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
 THEME_INFO = {
     "beach": {
         "name": "Пляж",
@@ -1015,6 +1089,10 @@ def main():
     if not themes:
         print("Mintland: в themes.json нет готовых тем", file=sys.stderr)
         return 1
+    # В установленном пакете рядом с кодом нет prototype/ — значит, это не
+    # дерево исходников, и можно положить ярлык на рабочий стол.
+    if not (HERE / "prototype").is_dir():
+        ensure_desktop_shortcut()
     signal.signal(signal.SIGINT, lambda *_: Gtk.main_quit())
     win = Switcher(themes)
     win.present()

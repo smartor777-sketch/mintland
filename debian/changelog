@@ -2,5 +2,6 @@ mintland (0.3.1) unstable; urgency=medium
 
   * Use English as the default UI language for all locales except Russian.
   * Keep the Russian UI for ru_* locales; a saved language choice still wins.
+  * Create a Mintland shortcut on the desktop on first launch.
 
  -- Alex <smartor777@gmail.com>  Thu, 19 Nov 2026 06:38:13 +0300
