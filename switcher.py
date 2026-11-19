@@ -6,7 +6,8 @@
   - включение и выключение слоя;
   - живая настройка параметров темы (пальмы, каяки, чайки, облака, персонажи);
   - сохранение в ~/.config/mintland/settings.json;
-  - передача изменений работающему themehost.py через run/control.json.
+  - передача изменений работающему themehost.py через control.json
+    (run/ в репозитории, ~/.cache/mintland/ в установленном пакете).
 
 Никаких gsettings/dconf — только свои файлы и скрипты (см. docs/SAFETY.md).
 """
@@ -26,13 +27,59 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 
 HERE = Path(__file__).resolve().parent
-PROTO = HERE / "prototype"
-RUN = HERE / "run"
+
+
+def _data_dir():
+    """Каталог с темами и превью.
+
+    В дереве исходников это сам репозиторий; в установленном пакете —
+    /usr/share/mintland (см. debian/install).
+    """
+    env = os.environ.get("MINTLAND_DATA")
+    if env:
+        return Path(env)
+    if (HERE / "prototype").is_dir():
+        return HERE
+    return Path("/usr/share/mintland")
+
+
+def _runtime_dir():
+    """Каталог рабочего состояния: control.json, wall.pid, wall.log.
+
+    В дереве исходников остаётся run/ (так удобнее для отладки). В
+    установленном пакете /usr/lib/mintland только для чтения, поэтому
+    состояние уходит в ~/.cache/mintland.
+    """
+    env = os.environ.get("MINTLAND_RUNTIME")
+    if env:
+        return Path(env)
+    if os.access(HERE, os.W_OK):
+        return HERE / "run"
+    base = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
+    return base / "mintland"
+
+
+DATA = _data_dir()
+PROTO = DATA / "prototype"
+RUN = _runtime_dir()
 CONFIG_DIR = Path.home() / ".config" / "mintland"
 SETTINGS = CONFIG_DIR / "settings.json"
 CONTROL = RUN / "control.json"
 PIDFILE = RUN / "wall.pid"
 THEMES_JSON = PROTO / "themes.json"
+
+
+def script_env():
+    """Окружение для wall-on.sh / wall-off.sh.
+
+    Скрипты должны писать состояние туда же, куда и панель, независимо от
+    того, запущены они из репозитория или из установленного пакета.
+    """
+    env = os.environ.copy()
+    env["MINTLAND_RUNTIME"] = str(RUN)
+    env["MINTLAND_DATA"] = str(DATA)
+    return env
+
 
 THEME_INFO = {
     "beach": {
@@ -618,9 +665,9 @@ class Switcher(Gtk.Window):
         if variant:
             for v in theme.get("variants", []):
                 if v["id"] == variant and v.get("thumb"):
-                    return HERE / v["thumb"]
+                    return DATA / v["thumb"]
         info = THEME_INFO.get(tid, {})
-        return HERE / info.get("thumb", "prototype/thumbs/%s.webp" % tid)
+        return DATA / info.get("thumb", "prototype/thumbs/%s.webp" % tid)
 
     def _make_thumb(self, tid):
         info = THEME_INFO.get(tid, {})
@@ -940,7 +987,7 @@ class Switcher(Gtk.Window):
         self.stop_btn.set_sensitive(False)
         subprocess.Popen(["bash", str(HERE / "wall-on.sh")],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
+                         env=script_env(), start_new_session=True)
 
     def _on_stop(self, _btn):
         self._busy_until = time.monotonic() + 4
@@ -949,7 +996,7 @@ class Switcher(Gtk.Window):
         self.stop_btn.set_sensitive(False)
         subprocess.Popen(["bash", str(HERE / "wall-off.sh")],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
+                         env=script_env(), start_new_session=True)
 
     def _refresh_status(self):
         if time.monotonic() < self._busy_until:

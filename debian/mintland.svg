@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fd3f4"/>
+      <stop offset="1" stop-color="#d9f2e6"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7cc47f"/>
+      <stop offset="1" stop-color="#3f8f5a"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="url(#sky)"/>
+  <circle cx="94" cy="34" r="12" fill="#ffe08a"/>
+  <path d="M4 92 C30 76 48 86 66 80 C86 73 104 84 124 72 L124 124 L4 124 Z" fill="url(#ground)"/>
+  <path d="M4 108 C32 96 54 104 76 98 C96 92 110 100 124 94 L124 124 L4 124 Z" fill="#2f7a4c" opacity="0.75"/>
+  <rect x="59" y="70" width="7" height="26" rx="3" fill="#6b4b32"/>
+  <circle cx="62.5" cy="60" r="17" fill="#3f9e63"/>
+  <circle cx="49" cy="66" r="11" fill="#4fb374"/>
+  <circle cx="76" cy="66" r="11" fill="#4fb374"/>
+  <circle cx="62.5" cy="47" r="10" fill="#5cc184"/>
+</svg>

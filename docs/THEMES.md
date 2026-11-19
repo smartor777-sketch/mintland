@@ -574,7 +574,7 @@ wmctrl -k off                     # вернуть окна
 - `prototype/flat.html` — WebGL2, поле расстояний до иконок, ассеты.
 - `prototype/meadow.html` — WebGL2, облака вокруг иконок, персонажи.
 - `themehost.py` — хост, шим, опрос иконок и паузы, переключение темы.
-- `switcher.py` — карточки, ползунки, сохранение, запись `run/control.json`.
+- `switcher.py` — карточки, ползунки, сохранение, запись `control.json`.
 - `iconsource.py` — откуда берутся прямоугольники иконок.
 - `tools/capture-theme.py`, `tools/test-theme.py`, `tools/preview-frame.py`,
   `tools/bench-theme.py`.

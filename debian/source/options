@@ -1,0 +1,5 @@
+tar-ignore = .git
+tar-ignore = run
+tar-ignore = __pycache__
+tar-ignore = *.pyc
+tar-ignore = bin

@@ -9,5 +9,12 @@ run/
 *.pid
 *.log
 
+# Сборка .deb
+debian/.debhelper/
+debian/mintland/
+debian/files
+debian/debhelper-build-stamp
+debian/*.substvars
+
 # Временные
 /tmp/

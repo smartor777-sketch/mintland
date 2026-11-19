@@ -38,7 +38,8 @@ by turning the layer off (`wall-off.sh`). There is no degradation of the switchi
 - they do not kill or restart `cinnamon`, `muffin`, `csd-*`;
 - they do not touch other people's windows and processes;
 - `switcher.py` does not call `gsettings`/`dconf`: only its own files
-  `~/.config/mintland/settings.json` and `run/control.json`;
+  `~/.config/mintland/settings.json` and `control.json` (`run/` when
+  running from the repository, `~/.cache/mintland/` in an installed package);
 - they kill only their own processes: the group recorded in `run/wall.pid`
   (`setsid`), plus a fallback by the unique path `mintland/themehost.py`
   and by `deskwall --create`;
@@ -100,5 +101,6 @@ switcher.py     — GTK3: themes, parameters, on/off; writes settings/control
 wall-on.sh      — service start: environment checks, PID file, deskwall -u
 wall-off.sh     — service stop: kill the group, restart nemo-desktop
 run/            — wall.pid, wall.log, control.json (gitignore)
+~/.cache/mintland/ — the same in an installed package
 ~/.config/mintland/settings.json — saved theme and parameters
 ```

@@ -1,0 +1,32 @@
+Source: mintland
+Section: x11
+Priority: optional
+Maintainer: Alex <smartor777@gmail.com>
+Build-Depends: debhelper-compat (= 13), gcc, libx11-dev, libxext-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/smartor777-sketch/mintland
+Rules-Requires-Root: no
+
+Package: mintland
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         nemo,
+         python3,
+         python3-gi,
+         gir1.2-gtk-3.0,
+         gir1.2-webkit2-4.1,
+         python3-cairo,
+         libglib2.0-bin,
+         libnotify-bin,
+         x11-utils,
+         x11-xserver-utils,
+         wmctrl,
+         webp-pixbuf-loader
+Suggests: cinnamon
+Description: animated clickable desktop wallpaper for Cinnamon/X11
+ Mintland draws an animated scene behind the desktop icons on Linux Mint
+ (Cinnamon/X11). The scene reacts to icon positions and keeps the icons
+ clickable.
+ .
+ It requires Nemo, which provides the desktop icons and their positions.
+ Wayland and other desktop environments are not supported.

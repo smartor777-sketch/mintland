@@ -1,0 +1,6 @@
+mintland (0.3.0) unstable; urgency=medium
+
+  * Initial Debian package.
+  * Cinnamon/X11 only; requires Nemo for desktop icons.
+
+ -- Alex <smartor777@gmail.com>  Thu, 19 Nov 2026 05:54:50 +0300

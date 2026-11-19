@@ -573,7 +573,7 @@ tools (`capture`, `test`, `bench`, `preview-frame`). Without them the loop
 - `prototype/flat.html` — WebGL2, a distance field to the icons, assets.
 - `prototype/meadow.html` — WebGL2, clouds around the icons, characters.
 - `themehost.py` — the host, the shim, polling of icons and pause, theme switching.
-- `switcher.py` — cards, sliders, saving, writing `run/control.json`.
+- `switcher.py` — cards, sliders, saving, writing `control.json`.
 - `iconsource.py` — where the icon rectangles come from.
 - `tools/capture-theme.py`, `tools/test-theme.py`, `tools/preview-frame.py`,
   `tools/bench-theme.py`.

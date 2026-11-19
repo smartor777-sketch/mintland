@@ -4,7 +4,17 @@
 
 set -u
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-RUN="$DIR/run"
+
+# Рабочее состояние: run/ в дереве исходников, ~/.cache/mintland в
+# установленном пакете (/usr/lib/mintland только для чтения).
+if [ -n "${MINTLAND_RUNTIME:-}" ]; then
+    RUN="$MINTLAND_RUNTIME"
+elif [ -w "$DIR" ]; then
+    RUN="$DIR/run"
+else
+    RUN="${XDG_CACHE_HOME:-$HOME/.cache}/mintland"
+fi
+export MINTLAND_RUNTIME="$RUN"
 mkdir -p "$RUN"
 PIDF="$RUN/wall.pid"
 LOG="$RUN/wall.log"
@@ -29,9 +39,21 @@ done
 sleep 0.5
 rm -f "$PIDF"
 
-# 2. Окружение: X11 и рабочий стол Nemo — обязательны (см. docs/SAFETY.md).
+# 2. Окружение: X11, Cinnamon и рабочий стол Nemo — обязательны
+#    (см. docs/SAFETY.md).
 if [ "${XDG_SESSION_TYPE:-}" != "x11" ]; then
     say "Сессия не X11 (${XDG_SESSION_TYPE:-?}) — слой требует X11."
+    exit 1
+fi
+case "${XDG_CURRENT_DESKTOP:-}" in
+    *Cinnamon*) ;;
+    *)
+        say "Mintland рассчитан на Cinnamon/X11 (сейчас: ${XDG_CURRENT_DESKTOP:-?})."
+        exit 1
+        ;;
+esac
+if ! command -v nemo-desktop >/dev/null 2>&1; then
+    say "Не найден nemo-desktop. Установите Nemo: Mintland использует его иконки."
     exit 1
 fi
 
@@ -40,7 +62,9 @@ fi
 # («Desktop already managed by another application»). Если процесс жив, но
 # окна нет, иконок не будет никогда — сколько ни жди.
 desk_window_present() {
-    wmctrl -l 2>/dev/null | grep -q "Рабочий стол"
+    # WM_CLASS не зависит от языка: заголовок может быть «Рабочий стол»
+    # или «Desktop», а класс всегда nemo-desktop.Nemo-desktop.
+    wmctrl -lx 2>/dev/null | grep -q "nemo-desktop\.Nemo-desktop"
 }
 
 if ! desk_window_present; then
@@ -64,7 +88,7 @@ fi
 # 3. Запуск слоя
 : > "$LOG"
 if ! bash "$DIR/start-layer.sh" >>"$LOG" 2>&1; then
-    say "Скрипт запуска завершился с ошибкой — см. run/wall.log"
+    say "Скрипт запуска завершился с ошибкой — см. $LOG"
     exit 1
 fi
 
@@ -76,7 +100,7 @@ for _ in $(seq 1 40); do
     sleep 0.25
 done
 if [ -z "$PID" ]; then
-    say "Слой не поднялся — см. run/wall.log"
+    say "Слой не поднялся — см. $LOG"
     exit 1
 fi
 echo "$PID" > "$PIDF"
@@ -102,7 +126,7 @@ for _ in $(seq 1 40); do
 done
 
 if [ "$LAYER_OK" != 1 ]; then
-    say "Окно слоя не появилось — см. run/wall.log"
+    say "Окно слоя не появилось — см. $LOG"
     exit 1
 fi
 

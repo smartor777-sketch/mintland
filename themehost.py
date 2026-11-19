@@ -2,13 +2,15 @@
 # themehost.py — хост темы Mintland на Linux Mint (Cinnamon/X11).
 #
 # Слой: окно типа DESKTOP + keep_below; WebKit рисует выбранную тему
-# (flat.html / meadow.html). Тема и параметры читаются из run/control.json,
+# (flat.html / meadow.html). Тема и параметры читаются из control.json
+# (run/ в репозитории, ~/.cache/mintland/ в установленном пакете),
 # который пишет switcher.py. nemo-desktop стартует ДО слоя и рисует иконки
 # поверх (Muffin кладёт DESKTOP-окно с BELOW-состоянием ниже nemo).
 
 import argparse
 import atexit
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -25,6 +27,24 @@ import iconsource
 
 HERE = Path(__file__).resolve().parent
 MARKER = "mintland-wall"
+
+
+def _runtime_dir():
+    """Каталог рабочего состояния (control.json, wall.log).
+
+    В репозитории это run/, в установленном пакете — ~/.cache/mintland:
+    /usr/lib/mintland доступен только для чтения.
+    """
+    env = os.environ.get("MINTLAND_RUNTIME")
+    if env:
+        return Path(env)
+    if os.access(HERE, os.W_OK):
+        return HERE / "run"
+    base = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
+    return base / "mintland"
+
+
+RUNTIME = _runtime_dir()
 
 SHIM_JS = """
 (function () {
@@ -82,7 +102,7 @@ class ThemeHost:
 
     def __init__(self, html_path: Path, control_path: Path = None):
         self.html_path = html_path
-        self.control_path = control_path or (HERE / "run" / "control.json")
+        self.control_path = control_path or (RUNTIME / "control.json")
         self.theme_id = None
         self.params = {}
         self.control_seq = None
@@ -101,7 +121,7 @@ class ThemeHost:
         atexit.register(self._cleanup)
 
     def _read_initial_control(self):
-        """До создания окна: выбрать тему/параметры из run/control.json."""
+        """До создания окна: выбрать тему/параметры из control.json."""
         try:
             data = json.loads(self.control_path.read_text(encoding="utf-8"))
         except Exception:
@@ -259,13 +279,16 @@ class ThemeHost:
             import ctypes
             import ctypes.util
 
+            # Ищем окно по WM_CLASS, а не по заголовку: заголовок
+            # локализован («Рабочий стол» / «Desktop»), класс — нет.
             out = subprocess.run(
-                ["xwininfo", "-root", "-tree"],
+                ["wmctrl", "-lx"],
                 capture_output=True, text=True, timeout=3).stdout
             wid = None
             for line in out.splitlines():
-                if "Рабочий стол" in line:
-                    wid = line.split()[0]
+                parts = line.split(None, 4)
+                if len(parts) >= 3 and parts[2] == "nemo-desktop.Nemo-desktop":
+                    wid = parts[0]
                     break
             if not wid:
                 return False
@@ -373,7 +396,7 @@ class ThemeHost:
             self.send(self.last_icons)
 
     def poll_control(self):
-        """Живое применение темы/параметров из run/control.json."""
+        """Живое применение темы/параметров из control.json."""
         try:
             data = json.loads(self.control_path.read_text(encoding="utf-8"))
         except Exception:
@@ -544,7 +567,7 @@ class ThemeHost:
             pass
 
     def _log(self, msg):
-        path = HERE / "run/wall.log"
+        path = RUNTIME / "wall.log"
         try:
             # Лог не должен расти без предела: при долгой работе он
             # занимает место и мешает читать свежие сообщения.
@@ -553,6 +576,7 @@ class ThemeHost:
         except Exception:
             pass
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             with open(str(path), "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
         except Exception:
@@ -584,7 +608,7 @@ def main():
     global _HOST
     ap = argparse.ArgumentParser()
     ap.add_argument("--html", default=str(HERE / "prototype" / "flat.html"))
-    ap.add_argument("--control", default=str(HERE / "run" / "control.json"),
+    ap.add_argument("--control", default=str(RUNTIME / "control.json"),
                     help="JSON с выбранной темой и параметрами")
     ap.add_argument("--marker", default=MARKER, help="маркер для pgrep (ярлыки)")
     args = ap.parse_args()

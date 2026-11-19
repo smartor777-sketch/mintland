@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Mintland
+Comment=Animated clickable desktop wallpaper for Cinnamon
+Comment[ru]=Живые обои с кликабельными иконками для Cinnamon
+Exec=mintland
+Icon=mintland
+Terminal=false
+Categories=Settings;DesktopSettings;
+OnlyShowIn=X-Cinnamon;
+StartupNotify=true
+StartupWMClass=Mintland

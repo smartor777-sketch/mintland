@@ -38,7 +38,8 @@
 - не убивают и не перезапускают `cinnamon`, `muffin`, `csd-*`;
 - не трогают чужие окна и процессы;
 - `switcher.py` не вызывает `gsettings`/`dconf`: только свои файлы
-  `~/.config/mintland/settings.json` и `run/control.json`;
+  `~/.config/mintland/settings.json` и `control.json` (в `run/` при запуске
+  из репозитория, в `~/.cache/mintland/` в установленном пакете);
 - убивают только собственные процессы: группу, записанную в `run/wall.pid`
   (`setsid`), плюс фолбэк по уникальному пути `mintland/themehost.py`
   и по `deskwall --create`;
@@ -100,5 +101,6 @@ switcher.py     — GTK3: темы, параметры, вкл/выкл; пиш�
 wall-on.sh      — служебный запуск: проверки окружения, PID-файл, deskwall -u
 wall-off.sh     — служебная остановка: kill группы, перезапуск nemo-desktop
 run/            — wall.pid, wall.log, control.json (gitignore)
+~/.cache/mintland/ — то же самое в установленном пакете
 ~/.config/mintland/settings.json — сохранённые тема и параметры
 ```

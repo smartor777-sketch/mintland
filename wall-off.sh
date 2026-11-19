@@ -6,7 +6,17 @@
 
 set -u
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-RUN="$DIR/run"
+
+# Рабочее состояние: run/ в дереве исходников, ~/.cache/mintland в
+# установленном пакете (/usr/lib/mintland только для чтения).
+if [ -n "${MINTLAND_RUNTIME:-}" ]; then
+    RUN="$MINTLAND_RUNTIME"
+elif [ -w "$DIR" ]; then
+    RUN="$DIR/run"
+else
+    RUN="${XDG_CACHE_HOME:-$HOME/.cache}/mintland"
+fi
+export MINTLAND_RUNTIME="$RUN"
 mkdir -p "$RUN"
 PIDF="$RUN/wall.pid"
 LOG="$RUN/wall.log"
@@ -45,7 +55,7 @@ fi
 # 3. Проверка чистоты: наших процессов не осталось
 LEFT="$(pgrep -f 'mintland/themehost\.py' | tr '\n' ' ')"
 if [ -n "$LEFT" ]; then
-    say "Внимание: остались процессы ($LEFT) — посмотрите run/wall.log"
+    say "Внимание: остались процессы ($LEFT) — посмотрите $LOG"
 fi
 
 # 4. Перезапускаем nemo-desktop после остановки: наш DESKTOP-слой заставляет
@@ -57,19 +67,21 @@ fi
 #    nemo успеет занять роль, — и он откажется её брать
 #    («Desktop already managed by another application»).
 #    Иконки тогда появятся только после ручного перезапуска nemo.
-pkill -x nemo-desktop 2>/dev/null
-sleep 1
-setsid nohup nemo-desktop >/dev/null 2>&1 < /dev/null &
-
-# Ждём окно рабочего стола (до 15 с). Обычно это 1–3 с.
 DESK_OK=0
-for _ in $(seq 1 60); do
-    if wmctrl -l 2>/dev/null | grep -q "Рабочий стол"; then
-        DESK_OK=1
-        break
-    fi
-    sleep 0.25
-done
+if command -v nemo-desktop >/dev/null 2>&1; then
+    pkill -x nemo-desktop 2>/dev/null
+    sleep 1
+    setsid nohup nemo-desktop >/dev/null 2>&1 < /dev/null &
+
+    # Ждём окно рабочего стола (до 15 с). Обычно это 1–3 с.
+    for _ in $(seq 1 60); do
+        if wmctrl -lx 2>/dev/null | grep -q "nemo-desktop\.Nemo-desktop"; then
+            DESK_OK=1
+            break
+        fi
+        sleep 0.25
+    done
+fi
 
 if [ "$DESK_OK" = 1 ]; then
     [ "$STOPPED" = 1 ] && say "Слой остановлен, иконки на месте." \

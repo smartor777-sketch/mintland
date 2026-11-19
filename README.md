@@ -15,6 +15,8 @@ ASUS Vivobook X1502ZA (Intel Core i7-12700H, 14 ядер / 20 потоков,
 загрузки CPU**; пауза — **~0.5% одного ядра, то есть ~0.02% общей**.
 Это не «процессор загружен на 65%»: занято примерно одно ядро из двадцати.
 
+**Требуется:** Cinnamon/X11 и Nemo; Wayland и другие DE не поддерживаются.
+
 **Wayland:** пока не поддерживается. Инженерный план порта (layer-shell,
 `nemo-desktop` в `BOTTOM`, авто-пауза через `cinnamon-list-windows`, риски и
 тесты) — в [`WAYLAND.md`](docs/WAYLAND.md).
@@ -52,7 +54,8 @@ WebGL-iframe, а не видеофайл.*
   доступ к файлам `file://`).
 - На рабочем столе один ярлык — **«Mintland — темы и настройки»**. Всё
   управление находится в приложении. Трея пока нет — состояние видно по сцене
-  и в `run/wall.log`.
+  и в рабочем логе (`run/wall.log` в репозитории, `~/.cache/mintland/wall.log`
+  в установленном пакете).
 - Апплет Dark Mode не затрагивается (никаких gsettings/dconf).
 
 ## Архитектура
@@ -82,8 +85,9 @@ WebGL-iframe, а не видеофайл.*
   + виртуальные иконки из `~/.config/nemo/desktop-metadata`, сетка `desktop-grid-adjust`.
 - `start-layer.sh`: запуск хоста (аппаратное ускорение WebKit).
 - `switcher.py`: GTK3-переключатель. Хранит выбор в
-  `~/.config/mintland/settings.json` и пишет `run/control.json`; `themehost.py`
-  читает control-файл, переключает HTML-тему и отправляет странице `settings`.
+  `~/.config/mintland/settings.json` и пишет `control.json` в рабочем каталоге
+  (`run/` в репозитории, `~/.cache/mintland/` в установленном пакете);
+  `themehost.py` читает control-файл, переключает HTML-тему и отправляет странице `settings`.
 - `wall-on.sh` / `wall-off.sh`: служебные скрипты запуска и остановки, их
   вызывает `switcher.py` (можно и вручную). `wall-on.sh` завершает старый
   `themehost` перед запуском (дубля не остаётся) и поднимает nemo после
@@ -158,8 +162,8 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 
 **Чего в репозитории нет:** `bin/deskwall` — это локально собранный бинарник
 (`bin/` в `.gitignore`); ярлык `.desktop` и symlink в `~/.local/bin` тоже
-создаются в системе. `run/control.json` и `~/.config/mintland/settings.json` —
-рабочие файлы приложения, они не коммитятся. Инструкция по сборке — ниже.
+создаются в системе. `control.json` (в `run/` или `~/.cache/mintland/`) и
+`~/.config/mintland/settings.json` — рабочие файлы приложения, они не коммитятся. Инструкция по сборке — ниже.
 
 ## Запуск приложения
 
@@ -178,7 +182,7 @@ Linux Mint Cinnamon/X11, 2560×1440, тема flat.html, 30 fps**.
 - кнопки **Включить слой** / **Выключить слой**;
 - ползунки параметров выбранной темы: пальмы, каяки, чайки, облака, персонажи,
   сияние, туман;
-- изменения сразу уходят работающему `themehost.py` через `run/control.json`;
+- изменения сразу уходят работающему `themehost.py` через `control.json`;
 - выбор и параметры сохраняются в `~/.config/mintland/settings.json`;
 - если слой выключен, выбранная тема применится при следующем включении;
 - в теме «Луг» мальчик и котёнок включаются переключателями «Персонажи»;
@@ -215,10 +219,24 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 # 2. Зависимости (Debian/Ubuntu/Mint):
 #    sudo apt install python3-gi python3-cairo python3-pil gir1.2-gtk-3.0 \
 #         gir1.2-webkit2-4.1 libglib2.0-bin libnotify-bin \
-#         x11-utils x11-xserver-utils webp-pixbuf-loader
+#         x11-utils x11-xserver-utils wmctrl webp-pixbuf-loader nemo
 #    Для сборки: gcc libx11-dev libxext-dev
 #    mpv/xwinwrap не используются.
 ```
+
+### Пакет .deb
+
+```bash
+sudo apt install debhelper devscripts lintian
+dpkg-buildpackage -us -uc -b
+sudo apt install ../mintland_0.3.0_amd64.deb
+```
+
+Пакет ставит код в `/usr/lib/mintland`, темы и превью — в
+`/usr/share/mintland`, ярлык — в меню приложений. Рабочие файлы
+(`control.json`, `wall.log`, `wall.pid`) в установленной версии лежат в
+`~/.cache/mintland/`, а не рядом с кодом: `/usr/lib/mintland` доступен только
+для чтения.
 
 ## Дорожная карта
 

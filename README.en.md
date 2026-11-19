@@ -14,6 +14,9 @@ Measured on an ASUS Vivobook X1502ZA laptop (Intel Core i7-12700H, 14 cores /
 total CPU**; paused — **~0.5% of one core, i.e. ~0.02% of total**. This does not
 mean "the CPU is 65% busy": roughly one core out of twenty is occupied.
 
+**Requires:** Cinnamon/X11 and Nemo; Wayland and other desktop environments are
+not supported.
+
 **Wayland:** not supported yet. The engineering plan for the port (layer-shell,
 `nemo-desktop` in `BOTTOM`, auto-pause via `cinnamon-list-windows`, risks and
 tests) — see [`docs/en/WAYLAND.md`](docs/en/WAYLAND.md).
@@ -51,7 +54,8 @@ top block is a live WebGL iframe, not a video file.*
   access for this).
 - One shortcut on the desktop — **"Mintland — themes and settings"**. Everything
   is controlled from the app. There is no tray icon yet; the state is visible in
-  the scene and in `run/wall.log`.
+  the scene and in the working log (`run/wall.log` in the repository,
+  `~/.cache/mintland/wall.log` in an installed package).
 - The Dark Mode applet is untouched (no `gsettings`/`dconf` calls).
 
 ## Architecture
@@ -82,8 +86,9 @@ top block is a live WebGL iframe, not a video file.*
   `desktop-grid-adjust`.
 - `start-layer.sh`: launches the host (WebKit hardware acceleration).
 - `switcher.py`: the GTK3 switcher. Keeps the choice in
-  `~/.config/mintland/settings.json` and writes `run/control.json`;
-  `themehost.py` reads the control file, switches the HTML theme and sends
+  `~/.config/mintland/settings.json` and writes `control.json` in the working
+  directory (`run/` in the repository, `~/.cache/mintland/` in an installed
+  package); `themehost.py` reads the control file, switches the HTML theme and sends
   `settings` to the page.
 - `wall-on.sh` / `wall-off.sh`: service scripts that start and stop the layer;
   `switcher.py` calls them (you can also run them by hand). `wall-on.sh` stops
@@ -161,8 +166,9 @@ workable option.
 
 **Not in the repository:** `bin/deskwall` is a locally built binary (`bin/` is in
 `.gitignore`); the `.desktop` shortcut and the symlink in `~/.local/bin` are also
-created on the system. `run/control.json` and `~/.config/mintland/settings.json`
-are the app's working files and are not committed. Build instructions are below.
+created on the system. `control.json` (in `run/` or `~/.cache/mintland/`) and
+`~/.config/mintland/settings.json` are the app's working files and are not
+committed. Build instructions are below.
 
 ## Launching the app
 
@@ -182,7 +188,7 @@ switcher.py`.
 - **Turn layer on** / **Turn layer off** buttons;
 - parameter sliders for the selected theme: palms, kayaks, gulls, clouds,
   characters, aurora, mist;
-- changes go straight to the running `themehost.py` through `run/control.json`;
+- changes go straight to the running `themehost.py` through `control.json`;
 - the selection and parameters are saved in `~/.config/mintland/settings.json`;
 - if the layer is off, the selected theme applies the next time it is turned on;
 - in the Meadow theme the boy and the kitten are toggled under "Characters";
@@ -220,10 +226,23 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 # 2. Dependencies (Debian/Ubuntu/Mint):
 #    sudo apt install python3-gi python3-cairo python3-pil gir1.2-gtk-3.0 \
 #         gir1.2-webkit2-4.1 libglib2.0-bin libnotify-bin \
-#         x11-utils x11-xserver-utils webp-pixbuf-loader
+#         x11-utils x11-xserver-utils wmctrl webp-pixbuf-loader nemo
 #    For building: gcc libx11-dev libxext-dev
 #    mpv/xwinwrap are not used.
 ```
+
+### .deb package
+
+```bash
+sudo apt install debhelper devscripts lintian
+dpkg-buildpackage -us -uc -b
+sudo apt install ../mintland_0.3.0_amd64.deb
+```
+
+The package installs the code into `/usr/lib/mintland`, themes and previews into
+`/usr/share/mintland`, and a menu entry. In an installed package the working
+files (`control.json`, `wall.log`, `wall.pid`) live in `~/.cache/mintland/`
+rather than next to the code, because `/usr/lib/mintland` is read-only.
 
 ## Roadmap
 
