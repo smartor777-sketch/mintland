@@ -163,9 +163,10 @@ UNIT_LABELS = {
 # ---------------------------------------------------------------------------
 # Язык интерфейса
 # ---------------------------------------------------------------------------
-# Русский — основной язык разработки, английский — перевод. Строки собраны
-# в одном месте, а не разбросаны по вызовам: иначе при добавлении языка
-# приходится искать их по всему файлу.
+# Русский — основной язык разработки, английский — перевод и язык по
+# умолчанию для всех локалей, кроме русской. Строки собраны в одном месте,
+# а не разбросаны по вызовам: иначе при добавлении языка приходится искать
+# их по всему файлу.
 #
 # Названия тем и подписи параметров берутся из themes.json, где лежит
 # русский текст; английский — в UI["en"]["themes"] ниже.
@@ -267,9 +268,10 @@ SETTINGS_LANG = CONFIG_DIR / "lang"
 def detect_lang():
     """Язык интерфейса: сохранённый выбор, иначе — из системы.
 
-    Русский основной, поэтому при незнакомой локали показываем его, а не
-    английский: проект русскоязычный, и для его основной аудитории это
-    верное поведение.
+    Английский — язык по умолчанию для всех локалей, кроме русской:
+    иначе англоязычный пользователь видел бы русский интерфейс. Русский
+    включается только при `ru_*`. Сохранённый выбор пользователя важнее
+    системной локали.
     """
     try:
         saved = SETTINGS_LANG.read_text(encoding="utf-8").strip()
@@ -279,9 +281,9 @@ def detect_lang():
         pass
     loc = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES")
            or os.environ.get("LANG") or "").lower()
-    if loc.startswith("en"):
-        return "en"
-    return "ru"
+    if loc.startswith("ru"):
+        return "ru"
+    return "en"
 
 
 def load_registry():
@@ -428,7 +430,7 @@ class AnimatedThumb(Gtk.DrawingArea):
 
 def t(lang, key):
     """Одна надпись интерфейса."""
-    return UI.get(lang, UI["ru"]).get(key, UI["ru"].get(key, key))
+    return UI.get(lang, UI["en"]).get(key, UI["en"].get(key, key))
 
 
 def theme_text(lang, tid, field, default=None):
@@ -470,7 +472,7 @@ def variant_text(lang, tid, vid, default):
     return default
 
 
-def fmt_value(p, value, theme_id, lang="ru"):
+def fmt_value(p, value, theme_id, lang="en"):
     fmt = p.get("format")
     if fmt == "percent":
         return "%d%%" % round(float(value) * 100)
