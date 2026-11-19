@@ -48,13 +48,13 @@ by turning the layer off (`wall-off.sh`). There is no degradation of the switchi
   role and does not affect Dark Mode: icon positions are stored
   in gvfs metadata, while the theme/wallpaper live in dconf, which we neither read nor write.
 
-## Shortcut
+## Applications menu entry
 
-| Desktop shortcut | Action |
+| Applications menu entry | Action |
 |---|---|
-| `Mintland-настройки.desktop` | `switcher.py` — themes, parameters, on/off |
+| **Mintland** (`/usr/bin/mintland`) | `switcher.py` — themes, parameters, on/off |
 
-There are no separate on and off shortcuts: `wall-on.sh` / `wall-off.sh`
+There are no separate on and off menu entries: `wall-on.sh` / `wall-off.sh`
 remain service scripts that the application calls.
 
 ## Step 1 results (12.11.2026) — the layer under the icons works

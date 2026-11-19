@@ -25,7 +25,7 @@ tests) — see [`docs/en/WAYLAND.md`](docs/en/WAYLAND.md).
 
 ## What it looks like
 
-**Control panel** — the shortcut "Mintland — themes and settings":
+**Control panel** — the **Mintland** entry in the applications menu:
 ---
 ![Mintland control panel](docs/switcher-en.png)
 ---
@@ -52,8 +52,8 @@ top block is a live WebGL iframe, not a video file.*
 - The Meadow theme has a boy with a kite and a black kitten: PNG sprites live in
   `prototype/assets/` and are loaded into the scene (WebKit is allowed `file://`
   access for this).
-- One shortcut on the desktop — **"Mintland — themes and settings"**. Everything
-  is controlled from the app. There is no tray icon yet; the state is visible in
+- One entry in the applications menu — **Mintland**. Everything is controlled
+  from the app. There is no tray icon yet; the state is visible in
   the scene and in the working log (`run/wall.log` in the repository,
   `~/.cache/mintland/wall.log` in an installed package).
 - The Dark Mode applet is untouched (no `gsettings`/`dconf` calls).
@@ -164,24 +164,25 @@ workable option.
 | `NOTICE` | Deskland attribution and trademark notice |
 | `.gitignore` | Excludes `bin/`, `run/`, `__pycache__` |
 
-**Not in the repository:** `bin/deskwall` is a locally built binary (`bin/` is in
-`.gitignore`); the `.desktop` shortcut and the symlink in `~/.local/bin` are also
-created on the system. `control.json` (in `run/` or `~/.cache/mintland/`) and
+**Not in the repository:** `bin/deskwall` is a locally built binary (`bin/` is
+in `.gitignore`). In an installed package the menu entry and icon live in
+`/usr/share/applications` and `/usr/share/icons`; they are not in the
+repository. `control.json` (in `run/` or `~/.cache/mintland/`) and
 `~/.config/mintland/settings.json` are the app's working files and are not
 committed. Build instructions are below.
 
 ## Launching the app
 
-- `Mintland-настройки.desktop` → `~/.local/bin/mintland-settings.sh` → `switcher.py`
+- installed package: **Mintland** in the applications menu → `/usr/bin/mintland` →
+  `switcher.py`;
+- from the repository: `python3 switcher.py`.
 
-The shortcut and symlink are created on the system; they are not in the
-repository. `wall-on.sh` / `wall-off.sh` are the service scripts the app calls
-when the buttons are pressed.
+`wall-on.sh` / `wall-off.sh` are the service scripts the app calls when the
+buttons are pressed.
 
 ## The Mintland app
 
-Launch: the **"Mintland — themes and settings"** shortcut, or `python3
-switcher.py`.
+Launch: **Mintland** in the applications menu, or `python3 switcher.py`.
 
 - cards for the ready themes from `prototype/themes.json` (Beach, Meadow, Night, Forest)
   with animated GIF previews;
