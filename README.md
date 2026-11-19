@@ -1,6 +1,13 @@
-# Mintland на Linux Mint (Cinnamon/X11)
+**English summary** · [Full English README](README.en.md)
 
-*[English version](README.en.md)*
+Mintland is an animated, clickable desktop wallpaper for Linux Mint
+(Cinnamon/X11). It draws a live scene behind the desktop icons and reacts to
+their positions; the icons stay clickable. It requires Nemo. Wayland and other
+desktop environments are not supported.
+
+---
+
+# Mintland на Linux Mint (Cinnamon/X11)
 
 Проект: порт Windows-программы [Deskland](https://github.com/BLEZZ0102/Deskland)
 (адаптивные обои, сцена реагирует на позиции иконок рабочего стола) под
