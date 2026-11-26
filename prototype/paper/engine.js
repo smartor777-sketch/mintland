@@ -1481,20 +1481,48 @@
       }
       pts = chaikin(pts, 3);
 
-      // Река плавно обходит островки иконок. Сдвигаем точки, попавшие
-      // в зону, и сглаживаем; сильного излома не будет.
+      // Река плавно обходит островки иконок. Алгоритм: сглаживаем
+      // линию и после каждого прохода возвращаем точки, попавшие в
+      // запретную зону, на её границу. Так кривая остаётся гладкой,
+      // но никогда не заходит на островок (раньше финальный «толчок»
+      // без сглаживания давал углы).
       if (this.icons.length) {
-        for (var pass = 0; pass < 12; pass++) {
-          for (var pi = 1; pi < pts.length - 1; pi++) {
-            if (this._inIconZone(pts[pi].x, pts[pi].y, 30)) {
-              var pushed = this._pushOutOfIcons(pts[pi].x, pts[pi].y, 34);
-              pts[pi].x = pushed.x;
-              pts[pi].y = pushed.y;
-            }
+        var clearPad = this._islandPad() + 34;
+
+        function clampOutsideZone(pt) {
+          for (var ci = 0; ci < self2.icons.length; ci++) {
+            var r = self2.icons[ci];
+            var l = r.x - clearPad, t = r.y - clearPad;
+            var rr = r.x + r.w + clearPad, b = r.y + r.h + clearPad;
+            if (pt.x <= l || pt.x >= rr || pt.y <= t || pt.y >= b) continue;
+
+            // Ближайшая точка на границе прямоугольника.
+            var dl = pt.x - l, dr = rr - pt.x;
+            var dt = pt.y - t, db = b - pt.y;
+            var m = Math.min(dl, dr, dt, db);
+            if (m === dl) pt.x = l;
+            else if (m === dr) pt.x = rr;
+            else if (m === dt) pt.y = t;
+            else pt.y = b;
           }
+        }
+
+        var self2 = this;
+        for (var pi = 1; pi < pts.length - 1; pi++) {
+          if (this._inIconZone(pts[pi].x, pts[pi].y, clearPad)) {
+            var pushed = this._pushOutOfIcons(pts[pi].x, pts[pi].y, clearPad);
+            pts[pi].x = pushed.x;
+            pts[pi].y = pushed.y;
+          }
+        }
+
+        for (var pass = 0; pass < 24; pass++) {
           for (var pj = 1; pj < pts.length - 1; pj++) {
             pts[pj].x = (pts[pj - 1].x + 2 * pts[pj].x + pts[pj + 1].x) / 4;
             pts[pj].y = (pts[pj - 1].y + 2 * pts[pj].y + pts[pj + 1].y) / 4;
+          }
+          for (var pc = 1; pc < pts.length - 1; pc++) {
+            clampOutsideZone(pts[pc]);
           }
         }
       }
