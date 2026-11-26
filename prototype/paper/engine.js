@@ -1592,11 +1592,42 @@
     var W = this.W, H = this.H;
     var built = [];
 
+    // Рамка ломаной: без неё проверка пересечений — O(n²) на каждую
+    // пробную дугу, и запекание вырастало до 400+ мс.
+    function bbox(pts) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (var i = 0; i < pts.length; i++) {
+        var p = pts[i];
+        if (p.x < x0) x0 = p.x;
+        if (p.x > x1) x1 = p.x;
+        if (p.y < y0) y0 = p.y;
+        if (p.y > y1) y1 = p.y;
+      }
+      return { x0: x0, y0: y0, x1: x1, y1: y1 };
+    }
+
+    var builtBoxes = [];
+
     function crossesBuilt(pts) {
+      var bb = bbox(pts);
       for (var o = 0; o < built.length; o++) {
+        var ob = builtBoxes[o];
+        if (bb.x1 < ob.x0 || bb.x0 > ob.x1 ||
+            bb.y1 < ob.y0 || bb.y0 > ob.y1) continue;
+
         var op = built[o];
         for (var i = 1; i < pts.length; i++) {
+          var ax = pts[i - 1].x, ay = pts[i - 1].y;
+          var bx = pts[i].x, by = pts[i].y;
+          var segX0 = Math.min(ax, bx), segX1 = Math.max(ax, bx);
+          var segY0 = Math.min(ay, by), segY1 = Math.max(ay, by);
+
           for (var j = 1; j < op.length; j++) {
+            var cx = op[j - 1].x, cy = op[j - 1].y;
+            var dx = op[j].x, dy = op[j].y;
+            // Быстрый отсев по рамке отрезка.
+            if (Math.max(cx, dx) < segX0 || Math.min(cx, dx) > segX1 ||
+                Math.max(cy, dy) < segY0 || Math.min(cy, dy) > segY1) continue;
             if (segIntersect(pts[i - 1], pts[i], op[j - 1], op[j])) {
               return true;
             }
@@ -1608,6 +1639,7 @@
 
     function pushSegment(pts, width) {
       built.push(pts);
+      builtBoxes.push(bbox(pts));
       var cum = [0];
       for (var q = 1; q < pts.length; q++) {
         cum.push(cum[q - 1] + Math.hypot(pts[q].x - pts[q - 1].x,
@@ -1623,6 +1655,17 @@
 
     // Дуга из a в b с изгибом. Перебираем изгибы, пока не получим
     // линию, не пересекающую уже построенную воду.
+    function coarseArc(a, b, nx, ny, amp, wave, N) {
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var pts = [];
+      for (var k = 0; k <= N; k++) {
+        var t = k / N;
+        var off = Math.sin(t * Math.PI * wave) * amp * Math.sin(Math.PI * t);
+        pts.push({ x: a.x + dx * t + nx * off, y: a.y + dy * t + ny * off });
+      }
+      return pts;
+    }
+
     // Дуга с плавным меандром: одна длинная дуга читалась как линейка.
     // Пробуем несколько амплитуд, пока линия не перестанет пересекать
     // уже построенную воду.
@@ -1636,8 +1679,15 @@
         var amp = amps[ai] * len;
         var wave = Math.max(1, Math.round(len / 260));
 
+        // Грубая проверка на редкой выборке, затем точная на
+        // сглаженной линии. Полная проверка каждого пробного изгиба
+        // стоила сотни миллисекунд на запекание.
+        if (crossesBuilt(coarseArc(a, b, nx, ny, amp, wave, Math.max(10, Math.round(len / 40))))) {
+          continue;
+        }
+
         var pts = [];
-        var N = Math.max(24, Math.round(len / 6));
+        var N = Math.max(24, Math.round(len / 8));
         for (var k = 0; k <= N; k++) {
           var t = k / N;
           var baseX = a.x + dx * t;
@@ -3071,7 +3121,9 @@
   // вокруг группы значков. Внутри пусто (объекты туда не ставятся),
   // снаружи двойной контур тушью. Пересобирается только при сдвиге.
   PaperEngine.prototype._iconIslandMask = function (padOverride) {
-    var ms = 1;
+    // Половина разрешения достаточно: островок — мягкий силуэт, а
+    // маска в полном разрешении стоила ~300 мс на каждый сдвиг иконки.
+    var ms = 0.5;
     var mw = Math.max(1, Math.round(this.W * ms));
     var mh = Math.max(1, Math.round(this.H * ms));
     var mask = document.createElement('canvas');
