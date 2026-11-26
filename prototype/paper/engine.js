@@ -370,114 +370,105 @@
   /* Замок: стена с воротами, две боковые башни и донжон с флагом.
    * Именно замок, а не отдельная башня: на карте он должен читаться
    * как узел дорог. */
+  /* Замок: плотная кучка высоких домов с острыми крышами, как на
+   * старых картах. Центральная башня выше остальных и с флагом. */
   function drawCastle(g, w, h, p, rng) {
-    var ax = w * 0.5, ay = h - 5;
+    var ax = w * 0.5, ay = h - 6;
     var spr = { ink: p.ink, inkSoft: p.inkSoft };
-
-    g.fillStyle = p.shadow;
-    g.beginPath();
-    g.ellipse(ax + 3, ay - 1.5, 15, 3.4, 0, 0, TAU);
-    g.fill();
 
     g.save();
     g.translate(ax, ay);
-    setInk(g, spr, 1);
 
-    // Крыши внутри стен — выглядывают над гребнем, как в замке.
-    function innerRoof(rx) {
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(2, -1, 22, 3.8, 0, 0, TAU);
+    g.fill();
+
+    // Один дом: прямоугольное тело, острая крыша, два окна.
+    // x, y — центр основания; bw — ширина; bh — высота стен.
+    function house(x, y, bw, bh, flag) {
+      var roofH = bw * 0.85;
+      var half = bw * 0.5;
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.25;
+      g.lineJoin = 'round';
+
+      // Стена.
+      g.fillStyle = p.paperLight;
+      g.beginPath();
+      g.rect(x - half, y - bh, bw, bh);
+      g.fill();
+      g.stroke();
+
+      // Крыша: треугольник с небольшим свесом.
       g.fillStyle = p.wallLeft;
-      g.fillRect(rx - 4, -9, 8, 4);
-      g.strokeRect(rx - 4, -9, 8, 4);
-      g.fillStyle = p.roofLeft;
       g.beginPath();
-      g.moveTo(rx - 5, -9); g.lineTo(rx + 5, -9); g.lineTo(rx, -15);
-      g.closePath(); g.fill(); g.stroke();
-    }
-    innerRoof(-8);
-    innerRoof(8);
+      g.moveTo(x - half - 1.2, y - bh);
+      g.lineTo(x + half + 1.2, y - bh);
+      g.lineTo(x, y - bh - roofH);
+      g.closePath();
+      g.fill();
+      g.stroke();
 
-    // Крепостная стена: передняя и боковые грани.
-    g.fillStyle = p.stone;
-    g.beginPath();
-    g.moveTo(-15, 0); g.lineTo(0, 6); g.lineTo(15, 0);
-    g.lineTo(15, -9); g.lineTo(0, -3); g.lineTo(-15, -9);
-    g.closePath(); g.fill(); g.stroke();
-
-    // Зубцы стены идут по гребню: в центре ниже, к башням выше.
-    for (var k = 0; k < 5; k++) {
-      var t = k / 4;
-      var bx = -12 + 24 * t;
-      var by = -9 + 6 * (1 - Math.abs(2 * t - 1));
-      g.fillRect(bx - 1.5, by - 3, 3, 3);
-      g.strokeRect(bx - 1.5, by - 3, 3, 3);
-    }
-
-    // Ворота.
-    g.fillStyle = 'rgba(90,70,48,0.6)';
-    g.beginPath();
-    g.moveTo(-3, 5); g.lineTo(0, 6.2); g.lineTo(3, 5);
-    g.lineTo(3, -1); g.quadraticCurveTo(0, -3.5, -3, -1);
-    g.closePath(); g.fill(); g.stroke();
-
-    // Боковые башни: ниже донжона, раздвинуты к краям стены.
-    function sideTower(sx) {
-      g.fillStyle = p.stone;
-      g.beginPath();
-      g.moveTo(sx - 4, 0); g.lineTo(sx, 2.5); g.lineTo(sx, -14); g.lineTo(sx - 4, -16.5);
-      g.closePath(); g.fill(); g.stroke();
-
+      // Теневая правая половина крыши — как на гравюре.
       g.fillStyle = p.stoneDark;
+      g.globalAlpha = 0.55;
       g.beginPath();
-      g.moveTo(sx, 2.5); g.lineTo(sx + 4, 0); g.lineTo(sx + 4, -16.5); g.lineTo(sx, -14);
-      g.closePath(); g.fill(); g.stroke();
+      g.moveTo(x, y - bh - roofH);
+      g.lineTo(x + half + 1.2, y - bh);
+      g.lineTo(x, y - bh);
+      g.closePath();
+      g.fill();
+      g.globalAlpha = 1;
 
-      g.fillStyle = p.stone;
-      g.beginPath();
-      g.moveTo(sx - 4, -16.5); g.lineTo(sx, -14); g.lineTo(sx + 4, -16.5);
-      g.lineTo(sx, -19); g.closePath();
-      g.fill(); g.stroke();
+      // Окна.
+      g.fillStyle = p.ink;
+      var ww = Math.max(1.4, bw * 0.16);
+      var gap = bw * 0.22;
+      g.fillRect(x - gap - ww * 0.5, y - bh * 0.62, ww, ww);
+      g.fillRect(x + gap - ww * 0.5, y - bh * 0.62, ww, ww);
 
-      g.fillRect(sx - 3.5, -20, 2.6, 2.6);
-      g.strokeRect(sx - 3.5, -20, 2.6, 2.6);
-      g.fillRect(sx + 0.9, -20, 2.6, 2.6);
-      g.strokeRect(sx + 0.9, -20, 2.6, 2.6);
+      // Флаг на центральной башне.
+      if (flag) {
+        g.strokeStyle = p.ink;
+        g.lineWidth = 1.1;
+        g.beginPath();
+        g.moveTo(x, y - bh - roofH);
+        g.lineTo(x, y - bh - roofH - 9);
+        g.stroke();
+        g.fillStyle = p.roofLeft;
+        g.beginPath();
+        g.moveTo(x, y - bh - roofH - 9);
+        g.lineTo(x + 7, y - bh - roofH - 6.6);
+        g.lineTo(x, y - bh - roofH - 4.2);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
     }
 
-    sideTower(-13);
-    sideTower(13);
+    // Задний ряд.
+    house(-12, -6, 9, 17, false);
+    house(12, -6, 9, 17, false);
 
-    // Донжон по центру — заметно выше боковых башен.
-    g.fillStyle = p.stone;
-    g.beginPath();
-    g.moveTo(-5, -1); g.lineTo(0, 2); g.lineTo(0, -26); g.lineTo(-5, -29);
-    g.closePath(); g.fill(); g.stroke();
+    // Центральная башня.
+    house(0, -2, 11, 30, true);
 
-    g.fillStyle = p.stoneDark;
-    g.beginPath();
-    g.moveTo(0, 2); g.lineTo(5, -1); g.lineTo(5, -29); g.lineTo(0, -26);
-    g.closePath(); g.fill(); g.stroke();
+    // Средний ряд.
+    house(-18, 4, 8.5, 15, false);
+    house(18, 4, 8.5, 15, false);
 
-    g.fillStyle = p.stone;
-    g.beginPath();
-    g.moveTo(-5, -29); g.lineTo(0, -26); g.lineTo(5, -29); g.lineTo(0, -32);
-    g.closePath(); g.fill(); g.stroke();
+    // Передний ряд: ниже всех и ближе к зрителю.
+    house(-8, 12, 10, 16, false);
+    house(8, 12, 10, 16, false);
 
-    g.fillRect(-4.5, -33, 3, 3.2); g.strokeRect(-4.5, -33, 3, 3.2);
-    g.fillRect(1.5, -33, 3, 3.2); g.strokeRect(1.5, -33, 3, 3.2);
-
-    // Флаг на донжоне.
-    g.strokeStyle = p.ink;
-    g.lineWidth = 1.1;
-    g.beginPath(); g.moveTo(0, -32); g.lineTo(0, -46); g.stroke();
-    g.fillStyle = p.roofLeft;
-    g.beginPath(); g.moveTo(0, -46); g.lineTo(8, -43); g.lineTo(0, -40);
-    g.closePath(); g.fill(); g.stroke();
     g.restore();
   }
 
   function makeCastle(seed, p) {
     var rng = mulberry32(seed);
-    var w = 38, h = 56, ax = 19, ay = 51;
+    var w = 54, h = 68, ax = 27, ay = 62;
     return makeSprite(w, h, ax, ay, function (g) {
       drawCastle(g, w, h, p, rng);
     });
@@ -1608,9 +1599,10 @@
 
     var builtBoxes = [];
 
-    function crossesBuilt(pts) {
+    function crossesBuilt(pts, ignoreIdx) {
       var bb = bbox(pts);
       for (var o = 0; o < built.length; o++) {
+        if (ignoreIdx != null && o === ignoreIdx) continue;
         var ob = builtBoxes[o];
         if (bb.x1 < ob.x0 || bb.x0 > ob.x1 ||
             bb.y1 < ob.y0 || bb.y0 > ob.y1) continue;
@@ -1762,6 +1754,79 @@
       y: lastLake.cy + dirY / dlen * (Math.hypot(W, H) + 120)
     };
     addArc(this._lakeRim(lastLake, sink.x, sink.y, 0.55), sink, 2.2);
+
+    // Ответвления: тонкие рукава в сторону от основного русла.
+    // Истончаются к концу и никуда не ведут — как на старых картах.
+    function addTributary(main) {
+      var mp = main.points;
+
+      // Берём точку русла, которая реально видна на листе.
+      var cands = [];
+      for (var i = 2; i < mp.length - 2; i++) {
+        var p = mp[i];
+        if (p.x > W * 0.08 && p.x < W * 0.92 &&
+            p.y > H * 0.10 && p.y < H * 0.90) {
+          cands.push(i);
+        }
+      }
+      if (!cands.length) return false;
+
+      var idx = cands[Math.floor(rng() * cands.length)];
+      var base = mp[idx];
+      var prev = mp[Math.max(0, idx - 4)];
+      var tx = base.x - prev.x, ty = base.y - prev.y;
+      var tlen = Math.hypot(tx, ty) || 1;
+      tx /= tlen; ty /= tlen;
+
+      // Перпендикуляр к руслу, случайная сторона.
+      var side = rng() < 0.5 ? -1 : 1;
+      var nx = -ty * side, ny = tx * side;
+
+      var length = 70 + rng() * 90;
+      var steps = 16;
+      var pts = [];
+      var x = base.x, y = base.y;
+
+      for (var si = 0; si <= steps; si++) {
+        pts.push({ x: x, y: y });
+        var t = si / steps;
+        // Рукав плавно отходит вбок и слегка загибается по течению.
+        var dirX = nx * (1 - t * 0.35) + tx * t * 0.55;
+        var dirY = ny * (1 - t * 0.35) + ty * t * 0.55;
+        var dl = Math.hypot(dirX, dirY) || 1;
+        x += dirX / dl * (length / steps);
+        y += dirY / dl * (length / steps);
+      }
+
+      // Первые точки лежат на родительском русле — его игнорируем.
+      var parentIdx = built.indexOf(main.points);
+      if (crossesBuilt(pts, parentIdx)) return false;
+
+      built.push(pts);
+      builtBoxes.push(bbox(pts));
+      var cum2 = [0];
+      for (var q4 = 1; q4 < pts.length; q4++) {
+        cum2.push(cum2[q4 - 1] + Math.hypot(pts[q4].x - pts[q4 - 1].x,
+                                             pts[q4].y - pts[q4 - 1].y));
+      }
+      self.rivers.push({
+        points: pts,
+        cum: cum2,
+        length: cum2[cum2.length - 1],
+        width: 0.95,
+        taper: true
+      });
+      return true;
+    }
+
+    // По одному-двум рукавам от каждой видимой крупной реки.
+    var mainRivers = this.rivers.slice();
+    for (var mi = 0; mi < mainRivers.length; mi++) {
+      if (mainRivers[mi].width < 1.5) continue;
+      var want = 1 + (mi % 2);
+      for (var wi = 0; wi < want; wi++) addTributary(mainRivers[mi]);
+    }
+
   };
 
   PaperEngine.prototype._nearRiver = function (x, y, pad) {
@@ -2362,7 +2427,7 @@
     for (var ci = 0; ci < castles.length; ci++) {
       var castleT = castles[ci];
       put('castle', this._sprites.castles, castleT.x, castleT.y,
-          1.00 + rng() * 0.12, 17, 0);
+          0.92 + rng() * 0.12, 23, 0);
     }
 
     for (var cn = 0; cn < castles.length; cn++) {
@@ -2374,20 +2439,9 @@
       });
     }
 
-    /* Дома вокруг замка: у образца это плотная кучка крыш, а не
-     * отдельная башня. Держим их близко к стенам. */
-    for (var cj = 0; cj < castles.length; cj++) {
-      var castle = castles[cj];
-      var hn = 10 + Math.floor(rng() * 4);
-      for (var hk = 0; hk < hn; hk++) {
-        var ha = rng() * TAU;
-        var hr = 13 + Math.sqrt(rng()) * 27;
-        var hx = castle.x + Math.cos(ha) * hr;
-        var hy = castle.y + Math.sin(ha) * hr * 0.68;
-        var hs = 0.62 + rng() * 0.22;
-        put('house', this._sprites.houses, hx, hy, hs, 4.6 * hs, 0);
-      }
-    }
+    /* Дома вокруг замка больше не нужны: сам спрайт замка — плотная
+     * кучка домов с острой крышей и флагом, как на образце. Отдельные
+     * домики только размывали силуэт. */
 
     /* Поля вокруг замков. */
     for (var fi = 0; fi < castles.length; fi++) {
@@ -2741,11 +2795,23 @@
       g.stroke();
 
       g.strokeStyle = p.river;
-      g.lineWidth = w;
-      g.beginPath();
-      g.moveTo(pts[0].x, pts[0].y);
-      for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
-      g.stroke();
+      if (rivers[i].taper) {
+        // Рукав истончается к концу: рисуем посегментно.
+        for (var q3 = 1; q3 < pts.length; q3++) {
+          var tq = q3 / (pts.length - 1);
+          g.lineWidth = Math.max(0.35, w * (1 - tq * 0.85));
+          g.beginPath();
+          g.moveTo(pts[q3 - 1].x, pts[q3 - 1].y);
+          g.lineTo(pts[q3].x, pts[q3].y);
+          g.stroke();
+        }
+      } else {
+        g.lineWidth = w;
+        g.beginPath();
+        g.moveTo(pts[0].x, pts[0].y);
+        for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
+        g.stroke();
+      }
     }
     g.restore();
   };
@@ -2927,8 +2993,8 @@
 
     for (var i = 0; i < castles.length; i++) {
       var c = castles[i];
-      this._drawSpacedText(g, names[i % names.length], c.x, c.y - 62,
-                           12, 'rgba(90,67,34,0.68)', 0,
+      this._drawSpacedText(g, names[i % names.length], c.x, c.y - 60,
+                           13, 'rgba(90,67,34,0.68)', 0,
                            'rgba(214,190,144,0.55)', true);
     }
   };
