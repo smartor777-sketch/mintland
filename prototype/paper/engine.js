@@ -1,6 +1,6 @@
 /* Mintland · движок карт (canvas 2D).
  *
- * Первый этап из docs/PAPER.md: бумага, озёра, города, пунктирные дороги,
+ * Первый этап из docs/PAPER.md: бумага, озёра, замки, пунктирные дороги,
  * процедурные спрайты и юниты. Никаких внешних ассетов: всё рисуется кодом.
  *
  * Мир строится детерминированно и не зависит от иконок. Иконки только
@@ -63,6 +63,11 @@
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
 
+  function smooth01(t) {
+    t = clamp(t, 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
   function roundRectPath(g, x, y, w, h, r) {
     r = Math.min(r, w * 0.5, h * 0.5);
     g.beginPath();
@@ -100,6 +105,17 @@
     if (len2 < 1e-6) return Math.hypot(px - ax, py - ay);
     var t = clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1);
     return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+  }
+
+  function segCross(ax, ay, bx, by, cx, cy, dx, dy) {
+    var rx = bx - ax, ry = by - ay;
+    var sx = dx - cx, sy = dy - cy;
+    var den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-6) return null;
+    var t = ((cx - ax) * sy - (cy - ay) * sx) / den;
+    var u = ((cx - ax) * ry - (cy - ay) * rx) / den;
+    if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+    return { x: ax + rx * t, y: ay + ry * t };
   }
 
   function pointOnPath(road, u) {
@@ -341,65 +357,119 @@
     });
   }
 
-  /* Крепость: стены, закрытый верх, зубцы, флаг. */
-  function drawTower(g, w, h, p, rng) {
-    var ax = w * 0.5, ay = h - 7;
+  /* Замок: стена с воротами, две боковые башни и донжон с флагом.
+   * Именно замок, а не отдельная башня: на карте он должен читаться
+   * как узел дорог. */
+  function drawCastle(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 5;
     var spr = { ink: p.ink, inkSoft: p.inkSoft };
 
     g.fillStyle = p.shadow;
     g.beginPath();
-    g.ellipse(ax + 2, ay - 1, 8, 2.3, 0, 0, TAU);
+    g.ellipse(ax + 3, ay - 1.5, 15, 3.4, 0, 0, TAU);
     g.fill();
 
     g.save();
     g.translate(ax, ay);
     setInk(g, spr, 1);
 
+    // Крыши внутри стен — выглядывают над гребнем, как в замке.
+    function innerRoof(rx) {
+      g.fillStyle = p.wallLeft;
+      g.fillRect(rx - 4, -9, 8, 4);
+      g.strokeRect(rx - 4, -9, 8, 4);
+      g.fillStyle = p.roofLeft;
+      g.beginPath();
+      g.moveTo(rx - 5, -9); g.lineTo(rx + 5, -9); g.lineTo(rx, -15);
+      g.closePath(); g.fill(); g.stroke();
+    }
+    innerRoof(-8);
+    innerRoof(8);
+
+    // Крепостная стена: передняя и боковые грани.
     g.fillStyle = p.stone;
     g.beginPath();
-    g.moveTo(-6, 0); g.lineTo(0, 3); g.lineTo(0, -17); g.lineTo(-6, -20);
+    g.moveTo(-15, 0); g.lineTo(0, 6); g.lineTo(15, 0);
+    g.lineTo(15, -9); g.lineTo(0, -3); g.lineTo(-15, -9);
     g.closePath(); g.fill(); g.stroke();
 
-    g.fillStyle = p.stoneDark;
-    g.beginPath();
-    g.moveTo(0, 3); g.lineTo(6, 0); g.lineTo(6, -20); g.lineTo(0, -17);
-    g.closePath(); g.fill(); g.stroke();
-
-    g.fillStyle = p.stoneDark;
-    g.beginPath();
-    g.moveTo(-6, -20); g.lineTo(0, -17); g.lineTo(6, -20);
-    g.lineTo(0, -23); g.closePath();
-    g.fill(); g.stroke();
-
-    g.fillStyle = p.stone;
-    g.beginPath();
-    g.moveTo(-5.5, -19.5); g.lineTo(0, -16.7); g.lineTo(5.5, -19.5);
-    g.lineTo(0, -22.3); g.closePath();
-    g.fill(); g.stroke();
-
-    var merlons = [-5, -1.5, 2];
-    for (var k = 0; k < merlons.length; k++) {
-      g.fillRect(merlons[k], -23, 3, 3.2);
-      g.strokeRect(merlons[k], -23, 3, 3.2);
+    // Зубцы стены идут по гребню: в центре ниже, к башням выше.
+    for (var k = 0; k < 5; k++) {
+      var t = k / 4;
+      var bx = -12 + 24 * t;
+      var by = -9 + 6 * (1 - Math.abs(2 * t - 1));
+      g.fillRect(bx - 1.5, by - 3, 3, 3);
+      g.strokeRect(bx - 1.5, by - 3, 3, 3);
     }
 
-    g.strokeStyle = p.ink;
-    g.lineWidth = 1.1;
-    g.beginPath(); g.moveTo(0, -23); g.lineTo(0, -34); g.stroke();
-    g.fillStyle = p.roofLeft;
-    g.beginPath(); g.moveTo(0, -34); g.lineTo(6, -31.5); g.lineTo(0, -29);
+    // Ворота.
+    g.fillStyle = 'rgba(90,70,48,0.6)';
+    g.beginPath();
+    g.moveTo(-3, 5); g.lineTo(0, 6.2); g.lineTo(3, 5);
+    g.lineTo(3, -1); g.quadraticCurveTo(0, -3.5, -3, -1);
     g.closePath(); g.fill(); g.stroke();
 
-    g.fillStyle = 'rgba(90,70,48,0.5)';
-    g.fillRect(2, -7, 3, 7);
+    // Боковые башни: ниже донжона, раздвинуты к краям стены.
+    function sideTower(sx) {
+      g.fillStyle = p.stone;
+      g.beginPath();
+      g.moveTo(sx - 4, 0); g.lineTo(sx, 2.5); g.lineTo(sx, -14); g.lineTo(sx - 4, -16.5);
+      g.closePath(); g.fill(); g.stroke();
+
+      g.fillStyle = p.stoneDark;
+      g.beginPath();
+      g.moveTo(sx, 2.5); g.lineTo(sx + 4, 0); g.lineTo(sx + 4, -16.5); g.lineTo(sx, -14);
+      g.closePath(); g.fill(); g.stroke();
+
+      g.fillStyle = p.stone;
+      g.beginPath();
+      g.moveTo(sx - 4, -16.5); g.lineTo(sx, -14); g.lineTo(sx + 4, -16.5);
+      g.lineTo(sx, -19); g.closePath();
+      g.fill(); g.stroke();
+
+      g.fillRect(sx - 3.5, -20, 2.6, 2.6);
+      g.strokeRect(sx - 3.5, -20, 2.6, 2.6);
+      g.fillRect(sx + 0.9, -20, 2.6, 2.6);
+      g.strokeRect(sx + 0.9, -20, 2.6, 2.6);
+    }
+
+    sideTower(-13);
+    sideTower(13);
+
+    // Донжон по центру — заметно выше боковых башен.
+    g.fillStyle = p.stone;
+    g.beginPath();
+    g.moveTo(-5, -1); g.lineTo(0, 2); g.lineTo(0, -26); g.lineTo(-5, -29);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.stoneDark;
+    g.beginPath();
+    g.moveTo(0, 2); g.lineTo(5, -1); g.lineTo(5, -29); g.lineTo(0, -26);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.stone;
+    g.beginPath();
+    g.moveTo(-5, -29); g.lineTo(0, -26); g.lineTo(5, -29); g.lineTo(0, -32);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillRect(-4.5, -33, 3, 3.2); g.strokeRect(-4.5, -33, 3, 3.2);
+    g.fillRect(1.5, -33, 3, 3.2); g.strokeRect(1.5, -33, 3, 3.2);
+
+    // Флаг на донжоне.
+    g.strokeStyle = p.ink;
+    g.lineWidth = 1.1;
+    g.beginPath(); g.moveTo(0, -32); g.lineTo(0, -46); g.stroke();
+    g.fillStyle = p.roofLeft;
+    g.beginPath(); g.moveTo(0, -46); g.lineTo(8, -43); g.lineTo(0, -40);
+    g.closePath(); g.fill(); g.stroke();
     g.restore();
   }
 
-  function makeTower(seed, p) {
+  function makeCastle(seed, p) {
     var rng = mulberry32(seed);
-    var w = 26, h = 40, ax = 13, ay = 36;
+    var w = 38, h = 56, ax = 19, ay = 51;
     return makeSprite(w, h, ax, ay, function (g) {
-      drawTower(g, w, h, p, rng);
+      drawCastle(g, w, h, p, rng);
     });
   }
 
@@ -492,6 +562,40 @@
     var w = 16, h = 13, ax = 8, ay = 10;
     return makeSprite(w, h, ax, ay, function (g) {
       drawRock(g, w, h, p, rng);
+    });
+  }
+
+  /* Кустик: маленькая крона без ствола, заполняет промежутки. */
+  function drawBush(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 3;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
+
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 1, ay - 0.8, 4.5, 1.5, 0, 0, TAU);
+    g.fill();
+
+    var pts = [];
+    var n = 9;
+    for (var k = 0; k < n; k++) {
+      var a = k / n * TAU;
+      var r = 4.5 * (0.8 + rng() * 0.4);
+      pts.push([ax + Math.cos(a) * r, ay - 5 + Math.sin(a) * r * 0.8]);
+    }
+    blobPath(g, pts);
+    g.globalAlpha = 0.30 + rng() * 0.22;
+    g.fillStyle = p.tree;
+    g.fill();
+    g.globalAlpha = 1;
+    setInk(g, spr, 1);
+    g.stroke();
+  }
+
+  function makeBush(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 16, h = 13, ax = 8, ay = 10;
+    return makeSprite(w, h, ax, ay, function (g) {
+      drawBush(g, w, h, p, rng);
     });
   }
 
@@ -588,6 +692,8 @@
     this._paper = null;
     this._paperKey = '';
     this._sprites = null;
+    this._clearing = null;
+    this._clearingSig = '';
     this._blocked = null;
     this._roadsForPlacement = [];
     this._reserved = [];
@@ -597,15 +703,16 @@
   PaperEngine.prototype._buildSprites = function () {
     var p = this.theme.palette;
     var i;
-    var s = { trees: [], houses: [], mountains: [], rocks: [], towers: [], carts: [], hills: [] };
+    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [] };
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1200 + i * 131, p, false));
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1e00 + i * 167, p, true));
     for (i = 0; i < 5; i++) s.houses.push(makeHouse(0x3400 + i * 173, p));
     for (i = 0; i < 6; i++) s.mountains.push(makeMountain(0x5600 + i * 211, p));
     for (i = 0; i < 3; i++) s.rocks.push(makeRock(0x7800 + i * 97, p));
-    for (i = 0; i < 2; i++) s.towers.push(makeTower(0x9a00 + i * 151, p));
+    for (i = 0; i < 2; i++) s.castles.push(makeCastle(0x9a00 + i * 151, p));
     for (i = 0; i < 2; i++) s.carts.push(makeCart(0xbc00 + i * 89, p));
     for (i = 0; i < 4; i++) s.hills.push(makeHill(0xde00 + i * 73, p));
+    for (i = 0; i < 4; i++) s.bushes.push(makeBush(0xf000 + i * 59, p));
     this._sprites = s;
   };
 
@@ -635,6 +742,7 @@
 
   PaperEngine.prototype.setIcons = function (icons) {
     this.icons = icons || [];
+    this._clearingSig = '';
     this.bakeDirty = true;
   };
 
@@ -919,9 +1027,9 @@
 
   /* ---------- мир ---------- */
 
-  PaperEngine.prototype._nearCity = function (cities, x, y, pad) {
-    for (var i = 0; i < cities.length; i++) {
-      if (Math.hypot(cities[i].x - x, cities[i].y - y) < pad) return true;
+  PaperEngine.prototype._nearCastle = function (castles, x, y, pad) {
+    for (var i = 0; i < castles.length; i++) {
+      if (Math.hypot(castles[i].x - x, castles[i].y - y) < pad) return true;
     }
     return false;
   };
@@ -948,15 +1056,15 @@
     this._buildReserved();
     this._buildBlocked();
 
-    var roadsCfg = this.theme.roads || { maxCities: 6, citySpacing: 0.30 };
+    var roadsCfg = this.theme.roads || { maxCastles: 6, castleSpacing: 0.30 };
 
-    /* --- города --- */
-    var minD = Math.min(W, H) * roadsCfg.citySpacing;
-    var count = clamp(Math.round(this.params.roads * roadsCfg.maxCities),
-                      2, roadsCfg.maxCities);
-    var cities = [];
+    /* --- замки --- */
+    var minD = Math.min(W, H) * roadsCfg.castleSpacing;
+    var count = clamp(Math.round(this.params.roads * roadsCfg.maxCastles),
+                      2, roadsCfg.maxCastles);
+    var castles = [];
     var tries = 0;
-    while (cities.length < count && tries < 1200) {
+    while (castles.length < count && tries < 1200) {
       tries++;
       if (tries % 200 === 0) minD *= 0.90;
       var x = 80 + rng() * (W - 160);
@@ -965,43 +1073,60 @@
       if (this._nearRiver(x, y, 24)) continue;
       if (this._inReserved(x, y, 30)) continue;
       var ok = true;
-      for (var c = 0; c < cities.length; c++) {
-        if (Math.hypot(cities[c].x - x, cities[c].y - y) < minD) {
+      for (var c = 0; c < castles.length; c++) {
+        if (Math.hypot(castles[c].x - x, castles[c].y - y) < minD) {
           ok = false;
           break;
         }
       }
-      if (ok) cities.push({ x: x, y: y });
+      if (ok) castles.push({ x: x, y: y });
     }
 
     /* --- сеть дорог: минимальное остовное дерево --- */
     var edges = [];
-    for (var i = 0; i < cities.length; i++) {
-      for (var j = i + 1; j < cities.length; j++) {
+    for (var i = 0; i < castles.length; i++) {
+      for (var j = i + 1; j < castles.length; j++) {
         edges.push({
           a: i, b: j,
-          d: Math.hypot(cities[i].x - cities[j].x, cities[i].y - cities[j].y)
+          d: Math.hypot(castles[i].x - castles[j].x, castles[i].y - castles[j].y)
         });
       }
     }
     edges.sort(function (p, q) { return p.d - q.d; });
 
     var uf = [];
-    for (var u = 0; u < cities.length; u++) uf[u] = u;
+    for (var u = 0; u < castles.length; u++) uf[u] = u;
     function find(a) {
       while (uf[a] !== a) { uf[a] = uf[uf[a]]; a = uf[a]; }
       return a;
     }
 
     var roadPaths = [];
-    for (var e = 0; e < edges.length && roadPaths.length < cities.length - 1; e++) {
+    var used = {};
+    for (var e = 0; e < edges.length && roadPaths.length < castles.length - 1; e++) {
       var ed = edges[e];
       var ra = find(ed.a), rb = find(ed.b);
       if (ra === rb) continue;
-      var pts = this._route(cities[ed.a], cities[ed.b]);
+      var pts = this._route(castles[ed.a], castles[ed.b]);
       if (!pts || pts.length < 3) continue;
       uf[ra] = rb;
+      used[ed.a + ':' + ed.b] = true;
       roadPaths.push(pts);
+    }
+
+    // Пара коротких хорд, чтобы дороги шли не только цепочкой:
+    // у образца сеть, а не одна линия.
+    var chords = 0;
+    for (var e2 = 0; e2 < edges.length && chords < 2; e2++) {
+      var ed2 = edges[e2];
+      if (used[ed2.a + ':' + ed2.b]) continue;
+      if (ed2.d > Math.min(W, H) * 0.85) continue;
+      var extra = this._route(castles[ed2.a], castles[ed2.b]);
+      if (extra && extra.length >= 3) {
+        used[ed2.a + ':' + ed2.b] = true;
+        roadPaths.push(extra);
+        chords++;
+      }
     }
 
     var roads = [];
@@ -1016,12 +1141,39 @@
     }
     this._roadsForPlacement = roads;
 
+    // Мосты: дороги могут пересекать реку, и это должно выглядеть
+    // намеренно, а не как разрыв.
+    this.bridges = [];
+    for (var bi = 0; bi < roads.length; bi++) {
+      var rpts = roads[bi].points;
+      for (var bk = 1; bk < rpts.length; bk++) {
+        for (var ri = 0; ri < this.rivers.length; ri++) {
+          var vpts = this.rivers[ri].points;
+          for (var rk = 1; rk < vpts.length; rk++) {
+            var hit = segCross(rpts[bk - 1].x, rpts[bk - 1].y,
+                               rpts[bk].x, rpts[bk].y,
+                               vpts[rk - 1].x, vpts[rk - 1].y,
+                               vpts[rk].x, vpts[rk].y);
+            if (hit) {
+              this.bridges.push({
+                x: hit.x, y: hit.y,
+                angle: Math.atan2(rpts[bk].y - rpts[bk - 1].y,
+                                  rpts[bk].x - rpts[bk - 1].x)
+              });
+            }
+          }
+        }
+      }
+    }
+
     /* --- объекты --- */
     var objects = [];
     var placed = [];
 
+    var EDGE = 180;
+
     function free(x, y, r) {
-      if (x < 8 || x > W - 8 || y < 18 || y > H - 6) return false;
+      if (x < -EDGE || x > W + EDGE || y < -EDGE || y > H + EDGE) return false;
       if (self._inLake(x, y, 10)) return false;
       if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
@@ -1048,121 +1200,140 @@
     }
 
     /* 1. горные гряды — самое крупное, ставим первыми */
-    var ranges = Math.round(12 + this.params.density * 14);
+    var ranges = Math.round(20 + this.params.density * 18);
     for (var m = 0; m < ranges; m++) {
       var cx = 0, cy = 0, found = false;
       for (var mt = 0; mt < 80 && !found; mt++) {
-        cx = 60 + rng() * (W - 120);
-        cy = 90 + rng() * (H - 150);
+        cx = -EDGE * 0.6 + rng() * (W + EDGE * 1.2);
+        cy = -EDGE * 0.6 + rng() * (H + EDGE * 1.2);
         if (this._inLake(cx, cy, 24)) continue;
         if (this._inReserved(cx, cy, 40)) continue;
-        if (this._nearCity(cities, cx, cy, 105)) continue;
+        if (this._nearCastle(castles, cx, cy, 105)) continue;
         found = true;
       }
       if (!found) continue;
 
       var ang = rng() * TAU;
-      var len = 40 + rng() * 100;
-      var n = 2 + Math.floor(rng() * 4);
+      var len = 80 + rng() * 170;
+      var n = 3 + Math.floor(rng() * 4);
       for (var mk = 0; mk < n; mk++) {
         var tt = n === 1 ? 0 : (mk / (n - 1) - 0.5);
         var mx = cx + Math.cos(ang) * len * tt + (rng() - 0.5) * 16;
         var my = cy + Math.sin(ang) * len * tt * 0.62 + (rng() - 0.5) * 12;
-        var ms = 0.78 + rng() * 0.42;
-        put('mountain', this._sprites.mountains, mx, my, ms, 15 * ms, 18);
+        var ms = 0.74 + rng() * 0.40;
+        put('mountain', this._sprites.mountains, mx, my, ms, 13 * ms, 16);
       }
     }
 
-    /* 2. города: сначала башни, потом полоса под подпись, потом дома */
-    for (var ci = 0; ci < cities.length; ci++) {
-      var cityT = cities[ci];
-      put('tower', this._sprites.towers, cityT.x, cityT.y,
-          0.92 + rng() * 0.12, 13, 0);
+    /* 2. замки: сначала башни, потом полоса под подпись, потом дома */
+    for (var ci = 0; ci < castles.length; ci++) {
+      var castleT = castles[ci];
+      put('castle', this._sprites.castles, castleT.x, castleT.y,
+          1.00 + rng() * 0.12, 17, 0);
     }
 
-    for (var cn = 0; cn < cities.length; cn++) {
+    for (var cn = 0; cn < castles.length; cn++) {
       this._reserved.push({
-        x: cities[cn].x - 80,
-        y: cities[cn].y - 70,
+        x: castles[cn].x - 80,
+        y: castles[cn].y - 70,
         w: 160,
         h: 26
       });
     }
 
-    for (var cj = 0; cj < cities.length; cj++) {
-      var city = cities[cj];
-      var hn = 6 + Math.floor(rng() * 4);
+    /* Дома вокруг замка: у образца это плотная кучка крыш, а не
+     * отдельная башня. Держим их близко к стенам. */
+    for (var cj = 0; cj < castles.length; cj++) {
+      var castle = castles[cj];
+      var hn = 10 + Math.floor(rng() * 4);
       for (var hk = 0; hk < hn; hk++) {
         var ha = rng() * TAU;
-        var hr = 22 + rng() * 58;
-        var hx = city.x + Math.cos(ha) * hr;
-        var hy = city.y + Math.sin(ha) * hr * 0.66;
-        var hs = 0.85 + rng() * 0.30;
-        put('house', this._sprites.houses, hx, hy, hs, 10 * hs, 0);
+        var hr = 13 + Math.sqrt(rng()) * 27;
+        var hx = castle.x + Math.cos(ha) * hr;
+        var hy = castle.y + Math.sin(ha) * hr * 0.68;
+        var hs = 0.62 + rng() * 0.22;
+        put('house', this._sprites.houses, hx, hy, hs, 4.6 * hs, 0);
       }
     }
 
-    /* 3. леса: группы деревьев, а не равномерная сыпь */
-    var clusters = Math.round(24 + this.params.forest * 30);
-    for (var fc = 0; fc < clusters; fc++) {
-      var fx = 0, fy = 0, fFound = false;
-      for (var ft = 0; ft < 70 && !fFound; ft++) {
-        fx = 40 + rng() * (W - 80);
-        fy = 70 + rng() * (H - 110);
-        if (this._inLake(fx, fy, 18)) continue;
-        if (this._inReserved(fx, fy, 40)) continue;
-        if (this._nearCity(cities, fx, fy, 65)) continue;
-        fFound = true;
-      }
-      if (!fFound) continue;
-
-      var fn = 5 + Math.floor(rng() * 8);
-      var fr = 26 + rng() * 50;
-      for (var fk = 0; fk < fn; fk++) {
-        var fa = rng() * TAU;
-        var frad = Math.sqrt(rng()) * fr;
-        var tx = fx + Math.cos(fa) * frad;
-        var ty = fy + Math.sin(fa) * frad * 0.66;
-        var ts = 0.72 + rng() * 0.32;
-        put('tree', this._sprites.trees, tx, ty, ts, 6 * ts, 9);
+    /* 3. леса: плотные массивы по шуму. Так на карте появляются
+     * настоящие лесные области, а не отдельные кучки деревьев. */
+    var FSTEP = 21;
+    for (var gy = -EDGE; gy < H + EDGE; gy += FSTEP) {
+      for (var gx = -EDGE; gx < W + EDGE; gx += FSTEP) {
+        var fx = gx + (rng() - 0.5) * FSTEP * 1.25;
+        var fy = gy + (rng() - 0.5) * FSTEP * 1.25;
+        var fnz = fbm(fx * 0.0021 + 7.3, fy * 0.0021 - 2.1, 4);
+        var dens = smooth01((fnz - 0.40) / 0.18) * this.params.forest;
+        if (rng() > dens) continue;
+        if (this._inLake(fx, fy, 14)) continue;
+        if (this._inReserved(fx, fy, 24)) continue;
+        if (this._nearCastle(castles, fx, fy, 55)) continue;
+        if (this._nearRiver(fx, fy, 8)) continue;
+        if (this._nearRoad(fx, fy, 7)) continue;
+        var ts = 0.68 + rng() * 0.34;
+        put('tree', this._sprites.trees, fx, fy, ts, 4.8 * ts, 0);
       }
     }
 
-    /* 4. одиночные деревья */
-    var lone = Math.round(16 + this.params.forest * 24);
+    /* 4. одиночные деревья на открытых местах */
+    var lone = Math.round(24 + this.params.forest * 16);
     for (var lt = 0; lt < lone; lt++) {
-      var lx = 20 + rng() * (W - 40);
-      var ly = 40 + rng() * (H - 60);
+      var lx = -EDGE + rng() * (W + EDGE * 2);
+      var ly = -EDGE + rng() * (H + EDGE * 2);
       var ls = 0.72 + rng() * 0.36;
       put('tree', this._sprites.trees, lx, ly, ls, 6 * ls, 8);
     }
 
     /* 5. камни */
-    var rocks = Math.round(16 + this.params.density * 22);
+    var rocks = Math.round(24 + this.params.density * 30);
     for (var rk = 0; rk < rocks; rk++) {
-      var rx = 20 + rng() * (W - 40);
-      var ry = 40 + rng() * (H - 60);
+      var rx = -EDGE + rng() * (W + EDGE * 2);
+      var ry = -EDGE + rng() * (H + EDGE * 2);
       var rs = 0.80 + rng() * 0.45;
       put('rock', this._sprites.rocks, rx, ry, rs, 6 * rs, 8);
     }
 
-    /* 6. холмики: заполняют пустой пергамент, как на образце */
-    var hills = Math.round(26 + this.params.density * 30);
+    /* 6. кустики */
+    var bushes = Math.round(150 + this.params.forest * 130);
+    for (var bu = 0; bu < bushes; bu++) {
+      var bx = -EDGE + rng() * (W + EDGE * 2);
+      var by = -EDGE + rng() * (H + EDGE * 2);
+      var bs = 0.8 + rng() * 0.5;
+      put('bush', this._sprites.bushes, bx, by, bs, 4, 5);
+    }
+
+    /* 7. холмики: заполняют пустой пергамент, как на образце */
+    var hills = Math.round(50 + this.params.density * 44);
     for (var hl = 0; hl < hills; hl++) {
-      var hx2 = 20 + rng() * (W - 40);
-      var hy2 = 40 + rng() * (H - 60);
+      var hx2 = -EDGE + rng() * (W + EDGE * 2);
+      var hy2 = -EDGE + rng() * (H + EDGE * 2);
       var hs2 = 0.8 + rng() * 0.4;
       put('hill', this._sprites.hills, hx2, hy2, hs2, 5, 6);
     }
 
     objects.sort(function (a, b) { return a.y - b.y; });
 
+    /* 8. травяные штрихи: самый мелкий слой, без проверок на пересечения */
+    var tufts = [];
+    var tuftCount = Math.round(900 + this.params.density * 600);
+    for (var tf = 0; tf < tuftCount; tf++) {
+      var tx2 = -EDGE + rng() * (W + EDGE * 2);
+      var ty2 = -EDGE + rng() * (H + EDGE * 2);
+      if (this._inLake(tx2, ty2, 6)) continue;
+      if (this._nearRiver(tx2, ty2, 3)) continue;
+      if (this._nearRoad(tx2, ty2, 5)) continue;
+      if (this._inReserved(tx2, ty2, 4)) continue;
+      tufts.push({ x: tx2, y: ty2, s: 0.7 + rng() * 0.6, a: rng() * TAU });
+    }
+
     this.world = {
-      cities: cities,
+      castles: castles,
       roads: roads,
       objects: objects,
       lakes: this.lakes,
-      rivers: this.rivers
+      rivers: this.rivers,
+      tufts: tufts
     };
     this.worldDirty = false;
     this.bakeDirty = true;
@@ -1316,6 +1487,30 @@
     g.restore();
   };
 
+  PaperEngine.prototype._drawTufts = function (g) {
+    var tufts = (this.world && this.world.tufts) || [];
+    if (!tufts.length) return;
+    var p = this.theme.palette;
+
+    g.save();
+    g.strokeStyle = p.inkSoft;
+    g.lineWidth = 0.8;
+    g.lineCap = 'round';
+    for (var i = 0; i < tufts.length; i++) {
+      var t = tufts[i];
+      var s = t.s;
+      g.beginPath();
+      g.moveTo(t.x, t.y);
+      g.lineTo(t.x - 2 * s, t.y - 4 * s);
+      g.moveTo(t.x, t.y);
+      g.lineTo(t.x + 0.5 * s, t.y - 5 * s);
+      g.moveTo(t.x, t.y);
+      g.lineTo(t.x + 2.5 * s, t.y - 3.5 * s);
+      g.stroke();
+    }
+    g.restore();
+  };
+
   PaperEngine.prototype._drawRoads = function (g) {
     var roads = (this.world && this.world.roads) || [];
     if (!roads.length) return;
@@ -1343,6 +1538,31 @@
       g.moveTo(pts[0].x, pts[0].y);
       for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
       g.stroke();
+    }
+    g.restore();
+  };
+
+  PaperEngine.prototype._drawBridges = function (g) {
+    var bridges = this.bridges || [];
+    if (!bridges.length) return;
+    var p = this.theme.palette;
+
+    g.save();
+    for (var i = 0; i < bridges.length; i++) {
+      var b = bridges[i];
+      g.save();
+      g.translate(b.x, b.y);
+      g.rotate(b.angle);
+      g.fillStyle = p.paperLight;
+      g.fillRect(-9, -3.5, 18, 7);
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1;
+      g.strokeRect(-9, -3.5, 18, 7);
+      g.beginPath();
+      g.moveTo(-6, -3.5); g.lineTo(-6, 3.5);
+      g.moveTo(6, -3.5); g.lineTo(6, 3.5);
+      g.stroke();
+      g.restore();
     }
     g.restore();
   };
@@ -1392,15 +1612,15 @@
     }
   };
 
-  // Города подписаны своим именем, как на старых картах. Подпись ставится
+  // Замки подписаны своим именем, как на старых картах. Подпись ставится
   // над башней, чтобы её не закрывали дома; повторов нет.
-  PaperEngine.prototype._drawCityNames = function (g) {
-    var cities = (this.world && this.world.cities) || [];
-    var names = this.theme.cityNames || [];
+  PaperEngine.prototype._drawCastleNames = function (g) {
+    var castles = (this.world && this.world.castles) || [];
+    var names = this.theme.castleNames || [];
     if (!names.length) return;
 
-    for (var i = 0; i < cities.length; i++) {
-      var c = cities[i];
+    for (var i = 0; i < castles.length; i++) {
+      var c = castles[i];
       this._drawSpacedText(g, names[i % names.length], c.x, c.y - 54,
                            12, 'rgba(90,67,34,0.68)', 0,
                            'rgba(214,190,144,0.55)', true);
@@ -1446,29 +1666,88 @@
     g.restore();
   };
 
-  PaperEngine.prototype._drawClearings = function (g) {
-    var icons = this.icons;
-    if (!icons.length) return;
-    var p = this.theme.palette;
+  // «Островки» под иконками: не рамка и не карточка, а мягкая поляна
+  // в лесу. Контур не рисуем — плотный лес вокруг сам образует остров.
+  PaperEngine.prototype._iconSig = function () {
+    var s = this.W + 'x' + this.H + ':';
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      s += Math.round(r.x) + ',' + Math.round(r.y) + ',' +
+           Math.round(r.w) + ',' + Math.round(r.h) + ';';
+    }
+    return s;
+  };
 
-    g.save();
+  PaperEngine.prototype._buildClearing = function () {
+    var icons = this.icons;
+    if (!icons.length) return null;
+
+    // Маска в четверть разрешения: при растяжении края становятся
+    // мягкими, как у настоящей поляны, а не как у кнопки.
+    var ms = 0.25;
+    var mw = Math.max(1, Math.round(this.W * ms));
+    var mh = Math.max(1, Math.round(this.H * ms));
+
+    var mask = document.createElement('canvas');
+    mask.width = mw;
+    mask.height = mh;
+    var mg = mask.getContext('2d');
+    mg.scale(ms, ms);
+    mg.fillStyle = '#fff';
+
     for (var i = 0; i < icons.length; i++) {
       var r = icons[i];
-      var pad = 12;
+      var pad = 24;
       var x = r.x - pad, y = r.y - pad;
       var w = r.w + pad * 2, h = r.h + pad * 2;
-
-      roundRectPath(g, x, y, w, h, 14);
-      g.fillStyle = p.clearing;
-      g.fill();
-
-      g.setLineDash([4, 5]);
-      g.strokeStyle = p.clearingLine;
-      g.lineWidth = 1;
-      g.stroke();
-      g.setLineDash([]);
+      var cx = x + w * 0.5, cy = y + h * 0.5;
+      var rx = w * 0.5, ry = h * 0.5;
+      var rng = mulberry32(Math.round(r.x * 13 + r.y * 7 + r.w * 3 + r.h));
+      var pts = [];
+      var n = 18;
+      for (var k = 0; k < n; k++) {
+        var a = k / n * TAU;
+        var wob = 0.90 + rng() * 0.10;
+        pts.push([cx + Math.cos(a) * rx * wob,
+                  cy + Math.sin(a) * ry * wob]);
+      }
+      blobPath(mg, pts);
+      mg.fill();
     }
-    g.restore();
+
+    var out = document.createElement('canvas');
+    out.width = Math.round(this.W * this.dpr);
+    out.height = Math.round(this.H * this.dpr);
+    var og = out.getContext('2d');
+    og.scale(this.dpr, this.dpr);
+
+    var fill = document.createElement('canvas');
+    fill.width = mw;
+    fill.height = mh;
+    var fg = fill.getContext('2d');
+    fg.drawImage(mask, 0, 0);
+    fg.globalCompositeOperation = 'source-in';
+    fg.fillStyle = this.theme.palette.paperLight;
+    fg.fillRect(0, 0, mw, mh);
+
+    og.save();
+    og.globalAlpha = 0.34;
+    og.imageSmoothingEnabled = true;
+    og.drawImage(fill, 0, 0, this.W, this.H);
+    og.restore();
+
+    return out;
+  };
+
+  PaperEngine.prototype._drawClearings = function (g) {
+    if (!this.icons.length) return;
+    var sig = this._iconSig();
+    if (this._clearingSig !== sig) {
+      this._clearingSig = sig;
+      this._clearing = this._buildClearing();
+    }
+    if (!this._clearing) return;
+    g.drawImage(this._clearing, 0, 0, this.W, this.H);
   };
 
   PaperEngine.prototype._spriteFor = function (o) {
@@ -1480,7 +1759,7 @@
   PaperEngine.prototype._drawObjects = function (g) {
     var objects = (this.world && this.world.objects) || [];
     var icons = this.icons;
-    var margin = (this.theme.objects && this.theme.objects.margin) || 20;
+    var margin = (this.theme.objects && this.theme.objects.margin) || 22;
 
     for (var i = 0; i < objects.length; i++) {
       var o = objects[i];
@@ -1540,11 +1819,13 @@
     g.drawImage(this._paper, 0, 0, this.W, this.H);
     this._drawRivers(g);
     this._drawLakes(g);
+    this._drawTufts(g);
     this._drawRoads(g);
+    this._drawBridges(g);
     this._drawLabels(g);
     this._drawClearings(g);
     this._drawObjects(g);
-    this._drawCityNames(g);
+    this._drawCastleNames(g);
     this._drawCompass(g);
     this._drawVignette(g);
     if (this.theme.frame !== false) this._drawFrame(g);
