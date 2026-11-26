@@ -36,6 +36,10 @@ mintland (0.3.2) unstable; urgency=medium
   * Make the icon island slider a real pixel offset (6-52 px).
   * Route rivers with A* over their waypoints: the path stays simple
     (no self-intersections) and keeps a clear margin from icon islands.
+  * Keep every lake fully inside the sheet and clear of icon islands.
+  * Widen the icon clearance slider to 4-120 px.
+  * Add a birds slider for the ravens over the witch's hut.
+  * Add a sitting cat beside the witch's hut.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
