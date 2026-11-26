@@ -1249,8 +1249,15 @@
     // остановится: карта должна обтекать островки, а не просто
     // закрываться подложкой.
     if (before !== after) {
-      this._needsWorldRebuild = true;
-      this._iconChangedAt = performance.now();
+      if (!before) {
+        // Первый набор иконок после запуска: ждать нечего, пересобираем
+        // сразу, иначе на старте в островках успевают появиться деревья.
+        this.worldDirty = true;
+        this.bakeDirty = true;
+      } else {
+        this._needsWorldRebuild = true;
+        this._iconChangedAt = performance.now();
+      }
     }
   };
 
@@ -1607,7 +1614,7 @@
   PaperEngine.prototype._islandPad = function () {
     var k = this.params.island;
     if (typeof k !== 'number') k = 0.55;
-    return Math.round(18 + k * 46);
+    return Math.round(10 + k * 34);
   };
 
   PaperEngine.prototype._inIconZone = function (x, y, pad) {
@@ -1810,7 +1817,7 @@
         if (this._inLake(x, y, 34)) continue;
         if (this._nearRiver(x, y, 26)) continue;
         if (this._inReserved(x, y, 30)) continue;
-        if (this._inIconZone(x, y, this._islandPad() + 8)) continue;
+        if (this._inIconZone(x, y, this._islandPad() + 10)) continue;
         var ok = true;
         for (var k = 0; k < castles.length; k++) {
           if (Math.hypot(castles[k].x - x, castles[k].y - y) < minD) {
@@ -1950,7 +1957,7 @@
       if (self._inLake(x, y, 10)) return false;
       if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
-      if (self._inIconZone(x, y, r + self._islandPad() * 0.45)) return false;
+      if (self._inIconZone(x, y, r + self._islandPad() + 6)) return false;
 
       var pad = r + 22;
       var c0 = Math.floor((x - pad) / CELL);
@@ -1970,9 +1977,39 @@
       return true;
     }
 
+    // Прямоугольник, который займёт спрайт: высота важна не меньше
+    // точки подошвы, иначе крона дерева залезает на островок.
+    function spriteBox(variants, x, y, scale, radius) {
+      var spr = variants[0];
+      var w = spr.w * scale;
+      var h = spr.h * scale;
+      return {
+        x: x - spr.ax * scale,
+        y: y - spr.ay * scale,
+        w: w,
+        h: h
+      };
+    }
+
+    function boxHitsIcon(box, pad) {
+      for (var i = 0; i < self.icons.length; i++) {
+        var r = self.icons[i];
+        if (box.x < r.x + r.w + pad && box.x + box.w > r.x - pad &&
+            box.y < r.y + r.h + pad && box.y + box.h > r.y - pad) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     function put(type, variants, x, y, scale, radius, roadPad) {
       if (!free(x, y, radius)) return false;
       if (roadPad && self._nearRoad(x, y, roadPad)) return false;
+      if (self.icons.length) {
+        var box = spriteBox(variants, x, y, scale, radius);
+        // Небольшой запас, чтобы контур не касался кромки островка.
+        if (boxHitsIcon(box, 6)) return false;
+      }
       objects.push({
         type: type,
         x: x,
@@ -2205,7 +2242,7 @@
       if (this._nearRiver(tx2, ty2, 3)) continue;
       if (this._nearRoad(tx2, ty2, 5)) continue;
       if (this._inReserved(tx2, ty2, 4)) continue;
-      if (this._inIconZone(tx2, ty2, this._islandPad() * 0.6)) continue;
+      if (this._inIconZone(tx2, ty2, this._islandPad() + 4)) continue;
       tufts.push({ x: tx2, y: ty2, s: 0.7 + rng() * 0.6, a: rng() * TAU });
     }
 
@@ -2249,9 +2286,11 @@
       for (var x = 0; x < mw; x++) {
         var v = fbm(x * 0.065 + 3.7, y * 0.065 + 9.1, 4);
         var i = (y * mw + x) * 4;
-        data[i] = base[0] + (v - 0.5) * 30;
-        data[i + 1] = base[1] + (v - 0.5) * 28;
-        data[i + 2] = base[2] + (v - 0.5) * 24;
+        // База почти ровная: основную «обжитую» неровность дают
+        // отдельные пятна, а не общий шум.
+        data[i] = base[0] + (v - 0.5) * 12;
+        data[i + 1] = base[1] + (v - 0.5) * 11;
+        data[i + 2] = base[2] + (v - 0.5) * 10;
         data[i + 3] = 255;
       }
     }
@@ -2261,26 +2300,66 @@
 
     var rng = mulberry32(0x9e3779b9);
 
-    // Пятна и выцветшие участки. Крупные и мягкие, как на старом листе:
-    // именно они дают «обжитой» вид, а не ровную заливку.
-    for (var s = 0; s < 26; s++) {
-      var sx = rng() * W, sy = rng() * H;
-      var sr = 70 + rng() * 320;
-      var grad = g.createRadialGradient(sx, sy, sr * 0.15, sx, sy, sr);
-      var a = 0.030 + rng() * 0.055;
-      grad.addColorStop(0, 'rgba(112,78,38,' + a.toFixed(3) + ')');
-      grad.addColorStop(0.62, 'rgba(112,78,38,' + (a * 0.5).toFixed(3) + ')');
-      grad.addColorStop(1, 'rgba(112,78,38,0)');
-      g.fillStyle = grad;
-      g.fillRect(sx - sr, sy - sr, sr * 2, sr * 2);
+    // Пятна по шуму: не ровные круги, а неровные кляксы, как на
+    // настоящем пергаменте. Считаем поле в низком разрешении и
+    // растягиваем — края получаются мягкими и органичными.
+    var pmw = Math.max(48, Math.ceil(W / 14));
+    var pmh = Math.max(32, Math.ceil(H / 14));
+    var pc = document.createElement('canvas');
+    pc.width = pmw;
+    pc.height = pmh;
+    var pg = pc.getContext('2d');
+    var pimg = pg.createImageData(pmw, pmh);
+    var pdata = pimg.data;
+    for (var py = 0; py < pmh; py++) {
+      for (var px = 0; px < pmw; px++) {
+        var n1 = fbm(px * 0.055 + 11.2, py * 0.055 - 4.3, 3);
+        var n2 = fbm(px * 0.16 - 2.7, py * 0.16 + 8.9, 2);
+        var v2 = n1 * 0.75 + n2 * 0.25;
+        // Только верхняя часть поля даёт пятна, остальное прозрачно.
+        var a2 = smooth01((v2 - 0.47) / 0.26);
+        var i2 = (py * pmw + px) * 4;
+        pdata[i2] = 112;
+        pdata[i2 + 1] = 84;
+        pdata[i2 + 2] = 44;
+        pdata[i2 + 3] = Math.round(a2 * 96);
+      }
     }
+    pg.putImageData(pimg, 0, 0);
+    g.imageSmoothingEnabled = true;
+    g.drawImage(pc, 0, 0, W, H);
 
-    // Пара светлых проплешин, чтобы пятна не выглядели грязью.
-    for (var s2 = 0; s2 < 8; s2++) {
-      var lx = rng() * W, ly = rng() * H, lr = 90 + rng() * 240;
+    // Ещё один слой мельче и плотнее — «затёки» по краям пятен.
+    var qmw = Math.max(64, Math.ceil(W / 8));
+    var qmh = Math.max(48, Math.ceil(H / 8));
+    var qc = document.createElement('canvas');
+    qc.width = qmw;
+    qc.height = qmh;
+    var qg = qc.getContext('2d');
+    var qimg = qg.createImageData(qmw, qmh);
+    var qdata = qimg.data;
+    for (var qy = 0; qy < qmh; qy++) {
+      for (var qx = 0; qx < qmw; qx++) {
+        var m1 = fbm(qx * 0.075 + 31.4, qy * 0.075 + 17.6, 3);
+        var m2 = fbm(qx * 0.21 + 5.1, qy * 0.21 - 9.4, 2);
+        var vv = m1 * 0.7 + m2 * 0.3;
+        var aa = smooth01((vv - 0.54) / 0.20);
+        var iq = (qy * qmw + qx) * 4;
+        qdata[iq] = 96;
+        qdata[iq + 1] = 70;
+        qdata[iq + 2] = 36;
+        qdata[iq + 3] = Math.round(aa * 52);
+      }
+    }
+    qg.putImageData(qimg, 0, 0);
+    g.drawImage(qc, 0, 0, W, H);
+
+    // Немного светлых проплешин, чтобы карта «дышала».
+    for (var s2 = 0; s2 < 7; s2++) {
+      var lx = rng() * W, ly = rng() * H, lr = 110 + rng() * 260;
       var lg = g.createRadialGradient(lx, ly, 0, lx, ly, lr);
-      lg.addColorStop(0, 'rgba(248,238,212,0.09)');
-      lg.addColorStop(1, 'rgba(248,238,212,0)');
+      lg.addColorStop(0, 'rgba(250,240,214,0.10)');
+      lg.addColorStop(1, 'rgba(250,240,214,0)');
       g.fillStyle = lg;
       g.fillRect(lx - lr, ly - lr, lr * 2, lr * 2);
     }
@@ -2551,8 +2630,20 @@
 
     g.save();
     g.translate(cx, cy);
-    g.strokeStyle = p.inkSoft;
-    g.lineWidth = 0.9;
+
+    // Светлая подложка: компас не должен сливаться с озером и рекой,
+    // поверх которых он иногда оказывается.
+    var halo = g.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5);
+    halo.addColorStop(0, 'rgba(246,236,210,0.85)');
+    halo.addColorStop(0.72, 'rgba(246,236,210,0.65)');
+    halo.addColorStop(1, 'rgba(246,236,210,0)');
+    g.fillStyle = halo;
+    g.beginPath();
+    g.arc(0, 0, r * 1.5, 0, TAU);
+    g.fill();
+
+    g.strokeStyle = 'rgba(78,58,30,0.92)';
+    g.lineWidth = 1.35;
 
     // Двойное кольцо.
     g.beginPath(); g.arc(0, 0, r, 0, TAU); g.stroke();
@@ -2575,33 +2666,35 @@
 
       if (i === 0) {
         // Северная стрелка — тёмная, остальные светлее.
-        g.fillStyle = 'rgba(90,67,34,0.72)';
+        g.fillStyle = 'rgba(78,58,30,1)';
         g.fill();
       } else if (major) {
-        g.fillStyle = 'rgba(90,67,34,0.38)';
+        g.fillStyle = 'rgba(78,58,30,0.78)';
         g.fill();
       } else if (mid) {
-        g.fillStyle = 'rgba(90,67,34,0.22)';
+        g.fillStyle = 'rgba(78,58,30,0.55)';
         g.fill();
       }
-      g.strokeStyle = 'rgba(90,67,34,0.38)';
-      g.lineWidth = 0.6;
+      g.strokeStyle = 'rgba(78,58,30,0.75)';
+      g.lineWidth = 0.9;
       g.stroke();
     }
 
     // Центральный кружок.
     g.beginPath(); g.arc(0, 0, r * 0.075, 0, TAU);
-    g.fillStyle = p.inkSoft;
+    g.fillStyle = 'rgba(78,58,30,1)';
     g.fill();
 
     // Буквы.
     g.font = '600 11px "Liberation Serif", Georgia, serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillStyle = 'rgba(90,67,34,0.62)';
+    g.font = '700 12px "Liberation Serif", Georgia, serif';
+    g.fillStyle = 'rgba(78,58,30,1)';
     g.fillText('N', 0, -r - 9);
-    g.fillStyle = 'rgba(90,67,34,0.42)';
+    g.fillStyle = 'rgba(78,58,30,0.88)';
     g.fillText('S', 0, r + 9);
+    g.fillStyle = 'rgba(78,58,30,0.88)';
     g.fillText('E', r + 9, 0);
     g.fillText('W', -r - 9, 0);
     g.restore();
@@ -2723,19 +2816,27 @@
     for (var i = 0; i < this.icons.length; i++) {
       var r = this.icons[i];
       // Соседние значки дают один общий остров, а не гирлянду кружков.
-      var pad = (padOverride == null ? this._islandPad() + 12 : padOverride);
+      var pad = (padOverride == null ? this._islandPad() : padOverride);
       var x = r.x - pad, y = r.y - pad;
       var w = r.w + pad * 2, h = r.h + pad * 2;
       var cx = x + w * 0.5, cy = y + h * 0.5;
       var rx = w * 0.5, ry = h * 0.5;
+
+      // Суперэллипс (сквиркл): вписанный эллипс у соседних значков
+      // оставляет между собой ромбовидные щели, а прямоугольник
+      // выглядит как панель. Степень 4 заполняет углы почти полностью,
+      // но силуэт остаётся мягким; шум по радиусу даёт неровный берег.
       var rng = mulberry32(Math.round(r.x * 13 + r.y * 7 + r.w * 3 + r.h));
       var pts = [];
-      var n = 20;
+      var n = 28;
+      var e = 2 / 4;   // показатель суперэллипса
       for (var k = 0; k < n; k++) {
         var a = k / n * TAU;
-        var wob = 0.88 + rng() * 0.12;
-        pts.push([cx + Math.cos(a) * rx * wob,
-                  cy + Math.sin(a) * ry * wob]);
+        var ca = Math.cos(a), sa = Math.sin(a);
+        var sx = (ca < 0 ? -1 : 1) * Math.pow(Math.abs(ca), e);
+        var sy = (sa < 0 ? -1 : 1) * Math.pow(Math.abs(sa), e);
+        var wob = 0.94 + rng() * 0.09;
+        pts.push([cx + sx * rx * wob, cy + sy * ry * wob]);
       }
       blobPath(mg, pts);
       mg.fill();
