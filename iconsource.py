@@ -60,6 +60,53 @@ def _grid_size():
     return int(m.group(1)), int(m.group(2))
 
 
+def _mounted_volume_names():
+    """Имена томов, которые сейчас реально смонтированы (нижний регистр)."""
+    names = set()
+    try:
+        out = subprocess.run(["gio", "mount", "-l"], capture_output=True,
+                             text=True, timeout=10).stdout
+    except Exception:
+        out = ""
+    for line in out.splitlines():
+        if line.startswith("Mount(") or line.strip().startswith("Volume("):
+            # Формат: Mount(0): NAME -> file:///path
+            if ":" in line:
+                tail = line.split(":", 1)[1]
+                if "->" in tail:
+                    names.add(tail.split("->")[0].strip().lower())
+    # запасной источник — /media и /run/media
+    for base in (Path("/media") / os.environ.get("USER", ""),
+                 Path("/run/media") / os.environ.get("USER", "")):
+        try:
+            for p in base.iterdir():
+                names.add(p.name.lower())
+        except OSError:
+            pass
+    return names
+
+
+def _volume_is_present(section, mounted):
+    """Есть ли том из раздела [Том …] среди смонтированных.
+
+    Nemo хранит раздел даже после извлечения флешки. Если строить поляну
+    по такой записи, на рабочем столе появляется круглое пятно от
+    несуществующей иконки. computer/trash — всегда настоящие.
+    """
+    low = section.lower()
+    if "volume" not in low:
+        return True
+    display = section.split(".volume")[0].strip("[]")
+    # «Том 524 MB» / «Volume 524 MB» -> «524 mb»
+    tokens = re.sub(r"^(?:том|volume)\s+", "", display, flags=re.I).strip().lower()
+    if not tokens:
+        return False
+    for name in mounted:
+        if tokens in name or name in tokens:
+            return True
+    return False
+
+
 def _virtual_icons():
     """[{name, x, y}] виртуальных иконок из desktop-metadata."""
     result = []
@@ -68,9 +115,14 @@ def _virtual_icons():
         cp.read(DESKTOP_META, encoding="utf-8")
     except Exception:
         return result
+    mounted = _mounted_volume_names()
     for section in cp.sections():
+        if section.startswith("desktop-"):
+            continue
         pos = cp.get(section, "nemo-icon-position", fallback=None)
         if not pos:
+            continue
+        if not _volume_is_present(section, mounted):
             continue
         m = re.match(r"\s*(\d+)\s*,\s*(\d+)", pos)
         if not m:
