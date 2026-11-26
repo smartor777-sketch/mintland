@@ -15,8 +15,8 @@
     id: 'worldmap',
     name: 'Старая карта',
     palette: {
-      paper: '#d6c4a0',
-      paperLight: '#efe1bb',
+      paper: '#d6be91',
+      paperLight: '#e0cda3',
       paperEdge: 'rgba(80, 55, 30, 0.20)',
       sea: '#cdbb96',
       seaLine: 'rgba(96, 73, 43, 0.22)',
