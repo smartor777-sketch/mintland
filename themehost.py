@@ -338,11 +338,28 @@ class ThemeHost:
 
     def _load_uri(self):
         # Версия по mtime: WebKit кэширует file:// и после правки темы
-        # показывал старую страницу. Для обоев кэш не нужен.
+        # показывал старую страницу. Считаем максимум по самой странице
+        # и по её скриптам — иначе обновлённый engine.js не подхватывался.
         try:
             ver = int(self.html_path.stat().st_mtime)
         except OSError:
             ver = 0
+        try:
+            for extra in self.html_path.parent.glob("*.js"):
+                ver = max(ver, int(extra.stat().st_mtime))
+            for extra in self.html_path.parent.glob("*/*.js"):
+                ver = max(ver, int(extra.stat().st_mtime))
+        except OSError:
+            pass
+
+        # И на всякий случай отключаем дисковый кэш: обои читаются с
+        # локального диска, кэш только мешает обновлениям.
+        try:
+            self.view.get_settings().set_cache_model(
+                WebKit2.CacheModel.DOCUMENT_VIEWER)
+        except Exception:
+            pass
+
         uri = "file://" + str(self.html_path) + "?wallpaper=1&v=" + str(ver)
         self._log("loading " + uri)
         self.view.load_uri(uri)
