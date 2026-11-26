@@ -29,7 +29,7 @@ tests) — see [`docs/en/WAYLAND.md`](docs/en/WAYLAND.md).
 
 **Control panel** — the **Mintland** entry in the applications menu:
 ---
-![Mintland control panel](docs/switcher-en.png)
+![Mintland control panel](docs/switcher-en-v041.png)
 ---
 **Themes** — animated previews (GIF):
 
