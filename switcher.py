@@ -262,7 +262,8 @@ PARAM_LABELS = {
         "forest": "Леса",
         "roads": "Замки и дороги",
         "units": "Повозки",
-        "island": "Остров вокруг иконок",
+        "island": "Отступ вокруг иконок",
+        "birds": "Птицы",
     },
 }
 
@@ -281,7 +282,7 @@ UNIT_LABELS = {
     "meadow": {"sigma": "px"},
     "night": {"halo": "px", "shoot": "шт", "fireflies": "шт"},
     "forest": {"trees": "шт", "glade": "px"},
-    "worldmap": {"units": "шт"},
+    "worldmap": {"units": "шт", "birds": "шт"},
 }
 
 
@@ -390,7 +391,8 @@ UI = {
                 "params": {
                     "density": "Density", "forest": "Forests",
                     "roads": "Castles and roads", "units": "Carts",
-                    "island": "Icon island size",
+                    "island": "Icon clearance",
+                    "birds": "Birds",
                 },
                 "variants": {"worldmap": "Old map"},
             },

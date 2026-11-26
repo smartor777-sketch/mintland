@@ -894,6 +894,87 @@
     });
   }
 
+  /* Котик у избы: сидит, хвост трубой. Рисуем в том же ключе, что и
+   * остальные объекты — светлая заливка и контур тушью, иначе на карте
+   * он читается просто чёрным пятном. */
+  function makeCat(seed, p, sleeping) {
+    var w = 22, h = 22, ax = 11, ay = 18;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+
+      g.fillStyle = p.shadow;
+      g.beginPath();
+      g.ellipse(1, 0, 6.5, 1.9, 0, 0, TAU);
+      g.fill();
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.05;
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      g.fillStyle = p.wallRight;
+
+      if (sleeping) {
+        // Свернулся калачиком.
+        g.beginPath();
+        g.ellipse(-0.5, -3.8, 6.8, 3.5, 0, 0, TAU);
+        g.fill(); g.stroke();
+
+        g.beginPath();
+        g.arc(4.0, -6.0, 2.2, 0, TAU);
+        g.fill(); g.stroke();
+
+        // Ушки.
+        g.beginPath();
+        g.moveTo(3.2, -7.6); g.lineTo(4.2, -9.6); g.lineTo(5.6, -7.4);
+        g.closePath(); g.fill(); g.stroke();
+
+        // Хвост вокруг тела.
+        g.beginPath();
+        g.moveTo(-6.4, -2.6);
+        g.quadraticCurveTo(-9.0, -5.4, -6.0, -7.0);
+        g.stroke();
+
+        // Закрытые глаза.
+        g.beginPath();
+        g.moveTo(4.6, -6.2); g.lineTo(5.8, -6.0);
+        g.stroke();
+        return;
+      }
+
+      // Сидящее тело.
+      g.beginPath();
+      g.ellipse(0, -4.6, 4.0, 5.4, 0, 0, TAU);
+      g.fill(); g.stroke();
+
+      // Голова.
+      g.beginPath();
+      g.arc(0.4, -11.0, 3.5, 0, TAU);
+      g.fill(); g.stroke();
+
+      // Уши.
+      g.beginPath();
+      g.moveTo(-2.6, -12.6); g.lineTo(-3.2, -16.0); g.lineTo(-0.2, -13.8);
+      g.closePath(); g.fill(); g.stroke();
+      g.beginPath();
+      g.moveTo(2.8, -12.6); g.lineTo(3.8, -15.8); g.lineTo(0.8, -13.8);
+      g.closePath(); g.fill(); g.stroke();
+
+      // Хвост трубой.
+      g.beginPath();
+      g.moveTo(-3.2, -2.4);
+      g.quadraticCurveTo(-8.6, -4.6, -6.4, -11.2);
+      g.stroke();
+
+      // Мордочка: глаза и нос.
+      g.fillStyle = p.ink;
+      g.beginPath(); g.arc(-1.2, -11.2, 0.7, 0, TAU); g.fill();
+      g.beginPath(); g.arc(1.8, -11.2, 0.7, 0, TAU); g.fill();
+      g.beginPath();
+      g.moveTo(0.3, -9.9); g.lineTo(1.5, -9.9); g.lineTo(0.9, -9.1);
+      g.closePath(); g.fill();
+    });
+  }
+
   /* Маяк: сужающаяся полосатая башня, галерея, фонарь и купол. */
   function makeLighthouse(seed, p) {
     var w = 30, h = 56, ax = 15, ay = 49;
@@ -1178,7 +1259,7 @@
   PaperEngine.prototype._buildSprites = function () {
     var p = this.theme.palette;
     var i;
-    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [], boats: [], witches: [], birds: [], lighthouses: [], beams: [], pumpkins: [] };
+    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [], boats: [], witches: [], birds: [], lighthouses: [], beams: [], pumpkins: [], cats: [] };
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1200 + i * 131, p, false));
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1e00 + i * 167, p, true));
     for (i = 0; i < 5; i++) s.houses.push(makeHouse(0x3400 + i * 173, p));
@@ -1195,6 +1276,8 @@
     for (i = 0; i < 2; i++) s.lighthouses.push(makeLighthouse(0xaa00 + i * 43, p));
     for (i = 0; i < 2; i++) s.beams.push(makeBeam(0xab00 + i * 47, p));
     for (i = 0; i < 3; i++) s.pumpkins.push(makePumpkin(0xac00 + i * 31, p));
+    s.cats.push(makeCat(0xad00, p, false));
+    s.cats.push(makeCat(0xad40, p, true));
     this._sprites = s;
   };
 
@@ -1211,7 +1294,7 @@
   };
 
   PaperEngine.prototype.setParams = function (v) {
-    var keys = ['density', 'forest', 'roads', 'units', 'cap30', 'island'];
+    var keys = ['density', 'forest', 'roads', 'units', 'cap30', 'island', 'birds'];
     var world = false;
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
@@ -1306,75 +1389,97 @@
 
   /* ---------- озёра ---------- */
 
+  // Озёра целиком внутри листа и никогда не под иконками. Если на
+  // исходном месте не помещаются, ищем свободное место по сетке; если
+  // и там тесно — уменьшаем. Так верхнее озеро больше не наезжает на
+  // колонку значков.
   PaperEngine.prototype._buildLakes = function (rng) {
     var W = this.W, H = this.H;
     var list = this.theme.lakes || [];
     var out = [];
+    var placed = [];
+
     for (var i = 0; i < list.length; i++) {
       var cfg = list[i];
+      var baseRx = Math.max(18, cfg.rx * W);
+      var baseRy = Math.max(11, cfg.ry * H);
+      var best = null;
+
+      for (var shrink = 1; shrink >= 0.48; shrink -= 0.12) {
+        var rx = baseRx * shrink;
+        var ry = baseRy * shrink;
+
+        // Форма озера гуляет на ±10%, поэтому берём запас 20%.
+        var mX = rx * 1.2, mY = ry * 1.2;
+        var minX = mX, maxX = W - mX;
+        var minY = mY, maxY = H - mY;
+        if (maxX <= minX || maxY <= minY) continue;
+
+        var cands = [];
+        var ox = clamp(cfg.x * W, minX, maxX);
+        var oy = clamp(cfg.y * H, minY, maxY);
+        cands.push({ x: ox, y: oy });
+
+        var stepX = Math.max(56, rx * 0.75);
+        var stepY = Math.max(46, ry * 0.75);
+        for (var gy = minY; gy <= maxY + 1; gy += stepY) {
+          for (var gx = minX; gx <= maxX + 1; gx += stepX) {
+            cands.push({ x: gx, y: gy });
+          }
+        }
+
+        for (var c = 0; c < cands.length; c++) {
+          var cx = cands[c].x, cy = cands[c].y;
+
+          // Не ставим озеро на подписи и компас.
+          if (this._inReserved(cx, cy, Math.max(rx, ry) * 0.6)) continue;
+
+          // Зазор до иконок: прямоугольник озера + отступ островка.
+          var clear = Infinity;
+          for (var k = 0; k < this.icons.length; k++) {
+            var r = this.icons[k];
+            var dx = Math.max(r.x - (cx + rx * 1.1), 0, (cx - rx * 1.1) - (r.x + r.w));
+            var dy = Math.max(r.y - (cy + ry * 1.1), 0, (cy - ry * 1.1) - (r.y + r.h));
+            var d = Math.hypot(dx, dy);
+            if (d < clear) clear = d;
+          }
+          if (this.icons.length && clear < this._islandPad() + 26) continue;
+
+          // Не сливаемся с другим озером.
+          var clash = false;
+          for (var q = 0; q < placed.length; q++) {
+            var o = placed[q];
+            if (Math.hypot(o.cx - cx, o.cy - cy) <
+                (o.rx + rx) * 1.15 + 24) { clash = true; break; }
+          }
+          if (clash) continue;
+
+          var distHome = Math.hypot(cx - cfg.x * W, cy - cfg.y * H);
+          var score = clear * 2 - distHome * 0.15;
+          if (!best || score > best.score) {
+            best = { x: cx, y: cy, rx: rx, ry: ry, score: score };
+          }
+        }
+
+        if (best) break;
+      }
+
+      if (!best) continue;
+
       out.push({
-        cx: cfg.x * W,
-        cy: cfg.y * H,
-        rx: Math.max(18, cfg.rx * W),
-        ry: Math.max(11, cfg.ry * H),
+        cx: best.x,
+        cy: best.y,
+        rx: best.rx,
+        ry: best.ry,
         ph: [rng() * TAU, rng() * TAU, rng() * TAU],
         amp: [0.10, 0.055, 0.03],
         name: cfg.name || ''
       });
+      placed.push({ cx: best.x, cy: best.y, rx: best.rx, ry: best.ry });
     }
+
     this._lakeHome = out.map(function (l) { return { cx: l.cx, cy: l.cy }; });
     this.lakes = out;
-    this._dodgeLakes();
-  };
-
-  // Если озеро попало под иконки, отодвигаем его в сторону, пока оно не
-  // освободит островки. Это и есть «карта строится вокруг иконок»:
-  // вода уходит, а не просвечивает под значком.
-  PaperEngine.prototype._dodgeLakes = function () {
-    if (!this.icons.length) return;
-    var W = this.W, H = this.H;
-
-    for (var li = 0; li < this.lakes.length; li++) {
-      var lake = this.lakes[li];
-      for (var iter = 0; iter < 14; iter++) {
-        var worst = null, worstOverlap = 0;
-        for (var i = 0; i < this.icons.length; i++) {
-          var r = this.icons[i];
-          var pad = 28;
-          var ix0 = r.x - pad, iy0 = r.y - pad;
-          var ix1 = r.x + r.w + pad, iy1 = r.y + r.h + pad;
-          var lx0 = lake.cx - lake.rx * 1.05;
-          var lx1 = lake.cx + lake.rx * 1.05;
-          var ly0 = lake.cy - lake.ry * 1.05;
-          var ly1 = lake.cy + lake.ry * 1.05;
-          var ox = Math.min(ix1, lx1) - Math.max(ix0, lx0);
-          var oy = Math.min(iy1, ly1) - Math.max(iy0, ly0);
-          if (ox > 0 && oy > 0) {
-            var overlap = Math.min(ox, oy);
-            if (overlap > worstOverlap) {
-              worstOverlap = overlap;
-              worst = r;
-            }
-          }
-        }
-        if (!worst) break;
-
-        var dx = lake.cx - (worst.x + worst.w * 0.5);
-        var dy = lake.cy - (worst.y + worst.h * 0.5);
-        var len = Math.hypot(dx, dy);
-        if (len < 1) { dx = 1; dy = 0; len = 1; }
-        // Уводим озеро по горизонтали: вода в центре экрана не должна
-        // уползать вверх, иначе она попадает под верхние иконки.
-        var push = worstOverlap + 12;
-        lake.cx += (dx >= 0 ? 1 : -1) * push;
-        lake.cy += (dy / len) * push * 0.25;
-
-        // Не уводим озеро целиком за экран.
-        lake.cx = clamp(lake.cx, -lake.rx * 0.55, W + lake.rx * 0.55);
-        lake.cy = clamp(lake.cy, -lake.ry * 0.55, H + lake.ry * 0.55);
-      }
-    }
-
     this._snapRiversToLakes();
   };
 
@@ -1799,7 +1904,7 @@
     // В старых сохранениях island был долей 0..1. Понимаем оба формата,
     // чтобы после обновления остров не схлопнулся в 1 px.
     if (k <= 1.5) k = 6 + k * 46;
-    return clamp(Math.round(k), 0, 80);
+    return clamp(Math.round(k), 0, 120);
   };
 
   PaperEngine.prototype._inIconZone = function (x, y, pad) {
@@ -2406,12 +2511,25 @@
 
       // Тыковка у крыльца: маленькая, чуть впереди и сбоку, чтобы
       // читалась рядом с избой, а не под ней.
-      var pumpkinX = witch.x + 26;
+      var pumpkinX = witch.x + 48;
       var pumpkinY = witch.y + 8;
       objects.push({
         type: 'pumpkin', x: pumpkinX, y: pumpkinY, s: 0.55 + rng() * 0.12,
         v: Math.floor(rng() * this._sprites.pumpkins.length),
         r: 8
+      });
+
+      // Котик: у избы, с другой стороны от тыквы. Половина шансов,
+      // что он спит — так сцена живее.
+      var catX = witch.x + 30;
+      var catY = witch.y + 4;
+      objects.push({
+        type: 'cat',
+        x: catX,
+        y: catY,
+        s: 1.25 + rng() * 0.15,
+        v: 0,
+        r: 10
       });
 
       this._witchLabel = { x: witch.x, y: witch.y };
@@ -2864,7 +2982,7 @@
     return s;
   };
 
-  var SPRITE_KEYS = { witch: 'witches', bush: 'bushes', pumpkin: 'pumpkins' };
+  var SPRITE_KEYS = { witch: 'witches', bush: 'bushes', pumpkin: 'pumpkins', cat: 'cats' };
 
   PaperEngine.prototype._spriteFor = function (o) {
     var key = SPRITE_KEYS[o.type] || (o.type + 's');
@@ -3166,30 +3284,40 @@
 
   // Ворон кружит над избушкой ведьмы: медленный эллипс и два кадра
   // взмаха. Двигается только в динамическом слое.
+  // Птицы кружат над избушкой ведьмы: количество задаётся ползунком,
+  // каждая летит по своей орбите с собственным периодом.
   PaperEngine.prototype._drawBirds = function (g, t) {
     var witch = this.world && this.world.witch;
     var sprites = this._sprites.birds || [];
     if (!witch || !sprites.length) return;
 
-    // Круг над избушкой: медленно, по вытянутому эллипсу. Проверяем
-    // несколько точек орбиты, чтобы ворон не пропадал под иконкой.
-    var cx = witch.x;
-    var cy = witch.y - 92;
-    var a = t * 0.00042 + 1.7;
-    var bx = cx + Math.cos(a) * 62;
-    var by = cy + Math.sin(a) * 22;
+    var n = clamp(Math.round(this.params.birds == null ? 2 : this.params.birds), 0, 12);
+    if (!n) return;
 
-    if (this._inIconZone(bx, by, 24)) return;
+    for (var i = 0; i < n; i++) {
+      var seed = i * 1.618;
+      var radius = 42 + (i % 4) * 16;
+      var height = witch.y - 74 - (i % 3) * 14;
+      var speed = 0.00030 + (i % 3) * 0.00007;
+      var phase = seed * 2.3;
 
-    var spr = sprites[Math.floor(t * 0.0045) % sprites.length];
-    var s = 1.0;
-    g.save();
-    g.translate(bx, by);
-    // Лёгкий наклон по направлению движения.
-    g.rotate(Math.cos(a) * 0.10);
-    g.scale(1.35, 1.35);
-    g.drawImage(spr.c, -spr.ax * s, -spr.ay * s, spr.w * s, spr.h * s);
-    g.restore();
+      var a = t * speed + phase;
+      var bx = witch.x + Math.cos(a) * radius;
+      var by = height + Math.sin(a) * radius * 0.34;
+
+      if (this._inIconZone(bx, by, 24)) continue;
+
+      var spr = sprites[Math.floor(t * 0.0045 + i * 0.7) % sprites.length];
+      var sc = 1.15 + (i % 3) * 0.1;
+
+      g.save();
+      g.translate(bx, by);
+      g.rotate(Math.cos(a) * 0.10);
+      g.scale(sc, sc);
+      g.globalAlpha = 0.95;
+      g.drawImage(spr.c, -spr.ax, -spr.ay, spr.w, spr.h);
+      g.restore();
+    }
   };
 
   PaperEngine.prototype._drawUnits = function (g, t) {
