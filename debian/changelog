@@ -1,6 +1,8 @@
 mintland (0.4.1) unstable; urgency=medium
 
-  * Give river tributaries the same width as their parent channel.
+  * Remove dead-end river tributaries: the water network is now a single
+    calm chain between lakes, with no branches ending in the middle of
+    the sheet.
   * Check the full castle sprite footprint before placing a town, so no
     road ends at an empty spot under an icon island.
   * Cap the icon clearance slider at 70 px.

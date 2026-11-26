@@ -1755,77 +1755,9 @@
     };
     addArc(this._lakeRim(lastLake, sink.x, sink.y, 0.55), sink, 2.2);
 
-    // Ответвления: тонкие рукава в сторону от основного русла.
-    // Истончаются к концу и никуда не ведут — как на старых картах.
-    function addTributary(main) {
-      var mp = main.points;
-
-      // Берём точку русла, которая реально видна на листе.
-      var cands = [];
-      for (var i = 2; i < mp.length - 2; i++) {
-        var p = mp[i];
-        if (p.x > W * 0.08 && p.x < W * 0.92 &&
-            p.y > H * 0.10 && p.y < H * 0.90) {
-          cands.push(i);
-        }
-      }
-      if (!cands.length) return false;
-
-      var idx = cands[Math.floor(rng() * cands.length)];
-      var base = mp[idx];
-      var prev = mp[Math.max(0, idx - 4)];
-      var tx = base.x - prev.x, ty = base.y - prev.y;
-      var tlen = Math.hypot(tx, ty) || 1;
-      tx /= tlen; ty /= tlen;
-
-      // Перпендикуляр к руслу, случайная сторона.
-      var side = rng() < 0.5 ? -1 : 1;
-      var nx = -ty * side, ny = tx * side;
-
-      var length = 70 + rng() * 90;
-      var steps = 16;
-      var pts = [];
-      var x = base.x, y = base.y;
-
-      for (var si = 0; si <= steps; si++) {
-        pts.push({ x: x, y: y });
-        var t = si / steps;
-        // Рукав плавно отходит вбок и слегка загибается по течению.
-        var dirX = nx * (1 - t * 0.35) + tx * t * 0.55;
-        var dirY = ny * (1 - t * 0.35) + ty * t * 0.55;
-        var dl = Math.hypot(dirX, dirY) || 1;
-        x += dirX / dl * (length / steps);
-        y += dirY / dl * (length / steps);
-      }
-
-      // Первые точки лежат на родительском русле — его игнорируем.
-      var parentIdx = built.indexOf(main.points);
-      if (crossesBuilt(pts, parentIdx)) return false;
-
-      built.push(pts);
-      builtBoxes.push(bbox(pts));
-      var cum2 = [0];
-      for (var q4 = 1; q4 < pts.length; q4++) {
-        cum2.push(cum2[q4 - 1] + Math.hypot(pts[q4].x - pts[q4 - 1].x,
-                                             pts[q4].y - pts[q4 - 1].y));
-      }
-      self.rivers.push({
-        points: pts,
-        cum: cum2,
-        length: cum2[cum2.length - 1],
-        width: main.width,
-        taper: false
-      });
-      return true;
-    }
-
-    // По одному-двум рукавам от каждой видимой крупной реки.
-    var mainRivers = this.rivers.slice();
-    for (var mi = 0; mi < mainRivers.length; mi++) {
-      if (mainRivers[mi].width < 1.5) continue;
-      var want = 1 + (mi % 2);
-      for (var wi = 0; wi < want; wi++) addTributary(mainRivers[mi]);
-    }
+    // Тупиковых ответвлений больше нет: замкнутая сеть рек и проток
+    // между озёрами выглядит спокойнее, чем рукава, обрывающиеся
+    // посреди листа.
 
   };
 
@@ -2858,15 +2790,11 @@
       g.stroke();
 
       g.strokeStyle = p.river;
-      if (false) {
-        // (оставлено на случай возврата сужения)
-      } else {
-        g.lineWidth = w;
-        g.beginPath();
-        g.moveTo(pts[0].x, pts[0].y);
-        for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
-        g.stroke();
-      }
+      g.lineWidth = w;
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
+      g.stroke();
     }
     g.restore();
   };
