@@ -147,7 +147,12 @@
     // При перетаскивании хост присылает много сообщений; слой
     // полян пересобирается в ближайшем кадре, а не на каждое.
     engine.setIconsSoon(icons);
-    if (paused || FREEZE) engine.render(performance.now());
+    if (paused || FREEZE) {
+      engine.render(performance.now());
+      // Мир пересобирается с задержкой (когда иконка остановилась),
+      // а на паузе кадров нет — поэтому досылаем один отложенный кадр.
+      setTimeout(function () { engine.render(performance.now()); }, 420);
+    }
   }
 
   engine.onFrame = function (e) {

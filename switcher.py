@@ -29,6 +29,43 @@ from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 HERE = Path(__file__).resolve().parent
 
 
+def app_version():
+    """Версия пакета: из debian/changelog в дереве исходников или из dpkg.
+
+    В заголовке окна номер версии нужен, чтобы по скриншоту было видно,
+    какая сборка у пользователя. Тихо возвращаем None, если узнать нельзя.
+    """
+    try:
+        import gzip
+        import re
+        text = ""
+        # Дерево исходников: debian/changelog рядом с кодом.
+        local = HERE / "debian" / "changelog"
+        if local.is_file():
+            text = local.read_text(encoding="utf-8", errors="replace")
+        else:
+            # Установленный пакет: /usr/share/doc/mintland/changelog.gz
+            for doc in (Path("/usr/share/doc/mintland/changelog.gz"),
+                        HERE.parent / "share" / "doc" / "mintland" / "changelog.gz"):
+                if doc.is_file():
+                    text = gzip.decompress(doc.read_bytes()).decode("utf-8", "replace")
+                    break
+        m = re.search(r"^mintland \(([^)]+)\)", text, re.M)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    try:
+        import subprocess
+        out = subprocess.run(["dpkg-query", "-W", "-f=${Version}", "mintland"],
+                             capture_output=True, text=True, timeout=3).stdout
+        if out.strip():
+            return out.strip()
+    except Exception:
+        pass
+    return None
+
+
 def _data_dir():
     """Каталог с темами и превью.
 
@@ -595,7 +632,9 @@ def fmt_value(p, value, theme_id, lang="en"):
 
 class Switcher(Gtk.Window):
     def __init__(self, themes):
-        super().__init__(title="Mintland")
+        version = app_version()
+        title = "Mintland v" + version if version else "Mintland"
+        super().__init__(title=title)
         self.lang = detect_lang()
         self.themes = themes
         self.theme_by_id = {t["id"]: t for t in themes}

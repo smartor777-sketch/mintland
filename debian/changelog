@@ -6,6 +6,10 @@ mintland (0.3.2) unstable; urgency=medium
     baked, so dragging icons no longer redraws the whole scene.
   * Register worldmap in themes.json and the switcher with density,
     forest, castles/roads and carts controls.
+  * Build the map around icon clearings: trees, roads and castles avoid
+    icon rectangles instead of being covered by an opaque patch.
+  * Rebuild the world shortly after an icon stops moving, not mid-drag.
+  * Show the package version in the switcher window title.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 

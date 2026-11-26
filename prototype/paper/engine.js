@@ -750,6 +750,9 @@
     this.displayDirty = true;
     this._blocked = null;
     this._roadsForPlacement = [];
+    this._needsWorldRebuild = false;
+    this._iconChangedAt = 0;
+    this._rebuildDelay = 320;
     this._reserved = [];
     this._buildSprites();
   }
@@ -799,12 +802,23 @@
   };
 
   PaperEngine.prototype.setIcons = function (icons) {
+    var before = this._iconSig();
     this.icons = icons || [];
-    // Основа не трогается: меняются только поляны под иконками.
+    var after = this._iconSig();
+
+    // Немедленно обновляем поляны — при перетаскивании это дешёвый слой.
     this._clearingSig = '';
     this.overlayDirty = true;
     this.displayDirty = true;
     this.lastIconMove = performance.now();
+
+    // А сам мир (лес, дороги, замки) пересоберём, когда иконка
+    // остановится: карта должна обтекать островки, а не просто
+    // закрываться подложкой.
+    if (before !== after) {
+      this._needsWorldRebuild = true;
+      this._iconChangedAt = performance.now();
+    }
   };
 
   // Хост присылает прямоугольники на каждом шаге перетаскивания, часто
@@ -986,6 +1000,35 @@
     return false;
   };
 
+  /* ---------- островки иконок ---------- */
+
+  // Прямоугольники иконок с запасом: сюда нельзя ставить объекты и
+  // прокладывать дороги. Именно из этого получается «карта вокруг
+  // рабочего стола минус иконки», а не подложка поверх рисунка.
+  PaperEngine.prototype._iconZones = function (pad) {
+    var out = [];
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      out.push({
+        x: r.x - pad,
+        y: r.y - pad,
+        w: r.w + pad * 2,
+        h: r.h + pad * 2
+      });
+    }
+    return out;
+  };
+
+  PaperEngine.prototype._inIconZone = function (x, y, pad) {
+    var icons = this.icons;
+    for (var i = 0; i < icons.length; i++) {
+      var r = icons[i];
+      if (x > r.x - pad && x < r.x + r.w + pad &&
+          y > r.y - pad && y < r.y + r.h + pad) return true;
+    }
+    return false;
+  };
+
   /* ---------- дороги ---------- */
 
   PaperEngine.prototype._buildBlocked = function () {
@@ -999,7 +1042,8 @@
         var x = c * step, y = r * step;
         data[r * cols + c] =
           (x < 18 || x > W - 18 || y < 18 || y > H - 18 ||
-           this._inLake(x, y, 22)) ? 1 : 0;
+           this._inLake(x, y, 22) ||
+           this._inIconZone(x, y, 14)) ? 1 : 0;
       }
     }
     this._blocked = { step: step, cols: cols, rows: rows, data: data };
@@ -1171,6 +1215,7 @@
         if (this._inLake(x, y, 34)) continue;
         if (this._nearRiver(x, y, 26)) continue;
         if (this._inReserved(x, y, 30)) continue;
+        if (this._inIconZone(x, y, 40)) continue;
         var ok = true;
         for (var k = 0; k < castles.length; k++) {
           if (Math.hypot(castles[k].x - x, castles[k].y - y) < minD) {
@@ -1193,6 +1238,7 @@
       if (this._inLake(rx, ry, 34)) continue;
       if (this._nearRiver(rx, ry, 26)) continue;
       if (this._inReserved(rx, ry, 30)) continue;
+      if (this._inIconZone(rx, ry, 40)) continue;
       var ok2 = true;
       for (var k2 = 0; k2 < castles.length; k2++) {
         if (Math.hypot(castles[k2].x - rx, castles[k2].y - ry) < minD * 0.75) {
@@ -1309,6 +1355,7 @@
       if (self._inLake(x, y, 10)) return false;
       if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
+      if (self._inIconZone(x, y, r + 10)) return false;
 
       var pad = r + 22;
       var c0 = Math.floor((x - pad) / CELL);
@@ -1480,6 +1527,7 @@
       if (this._nearRiver(tx2, ty2, 3)) continue;
       if (this._nearRoad(tx2, ty2, 5)) continue;
       if (this._inReserved(tx2, ty2, 4)) continue;
+      if (this._inIconZone(tx2, ty2, 8)) continue;
       tufts.push({ x: tx2, y: ty2, s: 0.7 + rng() * 0.6, a: rng() * TAU });
     }
 
@@ -1901,7 +1949,7 @@
     // Поляна чуть светлее бумаги — иначе она невидима и кажется, что
     // лес просто вырезан справа от иконки. Текстуру при этом сохраняем.
     og.globalCompositeOperation = 'source-atop';
-    og.globalAlpha = 0.30;
+    og.globalAlpha = 0.16;
     og.fillStyle = this.theme.palette.paperLight;
     og.fillRect(0, 0, this.W, this.H);
     og.globalAlpha = 1;
@@ -2067,6 +2115,12 @@
       this._iconsPending = false;
       this.setIcons(this._pendingIcons);
       this._pendingIcons = null;
+    }
+    if (this._needsWorldRebuild &&
+        performance.now() - this._iconChangedAt > this._rebuildDelay) {
+      this._needsWorldRebuild = false;
+      this.worldDirty = true;
+      this.bakeDirty = true;
     }
     if (this.bakeDirty || this.worldDirty || !this.world) this.bake();
     this._ensureOverlay();
