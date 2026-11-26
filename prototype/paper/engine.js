@@ -1505,104 +1505,6 @@
 
     this._lakeHome = out.map(function (l) { return { cx: l.cx, cy: l.cy }; });
     this.lakes = out;
-    this._buildLakeLinks(rng);
-  };
-
-  // Водные линии между озёрами. Это не «канал по линейке»: дуга с
-  // заметным изгибом идёт в обход уже нарисованной воды. Если все
-  // варианты изгиба пересекают реку — линия не рисуется.
-  PaperEngine.prototype._buildLakeLinks = function (rng) {
-    var links = this.theme.lakeLinks || [];
-    var out = [];
-    var rivers = this.rivers || [];
-    var self = this;
-
-    function arc(p0, p1, bow) {
-      var dx = p1.x - p0.x, dy = p1.y - p0.y;
-      var len = Math.hypot(dx, dy) || 1;
-      var mx = (p0.x + p1.x) * 0.5 - dy / len * bow;
-      var my = (p0.y + p1.y) * 0.5 + dx / len * bow;
-      var pts = [];
-      var N = 32;
-      for (var k = 0; k <= N; k++) {
-        var t = k / N, mt = 1 - t;
-        pts.push({
-          x: mt * mt * p0.x + 2 * mt * t * mx + t * t * p1.x,
-          y: mt * mt * p0.y + 2 * mt * t * my + t * t * p1.y
-        });
-      }
-      return pts;
-    }
-
-    function crossesWater(pts) {
-      var others = rivers.concat(out);
-      for (var oi = 0; oi < others.length; oi++) {
-        var op = others[oi].points;
-        for (var i = 2; i < pts.length - 2; i++) {
-          for (var j = 1; j < op.length; j += 2) {
-            if (segIntersect(pts[i - 1], pts[i], op[j - 1], op[j])) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
-
-    function rim(lake, tx, ty, k) {
-      var ang = Math.atan2((ty - lake.cy) / lake.ry, (tx - lake.cx) / lake.rx);
-      var rr = self._lakeEdge(lake, ang) * (k == null ? 0.7 : k);
-      return {
-        x: lake.cx + Math.cos(ang) * lake.rx * rr,
-        y: lake.cy + Math.sin(ang) * lake.ry * rr
-      };
-    }
-
-    var used = {};
-    for (var i = 0; i < links.length; i++) {
-      var cfg = links[i];
-      var a = this.lakes[cfg.from];
-      var b = this.lakes[cfg.to];
-      if (!a || !b) continue;
-      // Из одного озера не может выходить две протоки: на карте это
-      // читается как раздвоенное русло.
-      if (used[cfg.from] || used[cfg.to]) continue;
-      used[cfg.from] = true;
-      used[cfg.to] = true;
-
-      var p0 = rim(a, b.cx, b.cy, 0.62);
-      var p1 = rim(b, a.cx, a.cy, 0.62);
-      var len = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
-      // Слишком далёкие озёра не соединяем: линия через полкарты
-      // выглядит как отдельная река, а не протока.
-      if (len > 520) continue;
-
-      var bows = [0.16, -0.16, 0.28, -0.28, 0.42, -0.42, 0.60, -0.60];
-      var built = null;
-      for (var bi = 0; bi < bows.length; bi++) {
-        var pts = arc(p0, p1, bows[bi] * len);
-        if (!crossesWater(pts)) { built = pts; break; }
-      }
-      if (!built) continue;
-
-      // Протока заметно тоньше реки, поэтому сглаживаем сильнее:
-      // иначе у дуги видны грани сегментов.
-      built = chaikin(built, 2);
-
-      var cum = [0];
-      for (var q = 1; q < built.length; q++) {
-        cum.push(cum[q - 1] + Math.hypot(built[q].x - built[q - 1].x,
-                                          built[q].y - built[q - 1].y));
-      }
-      out.push({
-        points: built,
-        cum: cum,
-        length: cum[cum.length - 1],
-        width: cfg.width || 1.5
-      });
-    }
-
-    this.lakeLinks = out;
   };
 
   // По одному кораблику на озеро. Ходит по внутреннему эллипсу,
@@ -1662,48 +1564,154 @@
 
   /* ---------- реки ---------- */
 
-  PaperEngine.prototype._initRiverSrc = function () {
-    var W = this.W, H = this.H;
-    var list = this.theme.rivers || [];
-    this._riverSrc = list.map(function (item) {
-      return {
-        width: item.width || 2.2,
-        points: (item.points || []).map(function (q) {
-          return [q[0] * W, q[1] * H];
-        })
-      };
-    });
+  // Точка на кромке озера в направлении (tx, ty). k < 1 — чуть внутри
+  // воды, чтобы линия начиналась под берегом, а не в воздухе.
+  PaperEngine.prototype._lakeRim = function (lake, tx, ty, k) {
+    var ang = Math.atan2((ty - lake.cy) / lake.ry, (tx - lake.cx) / lake.rx);
+    var r = this._lakeEdge(lake, ang) * (k == null ? 0.72 : k);
+    return {
+      x: lake.cx + Math.cos(ang) * lake.rx * r,
+      y: lake.cy + Math.sin(ang) * lake.ry * r
+    };
   };
 
-  PaperEngine.prototype._buildRivers = function () {
-    var list = this.theme.rivers || [];
-    var out = [];
+  // Вода строится ОТ размещённых озёр, а не по фиксированным координатам.
+  // Одно русло проходит через все озёра цепочкой и уходит за края листа.
+  // Поэтому:
+  //   • каждая протока действительно соединяет озёра;
+  //   • нет раздвоенных русел (цепочка, а не дерево);
+  //   • нет самопересечений и пересечений между руслами — каждая дуга
+  //     проверяется по уже построенным.
+  PaperEngine.prototype._buildWaterNetwork = function (rng) {
+    var lakes = this.lakes || [];
+    this.rivers = [];
+    this.lakeLinks = [];
+    if (!lakes.length) return;
 
-    for (var i = 0; i < list.length; i++) {
-      var src = this._riverSrc[i].points;
-      var pts = [];
-      for (var k = 0; k < src.length; k++) {
-        pts.push({ x: src[k][0], y: src[k][1] });
+    var self = this;
+    var W = this.W, H = this.H;
+    var built = [];
+
+    function crossesBuilt(pts) {
+      for (var o = 0; o < built.length; o++) {
+        var op = built[o];
+        for (var i = 1; i < pts.length; i++) {
+          for (var j = 1; j < op.length; j++) {
+            if (segIntersect(pts[i - 1], pts[i], op[j - 1], op[j])) {
+              return true;
+            }
+          }
+        }
       }
+      return false;
+    }
 
-      // Река — гладкая авторская линия. Островки иконок непрозрачны,
-      // поэтому вода под ними просто не видна: обводить их не нужно.
-      // A* давал ступеньки и развилки, поэтому от него отказались.
-      pts = chaikin(pts, 4);
-
+    function pushSegment(pts, width) {
+      built.push(pts);
       var cum = [0];
-      for (var c2 = 1; c2 < pts.length; c2++) {
-        cum.push(cum[c2 - 1] + Math.hypot(pts[c2].x - pts[c2 - 1].x,
-                                           pts[c2].y - pts[c2 - 1].y));
+      for (var q = 1; q < pts.length; q++) {
+        cum.push(cum[q - 1] + Math.hypot(pts[q].x - pts[q - 1].x,
+                                          pts[q].y - pts[q - 1].y));
       }
-      out.push({
+      self.rivers.push({
         points: pts,
         cum: cum,
         length: cum[cum.length - 1],
-        width: list[i].width || 2.2
+        width: width || 1.8
       });
     }
-    this.rivers = out;
+
+    // Дуга из a в b с изгибом. Перебираем изгибы, пока не получим
+    // линию, не пересекающую уже построенную воду.
+    // Дуга с плавным меандром: одна длинная дуга читалась как линейка.
+    // Пробуем несколько амплитуд, пока линия не перестанет пересекать
+    // уже построенную воду.
+    function addArc(a, b, width) {
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var len = Math.hypot(dx, dy) || 1;
+      var nx = -dy / len, ny = dx / len;   // нормаль к прямой
+
+      var amps = [0.10, 0.16, 0.22, 0.28, 0.36, 0.46, 0.58];
+      for (var ai = 0; ai < amps.length; ai++) {
+        var amp = amps[ai] * len;
+        var wave = Math.max(1, Math.round(len / 260));
+
+        var pts = [];
+        var N = Math.max(24, Math.round(len / 6));
+        for (var k = 0; k <= N; k++) {
+          var t = k / N;
+          var baseX = a.x + dx * t;
+          var baseY = a.y + dy * t;
+          // Мягкий S-образный изгиб: синус с нулём на концах.
+          var off = Math.sin(t * Math.PI * wave) * amp * Math.sin(Math.PI * t);
+          pts.push({ x: baseX + nx * off, y: baseY + ny * off });
+        }
+
+        // Сглаживаем до проверки: chaikin немного смещает линию, и
+        // проверка «до» пропускала пересечения после сглаживания.
+        var smooth = chaikin(pts, 2);
+        if (crossesBuilt(smooth)) continue;
+        pushSegment(smooth, width);
+        return true;
+      }
+      return false;
+    }
+
+    // Порядок озёр: ближайший сосед, начиная с верхнего левого.
+    var order = [];
+    var left = [];
+    for (var i = 0; i < lakes.length; i++) left.push(i);
+    left.sort(function (a, b) {
+      var la = lakes[a], lb = lakes[b];
+      return (la.cx + la.cy) - (lb.cx + lb.cy);
+    });
+    order.push(left.shift());
+    while (left.length) {
+      var last = lakes[order[order.length - 1]];
+      var bi2 = 0, bd = Infinity;
+      for (var k2 = 0; k2 < left.length; k2++) {
+        var cand = lakes[left[k2]];
+        var d = Math.hypot(cand.cx - last.cx, cand.cy - last.cy);
+        if (d < bd) { bd = d; bi2 = k2; }
+      }
+      order.push(left.splice(bi2, 1)[0]);
+    }
+
+    // Исток: продолжаем линию от первого озера за пределы листа.
+    var first = lakes[order[0]];
+    var second = lakes[order[1]] || { cx: first.cx + 100, cy: first.cy + 100 };
+    // Исток продолжает линию ОТ второго озера через первое — то есть
+    // уходит наружу, а не тянется через всю карту.
+    var outX = first.cx - second.cx;
+    var outY = first.cy - second.cy;
+    var outLen = Math.hypot(outX, outY) || 1;
+    var far = Math.hypot(W, H) + 120;
+    var src = {
+      x: first.cx + outX / outLen * far,
+      y: first.cy + outY / outLen * far
+    };
+    addArc(src, this._lakeRim(first, src.x, src.y, 0.55), 2.4);
+
+    // Протоки между озёрами в порядке цепочки.
+    for (var c = 1; c < order.length; c++) {
+      var a = lakes[order[c - 1]];
+      var b = lakes[order[c]];
+      var p0 = this._lakeRim(a, b.cx, b.cy, 0.62);
+      var p1 = this._lakeRim(b, a.cx, a.cy, 0.62);
+      addArc(p0, p1, 1.7);
+    }
+
+    // Устье: уводим воду от последнего озера за край листа.
+    var lastLake = lakes[order[order.length - 1]];
+    var prevLake = lakes[order[order.length - 2]] || lastLake;
+    var dirX = lastLake.cx - prevLake.cx;
+    var dirY = lastLake.cy - prevLake.cy;
+    var dlen = Math.hypot(dirX, dirY) || 1;
+    var sink = {
+      x: lastLake.cx + dirX / dlen * (Math.hypot(W, H) + 120),
+      y: lastLake.cy + dirY / dlen * (Math.hypot(W, H) + 120)
+    };
+    addArc(this._lakeRim(lastLake, sink.x, sink.y, 0.55), sink, 2.2);
   };
 
   PaperEngine.prototype._nearRiver = function (x, y, pad) {
@@ -2003,12 +2011,10 @@
 
     // Исходные точки рек нужны до смещения озёр: _dodgeLakes поправит
     // те, что привязаны к центрам.
-    this._initRiverSrc();
     this._buildLakes(rng);
-    this._buildRivers();
-    // Протоки строим после рек: проверка пересечений должна видеть
-    // готовые русла, иначе линия пересекала реку.
-    this._buildLakeLinks(rng);
+    // Вода строится из размещённых озёр: так русла всегда связаны
+    // с озёрами и не пересекаются друг с другом.
+    this._buildWaterNetwork(rng);
     this._buildBoats(rng);
     this._buildReserved();
     this._buildBlocked();
@@ -3267,35 +3273,71 @@
   // взмаха. Двигается только в динамическом слое.
   // Птицы кружат над избушкой ведьмы: количество задаётся ползунком,
   // каждая летит по своей орбите с собственным периодом.
+  // Птицы летают по всей карте: у каждой своя замкнутая орбита с
+  // собственным центром, радиусом и периодом. Над избой ведьмы они
+  // тоже бывают — её координаты входят в набор орбит.
   PaperEngine.prototype._drawBirds = function (g, t) {
-    var witch = this.world && this.world.witch;
     var sprites = this._sprites.birds || [];
-    if (!witch || !sprites.length) return;
+    if (!sprites.length || !this.world) return;
 
     var n = clamp(Math.round(this.params.birds == null ? 2 : this.params.birds), 0, 12);
     if (!n) return;
 
-    for (var i = 0; i < n; i++) {
-      var seed = i * 1.618;
-      var radius = 42 + (i % 4) * 16;
-      var height = witch.y - 74 - (i % 3) * 14;
-      var speed = 0.00030 + (i % 3) * 0.00007;
-      var phase = seed * 2.3;
+    var W = this.W, H = this.H;
+    var witch = this.world.witch;
+    var rng = mulberry32(0x5eed + 17);
 
-      var a = t * speed + phase;
-      var bx = witch.x + Math.cos(a) * radius;
-      var by = height + Math.sin(a) * radius * 0.34;
+    // Заранее считаем орбиты: часть над избой, часть по всей карте.
+    if (!this._birdOrbits || this._birdOrbitsN !== n ||
+        this._birdOrbitsW !== W || this._birdOrbitsH !== H) {
+      var orbits = [];
+      for (var i = 0; i < n; i++) {
+        var overHut = witch && i < Math.ceil(n / 2);
+        var cx, cy, rx, ry;
+        if (overHut) {
+          cx = witch.x;
+          cy = witch.y - 88 - (i % 3) * 12;
+          rx = 44 + (i % 4) * 14;
+          ry = rx * 0.36;
+        } else {
+          cx = W * (0.12 + rng() * 0.76);
+          cy = H * (0.12 + rng() * 0.62);
+          rx = Math.min(W, H) * (0.18 + rng() * 0.22);
+          ry = rx * (0.30 + rng() * 0.25);
+        }
+        orbits.push({
+          cx: cx, cy: cy, rx: rx, ry: ry,
+          speed: 0.00022 + rng() * 0.00022,
+          phase: rng() * TAU,
+          tilt: (rng() - 0.5) * 0.10,
+          flap: 0.0035 + rng() * 0.0022
+        });
+      }
+      this._birdOrbits = orbits;
+      this._birdOrbitsN = n;
+      this._birdOrbitsW = W;
+      this._birdOrbitsH = H;
+    }
 
-      if (this._inIconZone(bx, by, 24)) continue;
+    var orbits = this._birdOrbits;
+    for (var k = 0; k < orbits.length; k++) {
+      var o = orbits[k];
+      var a = t * o.speed + o.phase;
+      var bx = o.cx + Math.cos(a) * o.rx;
+      var by = o.cy + Math.sin(a) * o.ry;
 
-      var spr = sprites[Math.floor(t * 0.0045 + i * 0.7) % sprites.length];
-      var sc = 1.15 + (i % 3) * 0.1;
+      // Не рисуем над иконками и за пределами листа.
+      if (bx < -20 || bx > W + 20 || by < -20 || by > H + 20) continue;
+      if (this._inIconZone(bx, by, 18)) continue;
+
+      var spr = sprites[Math.floor(t * o.flap + k * 0.7) % sprites.length];
+      var sc = 1.0 + (k % 3) * 0.12;
 
       g.save();
-      g.translate(bx, by);
-      g.rotate(Math.cos(a) * 0.10);
+      g.translate(Math.round(bx), Math.round(by));
+      g.rotate(Math.cos(a) * 0.10 + o.tilt);
       g.scale(sc, sc);
-      g.globalAlpha = 0.95;
+      g.globalAlpha = 0.92;
       g.drawImage(spr.c, -spr.ax, -spr.ay, spr.w, spr.h);
       g.restore();
     }
