@@ -1,3 +1,27 @@
+mintland (0.4.0) unstable; urgency=medium
+
+  * Release "Old map" as a finished theme: dense hand-drawn parchment
+    world with castle towns, forests, mountain ranges, rivers, lakes,
+    sailing ships, a lighthouse, a witch's hut with cat and ravens.
+  * Draw castles as a tight cluster of steep-roofed houses with a tall
+    central tower and flag.
+  * Build the water network from the placed lakes: one chain through all
+    lakes, meandering arcs, thin tributaries that taper out, and no
+    self- or mutual intersections.
+  * Keep lakes fully inside the sheet and clear of the icons.
+  * Give the icon islands a light parchment fill and a real pixel slider
+    (4-120 px) for the clearance around icons.
+  * Add sliders for bird count and keep roads a small distance clear of
+    the icon islands.
+  * Split baking into a static base and a cheap icon overlay, so moving
+    an icon no longer redraws the whole scene.
+  * Move xprop/gio/xwininfo polling into background threads so the GTK
+    main loop and the WebKit frame clock never stall.
+  * Cache-bust the theme scripts as well as the page.
+  * Show the package version in the switcher window title.
+
+ -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 12:00:00 +0300
+
 mintland (0.3.2) unstable; urgency=medium
 
   * Add the "Old map" theme: a dense hand-drawn parchment world with
