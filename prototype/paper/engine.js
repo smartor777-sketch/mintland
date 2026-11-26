@@ -2631,19 +2631,8 @@
     g.save();
     g.translate(cx, cy);
 
-    // Светлая подложка: компас не должен сливаться с озером и рекой,
-    // поверх которых он иногда оказывается.
-    var halo = g.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5);
-    halo.addColorStop(0, 'rgba(246,236,210,0.85)');
-    halo.addColorStop(0.72, 'rgba(246,236,210,0.65)');
-    halo.addColorStop(1, 'rgba(246,236,210,0)');
-    g.fillStyle = halo;
-    g.beginPath();
-    g.arc(0, 0, r * 1.5, 0, TAU);
-    g.fill();
-
-    g.strokeStyle = 'rgba(78,58,30,0.92)';
-    g.lineWidth = 1.35;
+    g.strokeStyle = 'rgba(70,50,24,0.95)';
+    g.lineWidth = 1.5;
 
     // Двойное кольцо.
     g.beginPath(); g.arc(0, 0, r, 0, TAU); g.stroke();
@@ -2675,8 +2664,8 @@
         g.fillStyle = 'rgba(78,58,30,0.55)';
         g.fill();
       }
-      g.strokeStyle = 'rgba(78,58,30,0.75)';
-      g.lineWidth = 0.9;
+      g.strokeStyle = 'rgba(70,50,24,0.80)';
+      g.lineWidth = 1.0;
       g.stroke();
     }
 
@@ -2790,7 +2779,6 @@
     this._drawObjects(g);
     this._drawCastleNames(g);
     this._drawWitchLabel(g);
-    this._drawCompass(g);
     this._drawVignette(g);
     if (this.theme.frame !== false) this._drawFrame(g);
 
@@ -3078,7 +3066,12 @@
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.drawImage(this.base, 0, 0);
     g.drawImage(this.overlay, 0, 0);
+
+    // Роза ветров — поверх островков: в углу часто стоит иконка, и на
+    // базовом слое компас под её поляной был бы не виден.
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this._drawCompass(g);
+
     this.displayDirty = false;
   };
 
