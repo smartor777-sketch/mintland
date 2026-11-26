@@ -577,29 +577,43 @@
 
   /* Поле: ромб с бороздами. Заполняет равнины вокруг замков, как на
    * фэнтези-картах, и не спорит с лесом по силуэту. */
+  /* Поле: ромб с бороздами. Борозды идут вдоль одной из сторон ромба,
+   * а не пересекают его — иначе поле читается как пустой ромб. */
+  /* Поле: ромб с бороздами. Борозды рисуем по клипу ромба, чтобы они
+   * гарантированно заполняли его и не вылезали за контур. */
   function drawField(g, w, h, p, rng) {
     var ax = w * 0.5, ay = h - 4;
     var spr = { ink: p.ink, inkSoft: p.inkSoft };
+    var rx = 13, ry = 6;
 
     g.save();
     g.translate(ax, ay);
-    setInk(g, spr, 1);
 
     g.fillStyle = p.paperLight;
     g.beginPath();
-    g.moveTo(-13, 0); g.lineTo(0, 6); g.lineTo(13, 0); g.lineTo(0, -6);
+    g.moveTo(-rx, 0); g.lineTo(0, ry); g.lineTo(rx, 0); g.lineTo(0, -ry);
     g.closePath();
-    g.fill(); g.stroke();
+    g.fill();
+    setInk(g, spr, 1);
+    g.stroke();
+
+    // Борозды внутри ромба.
+    g.save();
+    g.beginPath();
+    g.moveTo(-rx, 0); g.lineTo(0, ry); g.lineTo(rx, 0); g.lineTo(0, -ry);
+    g.closePath();
+    g.clip();
 
     g.strokeStyle = p.inkSoft;
-    g.lineWidth = 0.75;
-    for (var k = 1; k <= 4; k++) {
-      var t = k / 5;
+    g.lineWidth = 0.7;
+    for (var k = -rx + 3; k < rx; k += 3.2) {
       g.beginPath();
-      g.moveTo(-13 + 26 * t, 0 - 6 + 12 * t);
-      g.lineTo(-13 + 26 * t, 0 + 6 - 12 * t);
+      g.moveTo(k, -ry - 1);
+      g.lineTo(k + ry * 2, ry + 1);
       g.stroke();
     }
+    g.restore();
+
     g.restore();
   }
 
@@ -1544,12 +1558,17 @@
       };
     }
 
+    var used = {};
     for (var i = 0; i < links.length; i++) {
       var cfg = links[i];
       var a = this.lakes[cfg.from];
       var b = this.lakes[cfg.to];
       if (!a || !b) continue;
-      // Соединяем только те пары, что стоят не слишком далеко.
+      // Из одного озера не может выходить две протоки: на карте это
+      // читается как раздвоенное русло.
+      if (used[cfg.from] || used[cfg.to]) continue;
+      used[cfg.from] = true;
+      used[cfg.to] = true;
 
       var p0 = rim(a, b.cx, b.cy, 0.62);
       var p1 = rim(b, a.cx, a.cy, 0.62);
@@ -1956,6 +1975,9 @@
     this._initRiverSrc();
     this._buildLakes(rng);
     this._buildRivers();
+    // Протоки строим после рек: проверка пересечений должна видеть
+    // готовые русла, иначе линия пересекала реку.
+    this._buildLakeLinks(rng);
     this._buildBoats(rng);
     this._buildReserved();
     this._buildBlocked();
@@ -2092,8 +2114,9 @@
     for (var bi = 0; bi < roads.length; bi++) {
       var rpts = roads[bi].points;
       for (var bk = 1; bk < rpts.length; bk++) {
-        for (var ri = 0; ri < this.rivers.length; ri++) {
-          var vpts = this.rivers[ri].points;
+        var waters = (this.rivers || []).concat(this.lakeLinks || []);
+        for (var ri = 0; ri < waters.length; ri++) {
+          var vpts = waters[ri].points;
           for (var rk = 1; rk < vpts.length; rk++) {
             var hit = segCross(rpts[bk - 1].x, rpts[bk - 1].y,
                                rpts[bk].x, rpts[bk].y,
@@ -2716,15 +2739,48 @@
       g.save();
       g.translate(b.x, b.y);
       g.rotate(b.angle);
-      g.fillStyle = p.paperLight;
-      g.fillRect(-9, -3.5, 18, 7);
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1;
-      g.strokeRect(-9, -3.5, 18, 7);
+
+      // Тень под мостом.
+      g.fillStyle = 'rgba(70,51,29,0.22)';
       g.beginPath();
-      g.moveTo(-6, -3.5); g.lineTo(-6, 3.5);
-      g.moveTo(6, -3.5); g.lineTo(6, 3.5);
+      g.ellipse(0, 1.5, 12, 3, 0, 0, TAU);
+      g.fill();
+
+      // Настил: светлая доска с тёмным контуром.
+      g.fillStyle = p.paperLight;
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.1;
+      g.beginPath();
+      g.rect(-11, -4.2, 22, 8.4);
+      g.fill();
       g.stroke();
+
+      // Поперечные доски.
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      for (var pk = -8; pk <= 8; pk += 3.6) {
+        g.beginPath();
+        g.moveTo(pk, -3.6);
+        g.lineTo(pk, 3.6);
+        g.stroke();
+      }
+
+      // Перила вдоль обеих сторон.
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(-11, -4.2); g.lineTo(11, -4.2);
+      g.moveTo(-11, 4.2); g.lineTo(11, 4.2);
+      g.stroke();
+
+      // Стойки перил.
+      g.lineWidth = 0.9;
+      for (var sk = -8; sk <= 8; sk += 8) {
+        g.beginPath();
+        g.moveTo(sk, -4.2); g.lineTo(sk, -6.2);
+        g.moveTo(sk, 4.2); g.lineTo(sk, 6.2);
+        g.stroke();
+      }
       g.restore();
     }
     g.restore();

@@ -45,6 +45,11 @@ mintland (0.3.2) unstable; urgency=medium
   * Keep the lake boat steady: no per-frame rotation.
   * Keep a wider margin between lakes and the sheet edge.
   * Cache-bust the theme scripts, not just the page.
+  * Allow only one water channel per lake, and build channels after
+    rivers so they never cross a river.
+  * Count bridges over lake channels as well as rivers.
+  * Draw fields with hatched furrows instead of empty diamonds.
+  * Give bridges a deck, planks and railings.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
