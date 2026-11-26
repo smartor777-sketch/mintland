@@ -262,6 +262,7 @@ PARAM_LABELS = {
         "forest": "Леса",
         "roads": "Замки и дороги",
         "units": "Повозки",
+        "island": "Остров вокруг иконок",
     },
 }
 
@@ -389,6 +390,7 @@ UI = {
                 "params": {
                     "density": "Density", "forest": "Forests",
                     "roads": "Castles and roads", "units": "Carts",
+                    "island": "Icon island size",
                 },
                 "variants": {"worldmap": "Old map"},
             },

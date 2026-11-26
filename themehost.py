@@ -14,6 +14,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -119,6 +120,10 @@ class ThemeHost:
         self.started_at = time.time()
         self.paused = False
         self.scale = 1
+        # Подпроцессы (xprop/gio/xwininfo) нельзя запускать в
+        # главном потоке GTK: пока они работают, WebKit не рисует
+        # кадр, и вся анимация замирает одновременно.
+        self._busy = set()
         self._read_initial_control()
         atexit.register(self._cleanup)
 
@@ -355,7 +360,7 @@ class ThemeHost:
         if text == "ready":
             self.send_settings()
             self.last_icons = None
-            self.poll_icons()
+            self.poll_icons(immediate=True)
             # Первая раскладка нужна сразу: сцена стартует с пустым полем
             # и дорисовывает берег только через морфинг.
             self.send_icons_now()
@@ -366,11 +371,45 @@ class ThemeHost:
             # заставляет иконки мигнуть, а один — незаметен.
             self._restack_layer()
 
-    def poll_icons(self):
-        try:
-            rects = iconsource.collect()
-        except Exception:
-            rects = []
+    def _run_bg(self, key, fn):
+        """Выполнить блокирующую работу в фоне и вернуть результат в GTK."""
+        if key in self._busy:
+            return False
+        self._busy.add(key)
+
+        def work():
+            try:
+                result = fn()
+            except Exception:
+                result = None
+            GLib.idle_add(self._bg_done, key, result)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def _bg_done(self, key, result):
+        self._busy.discard(key)
+        if result is None:
+            return False
+        cb = getattr(self, "_bg_" + key, None)
+        if cb is not None:
+            cb(result)
+        return False
+
+    def poll_icons(self, immediate=False):
+        if immediate:
+            try:
+                self._apply_icons(iconsource.collect())
+            except Exception:
+                pass
+            return True
+        self._run_bg("icons", iconsource.collect)
+        return True
+
+    def _bg_icons(self, rects):
+        self._apply_icons(rects)
+
+    def _apply_icons(self, rects):
         payload = json.dumps({
             "t": "icons",
             "vis": True,
@@ -378,7 +417,7 @@ class ThemeHost:
                    round(r * self.scale), round(b * self.scale)] for l, t, r, b in rects],
         }, separators=(",", ":"))
         if payload == self.last_icons:
-            return True
+            return
         self.last_icons = payload
         # Дебаунс: при перетаскивании иконки раскладка меняется десятки раз
         # подряд, а пересчёт поля в сцене стоит ~30 мс. Ждём, пока движение
@@ -387,7 +426,6 @@ class ThemeHost:
             GLib.source_remove(self._icons_timer)
         self._icons_timer = GLib.timeout_add(self.ICONS_DEBOUNCE_MS,
                                               self._flush_icons)
-        return True
 
     def _flush_icons(self):
         self._icons_timer = None
@@ -438,11 +476,13 @@ class ThemeHost:
         self.send(json.dumps({"t": "settings", "v": self.params}, separators=(",", ":")))
 
     def poll_pause(self):
-        should = self._should_pause()
+        self._run_bg("pause", self._should_pause)
+        return True
+
+    def _bg_pause(self, should):
         if should != self.paused:
             self.paused = should
             self.send(json.dumps({"t": "pause", "v": should}, separators=(",", ":")))
-        return True
 
     def _should_pause(self) -> bool:
         try:
@@ -539,20 +579,26 @@ class ThemeHost:
         не будет — пользователь увидит обои без ярлыков и не поймёт
         причину. Сообщаем один раз.
         """
+        self._run_bg("nemo", self._nemo_alive_now)
+        return True
+
+    @staticmethod
+    def _nemo_alive_now():
         try:
-            alive = subprocess.run(["pgrep", "-x", "nemo-desktop"],
-                                   capture_output=True, timeout=3).returncode == 0
+            return subprocess.run(["pgrep", "-x", "nemo-desktop"],
+                                  capture_output=True, timeout=3).returncode == 0
         except Exception:
-            return True
+            return None
+
+    def _bg_nemo(self, alive):
         if alive == self._nemo_alive:
-            return True
+            return
         self._nemo_alive = alive
         if alive:
             self._log("nemo-desktop снова работает")
         else:
             self._log("ВНИМАНИЕ: nemo-desktop пропал — иконки не рисуются")
             self._notify_once()
-        return True
 
     def _notify_once(self):
         if self._nemo_notified:

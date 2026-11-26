@@ -1211,7 +1211,7 @@
   };
 
   PaperEngine.prototype.setParams = function (v) {
-    var keys = ['density', 'forest', 'roads', 'units', 'cap30'];
+    var keys = ['density', 'forest', 'roads', 'units', 'cap30', 'island'];
     var world = false;
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
@@ -1219,9 +1219,20 @@
       if (typeof v[k] !== typeof this.params[k]) continue;
       if (this.params[k] === v[k]) continue;
       this.params[k] = v[k];
-      if (k === 'density' || k === 'forest' || k === 'roads') world = true;
+      if (k === 'density' || k === 'forest' || k === 'roads' || k === 'island') world = true;
     }
     if (world) this.worldDirty = true;
+
+    // Ползунок острова: сама подложка меняется сразу (это дёшево), а
+    // мир пересобирается с задержкой — иначе каждый шаг ползунка
+    // вызывал бы полную перестройку A*.
+    if (Object.prototype.hasOwnProperty.call(v, 'island')) {
+      this.overlayDirty = true;
+      this.displayDirty = true;
+      this.worldDirty = false;
+      this._needsWorldRebuild = true;
+      this._iconChangedAt = performance.now();
+    }
   };
 
   PaperEngine.prototype.setIcons = function (icons) {
@@ -1591,6 +1602,14 @@
     return best;
   };
 
+  // Отступ островка вокруг иконки. Ползунок «Остров» двигает его в
+  // пределах 0.4–2.0 от базового значения.
+  PaperEngine.prototype._islandPad = function () {
+    var k = this.params.island;
+    if (typeof k !== 'number') k = 0.55;
+    return Math.round(18 + k * 46);
+  };
+
   PaperEngine.prototype._inIconZone = function (x, y, pad) {
     var icons = this.icons;
     for (var i = 0; i < icons.length; i++) {
@@ -1615,7 +1634,7 @@
         data[r * cols + c] =
           (x < 18 || x > W - 18 || y < 18 || y > H - 18 ||
            this._inLake(x, y, 22) ||
-           this._inIconZone(x, y, 20)) ? 1 : 0;
+           this._inIconZone(x, y, this._islandPad() * 0.5)) ? 1 : 0;
       }
     }
     this._blocked = { step: step, cols: cols, rows: rows, data: data };
@@ -1791,7 +1810,7 @@
         if (this._inLake(x, y, 34)) continue;
         if (this._nearRiver(x, y, 26)) continue;
         if (this._inReserved(x, y, 30)) continue;
-        if (this._inIconZone(x, y, 50)) continue;
+        if (this._inIconZone(x, y, this._islandPad() + 8)) continue;
         var ok = true;
         for (var k = 0; k < castles.length; k++) {
           if (Math.hypot(castles[k].x - x, castles[k].y - y) < minD) {
@@ -1931,7 +1950,7 @@
       if (self._inLake(x, y, 10)) return false;
       if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
-      if (self._inIconZone(x, y, r + 18)) return false;
+      if (self._inIconZone(x, y, r + self._islandPad() * 0.45)) return false;
 
       var pad = r + 22;
       var c0 = Math.floor((x - pad) / CELL);
@@ -2133,7 +2152,7 @@
         if (this._inLake(px, py, 30)) continue;
         if (this._nearRiver(px, py, 26)) continue;
         if (this._nearRoad(px, py, 26)) continue;
-        if (this._inIconZone(px, py, 60)) continue;
+        if (this._inIconZone(px, py, this._islandPad() + 20)) continue;
         if (this._inReserved(px, py, 50)) continue;
 
         // Ближайший объект: чем дальше, тем «пустее» место.
@@ -2186,7 +2205,7 @@
       if (this._nearRiver(tx2, ty2, 3)) continue;
       if (this._nearRoad(tx2, ty2, 5)) continue;
       if (this._inReserved(tx2, ty2, 4)) continue;
-      if (this._inIconZone(tx2, ty2, 26)) continue;
+      if (this._inIconZone(tx2, ty2, this._islandPad() * 0.6)) continue;
       tufts.push({ x: tx2, y: ty2, s: 0.7 + rng() * 0.6, a: rng() * TAU });
     }
 
@@ -2242,14 +2261,28 @@
 
     var rng = mulberry32(0x9e3779b9);
 
-    // Пятна и выцветшие участки.
-    for (var s = 0; s < 11; s++) {
-      var sx = rng() * W, sy = rng() * H, sr = 90 + rng() * 280;
-      var grad = g.createRadialGradient(sx, sy, 0, sx, sy, sr);
-      grad.addColorStop(0, 'rgba(120,86,44,' + (0.025 + rng() * 0.035).toFixed(3) + ')');
-      grad.addColorStop(1, 'rgba(120,86,44,0)');
+    // Пятна и выцветшие участки. Крупные и мягкие, как на старом листе:
+    // именно они дают «обжитой» вид, а не ровную заливку.
+    for (var s = 0; s < 26; s++) {
+      var sx = rng() * W, sy = rng() * H;
+      var sr = 70 + rng() * 320;
+      var grad = g.createRadialGradient(sx, sy, sr * 0.15, sx, sy, sr);
+      var a = 0.030 + rng() * 0.055;
+      grad.addColorStop(0, 'rgba(112,78,38,' + a.toFixed(3) + ')');
+      grad.addColorStop(0.62, 'rgba(112,78,38,' + (a * 0.5).toFixed(3) + ')');
+      grad.addColorStop(1, 'rgba(112,78,38,0)');
       g.fillStyle = grad;
       g.fillRect(sx - sr, sy - sr, sr * 2, sr * 2);
+    }
+
+    // Пара светлых проплешин, чтобы пятна не выглядели грязью.
+    for (var s2 = 0; s2 < 8; s2++) {
+      var lx = rng() * W, ly = rng() * H, lr = 90 + rng() * 240;
+      var lg = g.createRadialGradient(lx, ly, 0, lx, ly, lr);
+      lg.addColorStop(0, 'rgba(248,238,212,0.09)');
+      lg.addColorStop(1, 'rgba(248,238,212,0)');
+      g.fillStyle = lg;
+      g.fillRect(lx - lr, ly - lr, lr * 2, lr * 2);
     }
 
     // Волокна бумаги.
@@ -2676,7 +2709,7 @@
   // Островки иконок: как на референсе — не карточка, а береговая линия
   // вокруг группы значков. Внутри пусто (объекты туда не ставятся),
   // снаружи двойной контур тушью. Пересобирается только при сдвиге.
-  PaperEngine.prototype._iconIslandMask = function () {
+  PaperEngine.prototype._iconIslandMask = function (padOverride) {
     var ms = 1;
     var mw = Math.max(1, Math.round(this.W * ms));
     var mh = Math.max(1, Math.round(this.H * ms));
@@ -2689,9 +2722,8 @@
 
     for (var i = 0; i < this.icons.length; i++) {
       var r = this.icons[i];
-      // Большой отступ: соседние значки дают один общий остров, а не
-      // гирлянду из отдельных кружков.
-      var pad = 36;
+      // Соседние значки дают один общий остров, а не гирлянду кружков.
+      var pad = (padOverride == null ? this._islandPad() + 12 : padOverride);
       var x = r.x - pad, y = r.y - pad;
       var w = r.w + pad * 2, h = r.h + pad * 2;
       var cx = x + w * 0.5, cy = y + h * 0.5;
@@ -2729,56 +2761,75 @@
     var mask = this._iconIslandMask();
     var palette = this.theme.palette;
 
-    // Две тонкие линии по контуру: внутренняя у самой кромки и внешняя
-    // на отступе. Так остров читается как берег, а не как обводка UI.
+    // Две тонкие линии по контуру. band(a, b) — полоса между
+    // расширениями маски на a и b пикселей. Раньше при inner = 0
+    // вычитания не происходило и заливался весь остров.
     function band(inner, outer, alpha) {
-      var c = document.createElement('canvas');
-      c.width = mask.w;
-      c.height = mask.h;
-      var cg = c.getContext('2d');
-
-      // Внешняя граница: маска, расширенная на outer.
-      var dil = document.createElement('canvas');
-      dil.width = mask.w;
-      dil.height = mask.h;
-      var dg = dil.getContext('2d');
-      for (var d = 0; d < outer; d++) {
-        dg.drawImage(mask.canvas, -d, 0);
-        dg.drawImage(mask.canvas, d, 0);
-        dg.drawImage(mask.canvas, 0, -d);
-        dg.drawImage(mask.canvas, 0, d);
-      }
-      dg.globalCompositeOperation = 'destination-out';
-      // Вырезаем всё, что ближе inner: получается полосая рамка.
-      for (var e = 0; e < inner; e++) {
-        var tmp = document.createElement('canvas');
-        tmp.width = mask.w;
-        tmp.height = mask.h;
-        var tg = tmp.getContext('2d');
-        for (var f = 0; f < inner; f++) {
-          tg.drawImage(mask.canvas, -f, 0);
-          tg.drawImage(mask.canvas, f, 0);
-          tg.drawImage(mask.canvas, 0, -f);
-          tg.drawImage(mask.canvas, 0, f);
+      function dilated(amount) {
+        var c = document.createElement('canvas');
+        c.width = mask.w;
+        c.height = mask.h;
+        var cg = c.getContext('2d');
+        for (var d = 0; d <= amount; d++) {
+          if (d === 0) {
+            cg.drawImage(mask.canvas, 0, 0);
+            continue;
+          }
+          cg.drawImage(mask.canvas, -d, 0);
+          cg.drawImage(mask.canvas, d, 0);
+          cg.drawImage(mask.canvas, 0, -d);
+          cg.drawImage(mask.canvas, 0, d);
         }
-        dg.drawImage(tmp, 0, 0);
-        break;
+        return c;
       }
-      dg.globalCompositeOperation = 'source-in';
-      dg.fillStyle = palette.ink;
-      dg.fillRect(0, 0, dil.width, dil.height);
 
-      cg.globalAlpha = alpha;
-      cg.drawImage(dil, 0, 0);
-      return c;
+      var big = dilated(outer);
+      var small = dilated(inner);
+      var cg = big.getContext('2d');
+      cg.globalCompositeOperation = 'destination-out';
+      cg.drawImage(small, 0, 0);
+      cg.globalCompositeOperation = 'source-in';
+      cg.fillStyle = palette.ink;
+      cg.fillRect(0, 0, big.width, big.height);
+
+      var out = document.createElement('canvas');
+      out.width = big.width;
+      out.height = big.height;
+      var og = out.getContext('2d');
+      og.globalAlpha = alpha;
+      og.drawImage(big, 0, 0);
+      return out;
     }
 
-    var outer = band(4, 6, 0.30);
-    var inner = band(0, 2, 0.26);
+    var outer = band(4, 6, 0.34);
+    var inner = band(1, 2, 0.28);
+
+    // Светлая подложка островка: чистый пергамент без леса и травы,
+    // как на референсе. Вырезаем её по той же маске.
+    var fill = document.createElement('canvas');
+    fill.width = mask.w;
+    fill.height = mask.h;
+    var fg = fill.getContext('2d');
+
+    // Сначала ровный светлый пергамент — он гарантированно светлее
+    // карты, даже у затемнённого виньеткой края.
+    fg.fillStyle = palette.paperLight;
+    fg.fillRect(0, 0, mask.w, mask.h);
+
+    // Потом лёгкая текстура бумаги, чтобы остров не был «пластиковым».
+    if (this._paper) {
+      fg.globalAlpha = 0.30;
+      fg.drawImage(this._paper, 0, 0, mask.w, mask.h);
+      fg.globalAlpha = 1;
+    }
+
+    fg.globalCompositeOperation = 'destination-in';
+    fg.drawImage(mask.canvas, 0, 0);
 
     g.save();
     g.imageSmoothingEnabled = true;
     g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(fill, 0, 0, this.overlay.width, this.overlay.height);
     g.drawImage(outer, 0, 0, this.overlay.width, this.overlay.height);
     g.drawImage(inner, 0, 0, this.overlay.width, this.overlay.height);
     g.restore();
