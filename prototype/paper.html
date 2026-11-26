@@ -37,8 +37,19 @@
 <body>
 <canvas id="art"></canvas>
 <div id="dev"></div>
-<script src="paper/themes.js"></script>
-<script src="paper/engine.js"></script>
+<script>
+  // Версия скриптов из URL страницы: WebKit кэширует file:// и без этого
+  // после обновления темы продолжал крутить старые themes.js/engine.js.
+  (function () {
+    var qs = new URLSearchParams(location.search);
+    var v = qs.get('v') || Date.now();
+    function load(src) {
+      document.write('<script src="' + src + '?v=' + v + '"><\/script>');
+    }
+    load('paper/themes.js');
+    load('paper/engine.js');
+  })();
+</script>
 <script>
 (function () {
   'use strict';

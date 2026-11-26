@@ -1419,8 +1419,9 @@
         var rx = baseRx * shrink;
         var ry = baseRy * shrink;
 
-        // Форма озера гуляет на ±10%, поэтому берём запас 20%.
-        var mX = rx * 1.2, mY = ry * 1.2;
+        // Форма гуляет на ±10%, плюс светлый берег и тень: берём
+        // запас 35%, чтобы озеро гарантированно не касалось кромки.
+        var mX = rx * 1.35, mY = ry * 1.35;
         var minX = mX, maxX = W - mX;
         var minY = mY, maxY = H - mY;
         if (maxX <= minX || maxY <= minY) continue;
