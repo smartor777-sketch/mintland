@@ -56,6 +56,13 @@
     return sum / norm;
   }
 
+  function hexToRgb(hex) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
   function roundRectPath(g, x, y, w, h, r) {
     r = Math.min(r, w * 0.5, h * 0.5);
     g.beginPath();
@@ -179,286 +186,382 @@
     g.closePath();
   }
 
-  function makeTree(seed, p) {
-    var rng = mulberry32(seed);
-    var w = 36, h = 50, ax = 18, ay = 46;
-    return makeSprite(w, h, ax, ay, function (g) {
-      g.fillStyle = p.shadow;
-      g.beginPath();
-      g.ellipse(ax + 3, ay - 1.5, 8 + rng() * 2, 2.8, 0, 0, TAU);
-      g.fill();
+  function setInk(g, spr, scale) {
+    g.lineWidth = 1 / Math.max(0.05, scale);
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.strokeStyle = spr.ink;
+  }
 
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.7;
-      g.lineCap = 'round';
-      g.beginPath();
-      g.moveTo(ax, ay - 1);
-      g.quadraticCurveTo(ax - 1.5, ay - 9, ax + 0.5, ay - 16);
-      g.stroke();
+  /* Дерево: тонкий ствол и один неровный контур кроны. Внутренних
+   * окружностей нет — на старой карте дерево читается силуэтом.
+   * k — масштаб значка: на больших картах деревья мельче домов. */
+  function drawTree(g, w, h, p, rng, conifer) {
+    var ax = w * 0.5, ay = h - 4;
+    var k = Math.max(0.62, (h - 8) / 28);
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
 
-      // Крона: два боковых сгустка и главный сверху. Внутренние
-      // контуры боковых сгустков закрывает главный, поэтому нет
-      // «пузырей» из отдельных кругов.
-      function canopy(cx, cy, rx, ry) {
-        var pts = [];
-        for (var k = 0; k < 9; k++) {
-          var a = k / 9 * TAU;
-          var j = 0.80 + rng() * 0.34;
-          pts.push([cx + Math.cos(a) * rx * j, cy + Math.sin(a) * ry * j]);
-        }
-        return pts;
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 2.5 * k, ay - 1.2, 5.5 * k + rng() * 1.3, 2 * k, 0, 0, TAU);
+    g.fill();
+
+    g.strokeStyle = p.ink;
+    g.lineWidth = 1.35;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(ax, ay - 1);
+    g.quadraticCurveTo(ax - 1, ay - 7 * k, ax + 0.5, ay - 12 * k);
+    g.stroke();
+
+    if (conifer) {
+      function tier(baseY, halfW, topY) {
+        g.beginPath();
+        g.moveTo(ax, topY);
+        g.lineTo(ax + halfW, baseY);
+        g.lineTo(ax - halfW, baseY);
+        g.closePath();
+        g.globalAlpha = 0.30 + rng() * 0.18;
+        g.fillStyle = p.tree;
+        g.fill();
+        g.globalAlpha = 1;
+        g.strokeStyle = p.ink;
+        g.lineWidth = 1.1;
+        g.stroke();
       }
 
-      g.fillStyle = p.tree;
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.1;
+      tier(ay - 3 * k, 8.5 * k, ay - 17 * k);
+      tier(ay - 11 * k, 6.2 * k, ay - 24 * k);
+      tier(ay - 18 * k, 3.8 * k, ay - 31 * k);
+      return;
+    }
 
-      blobPath(g, canopy(ax - 7, ay - 26, 7, 6.5));
-      g.fill(); g.stroke();
+    var pts = [];
+    var n = 11 + Math.floor(rng() * 3);
+    var cy = ay - 20 * k;
+    for (var i = 0; i < n; i++) {
+      var a = i / n * TAU;
+      var rx = 8.5 * k * (0.74 + rng() * 0.36);
+      var ry = 7.2 * k * (0.74 + rng() * 0.36);
+      pts.push([ax + Math.cos(a) * rx, cy + Math.sin(a) * ry]);
+    }
+    blobPath(g, pts);
+    g.globalAlpha = 0.34 + rng() * 0.30;
+    g.fillStyle = p.tree;
+    g.fill();
+    g.globalAlpha = 1;
+    setInk(g, spr, 1);
+    g.stroke();
 
-      blobPath(g, canopy(ax + 7.5, ay - 26, 7, 6.5));
-      g.fill(); g.stroke();
+    g.strokeStyle = p.treeLight;
+    g.lineWidth = 0.9;
+    g.beginPath();
+    g.moveTo(ax - 4 * k, cy - 2 * k);
+    g.lineTo(ax - 1 * k, cy - 5 * k);
+    g.moveTo(ax + 1 * k, cy + 2 * k);
+    g.lineTo(ax + 4 * k, cy - 1 * k);
+    g.moveTo(ax + 3 * k, cy + 4 * k);
+    g.lineTo(ax + 5 * k, cy + 1 * k);
+    g.stroke();
+  }
 
-      blobPath(g, canopy(ax - 0.5, ay - 33, 10, 8.5));
-      g.fill(); g.stroke();
-
-      g.globalAlpha = 0.42;
-      g.fillStyle = p.treeLight;
-      blobPath(g, canopy(ax - 4, ay - 36, 4, 3.2));
-      g.fill();
-      g.globalAlpha = 1;
+  function makeTree(seed, p, conifer) {
+    var rng = mulberry32(seed);
+    var w = conifer ? 22 : 24;
+    var h = conifer ? 30 : 32;
+    var ax = w * 0.5, ay = h - 4;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.save();
+      drawTree(g, w, h, p, rng, conifer);
+      g.restore();
     });
+  }
+
+  /* Дом: низкие пропорции, контур и косые штрихи на стене. */
+  function drawHouse(g, w, h, p, rng) {
+    var s = 0.52 + rng() * 0.08;
+    var ax = w * 0.5, ay = h - 5;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
+
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 2, ay - 1, 9, 2.4, 0, 0, TAU);
+    g.fill();
+
+    g.save();
+    g.translate(ax, ay);
+    g.scale(s, s);
+    g.translate(0, -7);
+    setInk(g, spr, s);
+
+    g.fillStyle = p.wallLeft;
+    g.beginPath();
+    g.moveTo(-13, 0); g.lineTo(0, 6); g.lineTo(0, -16); g.lineTo(-13, -22);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.wallRight;
+    g.beginPath();
+    g.moveTo(0, 6); g.lineTo(13, 0); g.lineTo(13, -22); g.lineTo(0, -16);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.roofLeft;
+    g.beginPath();
+    g.moveTo(-16, -22); g.lineTo(0, -16); g.lineTo(16, -22);
+    g.lineTo(7, -33); g.lineTo(-7, -33);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.roofRight;
+    g.globalAlpha = 0.55;
+    g.beginPath();
+    g.moveTo(-16, -22); g.lineTo(0, -16); g.lineTo(16, -22);
+    g.lineTo(13, -24); g.lineTo(0, -19); g.lineTo(-13, -24);
+    g.closePath(); g.fill();
+    g.globalAlpha = 1;
+
+    g.fillStyle = 'rgba(90,70,48,0.55)';
+    g.fillRect(4, -10, 4, 10);
+    g.fillStyle = 'rgba(236,222,190,0.65)';
+    g.fillRect(-9, -16, 3.5, 3.5);
+    g.strokeRect(-9, -16, 3.5, 3.5);
+
+    g.strokeStyle = p.inkSoft;
+    g.lineWidth = 0.9;
+    g.beginPath();
+    g.moveTo(-12, -6); g.lineTo(-7, -10);
+    g.moveTo(-12, -2); g.lineTo(-4, -9);
+    g.stroke();
+    g.restore();
   }
 
   function makeHouse(seed, p) {
     var rng = mulberry32(seed);
-    var roof = rng() < 0.5 ? [p.roofLeft, p.roofRight] : [p.roofAltLeft, p.roofAltRight];
-    var s = 0.60 + rng() * 0.10;
-    var w = 36, h = 40, ax = 18, ay = 36;
+    var w = 26, h = 32, ax = 13, ay = 28;
     return makeSprite(w, h, ax, ay, function (g) {
-      g.fillStyle = p.shadow;
-      g.beginPath();
-      g.ellipse(ax + 3, ay - 1.5, 12, 3.4, 0, 0, TAU);
-      g.fill();
-
-      g.save();
-      g.translate(ax, ay);
-      g.scale(s, s);
-      g.translate(0, -7);
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.6;
-      g.lineJoin = 'round';
-
-      g.fillStyle = p.wallLeft;
-      g.beginPath();
-      g.moveTo(-15, 0); g.lineTo(0, 7); g.lineTo(0, -18); g.lineTo(-15, -25);
-      g.closePath(); g.fill(); g.stroke();
-
-      g.fillStyle = p.wallRight;
-      g.beginPath();
-      g.moveTo(0, 7); g.lineTo(15, 0); g.lineTo(15, -25); g.lineTo(0, -18);
-      g.closePath(); g.fill(); g.stroke();
-
-      // Крыша: один скат к зрителю, ridge горизонтальный.
-      g.fillStyle = roof[0];
-      g.beginPath();
-      g.moveTo(-18, -25); g.lineTo(0, -18); g.lineTo(18, -25);
-      g.lineTo(8, -38); g.lineTo(-8, -38);
-      g.closePath(); g.fill(); g.stroke();
-
-      // Тень у карниза, чтобы скат не выглядел плоским.
-      g.fillStyle = roof[1];
-      g.globalAlpha = 0.45;
-      g.beginPath();
-      g.moveTo(-18, -25); g.lineTo(0, -18); g.lineTo(18, -25);
-      g.lineTo(15, -27.5); g.lineTo(0, -21); g.lineTo(-15, -27.5);
-      g.closePath(); g.fill();
-      g.globalAlpha = 1;
-
-      g.fillStyle = 'rgba(90,70,48,0.72)';
-      g.fillRect(5, -12, 6, 13);
-      g.fillStyle = 'rgba(250,240,214,0.8)';
-      g.fillRect(-10, -19, 5, 5);
-      g.strokeStyle = p.inkSoft;
-      g.lineWidth = 1.1;
-      g.strokeRect(-10, -19, 5, 5);
-      g.restore();
+      drawHouse(g, w, h, p, rng);
     });
   }
 
-  function makeTower(seed, p) {
-    var w = 34, h = 52, ax = 17, ay = 46;
-    return makeSprite(w, h, ax, ay, function (g) {
-      g.fillStyle = p.shadow;
-      g.beginPath();
-      g.ellipse(ax + 3, ay - 1.5, 11, 3.2, 0, 0, TAU);
-      g.fill();
+  /* Крепость: стены, закрытый верх, зубцы, флаг. */
+  function drawTower(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 7;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
 
-      g.save();
-      g.translate(ax, ay);
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 2, ay - 1, 8, 2.3, 0, 0, TAU);
+    g.fill();
+
+    g.save();
+    g.translate(ax, ay);
+    setInk(g, spr, 1);
+
+    g.fillStyle = p.stone;
+    g.beginPath();
+    g.moveTo(-6, 0); g.lineTo(0, 3); g.lineTo(0, -17); g.lineTo(-6, -20);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.stoneDark;
+    g.beginPath();
+    g.moveTo(0, 3); g.lineTo(6, 0); g.lineTo(6, -20); g.lineTo(0, -17);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = p.stoneDark;
+    g.beginPath();
+    g.moveTo(-6, -20); g.lineTo(0, -17); g.lineTo(6, -20);
+    g.lineTo(0, -23); g.closePath();
+    g.fill(); g.stroke();
+
+    g.fillStyle = p.stone;
+    g.beginPath();
+    g.moveTo(-5.5, -19.5); g.lineTo(0, -16.7); g.lineTo(5.5, -19.5);
+    g.lineTo(0, -22.3); g.closePath();
+    g.fill(); g.stroke();
+
+    var merlons = [-5, -1.5, 2];
+    for (var k = 0; k < merlons.length; k++) {
+      g.fillRect(merlons[k], -23, 3, 3.2);
+      g.strokeRect(merlons[k], -23, 3, 3.2);
+    }
+
+    g.strokeStyle = p.ink;
+    g.lineWidth = 1.1;
+    g.beginPath(); g.moveTo(0, -23); g.lineTo(0, -34); g.stroke();
+    g.fillStyle = p.roofLeft;
+    g.beginPath(); g.moveTo(0, -34); g.lineTo(6, -31.5); g.lineTo(0, -29);
+    g.closePath(); g.fill(); g.stroke();
+
+    g.fillStyle = 'rgba(90,70,48,0.5)';
+    g.fillRect(2, -7, 3, 7);
+    g.restore();
+  }
+
+  function makeTower(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 26, h = 40, ax = 13, ay = 36;
+    return makeSprite(w, h, ax, ay, function (g) {
+      drawTower(g, w, h, p, rng);
+    });
+  }
+
+  /* Гора: два-три пика, штриховка на теневой стороне.
+   * Вершины рисуем тонко, как на гравюре, а не как заливные клинья. */
+  function drawMountain(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 5;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
+
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 3, ay - 1, 14, 2.8, 0, 0, TAU);
+    g.fill();
+
+    function peak(px, baseY, halfW, height) {
       g.strokeStyle = p.ink;
-      g.lineWidth = 1.5;
+      g.lineWidth = 1.25;
       g.lineJoin = 'round';
 
-      g.fillStyle = p.stone;
+      g.fillStyle = p.mountain;
       g.beginPath();
-      g.moveTo(-8, 0); g.lineTo(0, 4); g.lineTo(0, -22); g.lineTo(-8, -26);
+      g.moveTo(px, baseY - height);
+      g.lineTo(px - halfW, baseY);
+      g.lineTo(px, baseY);
       g.closePath(); g.fill(); g.stroke();
 
-      g.fillStyle = p.stoneDark;
+      g.fillStyle = p.mountainDark;
       g.beginPath();
-      g.moveTo(0, 4); g.lineTo(8, 0); g.lineTo(8, -26); g.lineTo(0, -22);
+      g.moveTo(px, baseY - height);
+      g.lineTo(px + halfW, baseY);
+      g.lineTo(px, baseY);
       g.closePath(); g.fill(); g.stroke();
 
-      // Призматическая крепость: стены, закрытая крыша и выправленная
-      // стенка на верху, так башня не читается как открытая книга.
-      g.fillStyle = p.stoneDark;
-      g.beginPath();
-      g.moveTo(-8, -26); g.lineTo(0, -22); g.lineTo(8, -26);
-      g.lineTo(0, -30); g.closePath();
-      g.fill(); g.stroke();
-
-      g.fillStyle = p.stone;
-      g.beginPath();
-      g.moveTo(-7.5, -25.5); g.lineTo(0, -21.5); g.lineTo(7.5, -25.5);
-      g.lineTo(0, -29); g.closePath();
-      g.fill(); g.stroke();
-
-      // Мерлоны на гребне.
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.1;
-      g.fillStyle = p.stone;
-      var merlons = [[-5.5, -26], [0, -25], [5.5, -26]];
-      for (var k = 0; k < merlons.length; k++) {
-        g.fillRect(merlons[k][0], -30, 4, 5);
-        g.strokeRect(merlons[k][0], -30, 4, 5);
+      // Штриховка вдоль склона, а не поперёк.
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      for (var k = 1; k <= 3; k++) {
+        var t = k * 0.22;
+        var y1 = baseY - height * (t + 0.16);
+        var x1 = px + halfW * (1 - (t + 0.16)) * 0.35;
+        var y2 = baseY - height * t;
+        var x2 = px + halfW * (1 - t) * 0.92;
+        g.beginPath();
+        g.moveTo(x1, y1);
+        g.lineTo(x2, y2);
+        g.stroke();
       }
+    }
 
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.2;
-      g.beginPath(); g.moveTo(0, -30); g.lineTo(0, -44); g.stroke();
-      g.fillStyle = p.roofLeft;
-      g.beginPath(); g.moveTo(0, -44); g.lineTo(9, -41); g.lineTo(0, -37);
-      g.closePath(); g.fill(); g.stroke();
-
-      // Дверь у основания.
-      g.fillStyle = 'rgba(90,70,48,0.55)';
-      g.fillRect(2, -10, 4, 10);
-      g.restore();
-    });
+    peak(ax - 9 + rng() * 2, ay - 2, 12 + rng() * 2, 13 + rng() * 3);
+    peak(ax + 9 + rng() * 2, ay - 1, 11 + rng() * 2, 11 + rng() * 3);
+    peak(ax + (rng() - 0.5) * 3, ay, 16 + rng() * 3, 18 + rng() * 4);
   }
 
   function makeMountain(seed, p) {
     var rng = mulberry32(seed);
-    var w = 54, h = 42, ax = 27, ay = 36;
+    var w = 52, h = 36, ax = 26, ay = 31;
     return makeSprite(w, h, ax, ay, function (g) {
-      var i;
-
-      g.fillStyle = p.shadow;
-      g.beginPath();
-      g.ellipse(ax + 4, ay - 1.5, 18, 3.6, 0, 0, TAU);
-      g.fill();
-
-      function peak(px, baseY, halfW, height) {
-        g.strokeStyle = p.ink;
-        g.lineWidth = 1.2;
-        g.lineJoin = 'round';
-
-        g.fillStyle = p.mountain;
-        g.beginPath();
-        g.moveTo(px, baseY - height);
-        g.lineTo(px - halfW, baseY);
-        g.lineTo(px, baseY);
-        g.closePath();
-        g.fill(); g.stroke();
-
-        g.fillStyle = p.mountainDark;
-        g.beginPath();
-        g.moveTo(px, baseY - height);
-        g.lineTo(px + halfW, baseY);
-        g.lineTo(px, baseY);
-        g.closePath();
-        g.fill(); g.stroke();
-
-        // штриховка на теневой грани
-        g.strokeStyle = 'rgba(90,70,48,0.30)';
-        g.lineWidth = 0.8;
-        for (var k = 1; k <= 2; k++) {
-          var t = 0.30 + k * 0.22;
-          var yy = baseY - height * t;
-          var xr = px + halfW * (1 - t);
-          g.beginPath();
-          g.moveTo(px + xr * 0.45, yy);
-          g.lineTo(xr - 0.5, yy);
-          g.stroke();
-        }
-      }
-
-      peak(ax - 10 + rng() * 3, ay - 3, 13 + rng() * 3, 14 + rng() * 4);
-      peak(ax + 10 + rng() * 3, ay - 2, 12 + rng() * 3, 12 + rng() * 4);
-      peak(ax + (rng() - 0.5) * 5, ay, 17 + rng() * 4, 20 + rng() * 5);
-
-      g.globalAlpha = 0.16;
-      g.fillStyle = p.paperLight;
-      g.beginPath();
-      g.ellipse(ax - 5, ay - 17, 6, 8, -0.5, 0, TAU);
-      g.fill();
-      g.globalAlpha = 1;
+      drawMountain(g, w, h, p, rng);
     });
+  }
+
+  /* Камень: маленький силуэт с контуром. */
+  function drawRock(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 3;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
+
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 1.5, ay - 1, 5.5, 1.8, 0, 0, TAU);
+    g.fill();
+
+    g.save();
+    g.translate(ax, ay);
+    setInk(g, spr, 1);
+    g.fillStyle = p.mountain;
+    g.beginPath();
+    g.moveTo(-5.5, 0);
+    g.lineTo(-4, -4 - rng() * 1.2);
+    g.lineTo(0, -6.5 - rng() * 1.2);
+    g.lineTo(4.5, -4 - rng() * 1.2);
+    g.lineTo(6, 0);
+    g.closePath();
+    g.fill(); g.stroke();
+    g.restore();
   }
 
   function makeRock(seed, p) {
     var rng = mulberry32(seed);
-    var w = 22, h = 18, ax = 11, ay = 14;
+    var w = 16, h = 13, ax = 8, ay = 10;
     return makeSprite(w, h, ax, ay, function (g) {
-      g.translate(ax, ay);
-      g.fillStyle = p.shadow;
-      g.beginPath();
-      g.ellipse(2, -1, 7, 2.2, 0, 0, TAU);
-      g.fill();
-
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1;
-      g.fillStyle = p.mountain;
-      g.beginPath();
-      g.moveTo(-7, 0);
-      g.lineTo(-5, -6 - rng() * 2);
-      g.lineTo(0, -9 - rng() * 2);
-      g.lineTo(6, -6 - rng() * 2);
-      g.lineTo(8, 0);
-      g.closePath();
-      g.fill(); g.stroke();
+      drawRock(g, w, h, p, rng);
     });
   }
 
-  function makeCart(seed, p) {
-    var w = 30, h = 24, ax = 15, ay = 20;
+  /* Холмик: дуга с травяными штрихами. Такие знаки на старых картах
+   * заполняют пустое место, не превращаясь в объекты. */
+  function drawHill(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 3;
+    var r = 4.5 + rng() * 2;
+    g.strokeStyle = p.inkSoft;
+    g.lineWidth = 0.9;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.arc(ax, ay, r, Math.PI, TAU);
+    g.stroke();
+
+    var ticks = 2 + Math.floor(rng() * 2);
+    for (var k = 0; k < ticks; k++) {
+      var t = (k + 1) / (ticks + 1);
+      var x = ax - r + 2 * r * t;
+      var y = ay - Math.sin(Math.PI * t) * r;
+      g.beginPath();
+      g.moveTo(x, y - 0.5);
+      g.lineTo(x - 1.2, y - 3.6);
+      g.stroke();
+    }
+  }
+
+  function makeHill(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 18, h = 13, ax = 9, ay = 10;
     return makeSprite(w, h, ax, ay, function (g) {
-      g.translate(ax, ay);
+      drawHill(g, w, h, p, rng);
+    });
+  }
 
-      g.fillStyle = p.shadow;
-      g.beginPath();
-      g.ellipse(2, -1, 11, 3, 0, 0, TAU);
-      g.fill();
+  /* Повозка: миниатюрная точка на дороге. */
+  function drawCart(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 3;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
 
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.1;
-      g.lineJoin = 'round';
+    g.fillStyle = p.shadow;
+    g.beginPath();
+    g.ellipse(ax + 1.5, ay - 0.8, 8, 2.2, 0, 0, TAU);
+    g.fill();
 
-      g.fillStyle = p.wood;
-      g.fillRect(-8, -11, 14, 8);
-      g.strokeRect(-8, -11, 14, 8);
+    g.save();
+    g.translate(ax, ay);
+    setInk(g, spr, 1);
+    g.fillStyle = p.wood;
+    g.fillRect(-6.5, -8, 11, 6);
+    g.strokeRect(-6.5, -8, 11, 6);
 
-      g.fillStyle = p.roofLeft;
-      g.beginPath();
-      g.moveTo(-8, -11);
-      g.quadraticCurveTo(-1, -18, 6, -11);
-      g.closePath();
-      g.fill(); g.stroke();
+    g.fillStyle = p.roofLeft;
+    g.beginPath();
+    g.moveTo(-6.5, -8);
+    g.quadraticCurveTo(-1, -14, 4.5, -8);
+    g.closePath();
+    g.fill(); g.stroke();
 
-      g.fillStyle = p.ink;
-      g.beginPath(); g.arc(-5, 0, 3, 0, TAU); g.fill();
-      g.beginPath(); g.arc(5, 0, 3, 0, TAU); g.fill();
+    g.fillStyle = p.ink;
+    g.beginPath(); g.arc(-4.5, 0, 2.4, 0, TAU); g.fill();
+    g.beginPath(); g.arc(4.5, 0, 2.4, 0, TAU); g.fill();
+    g.restore();
+  }
+
+  function makeCart(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 24, h = 18, ax = 12, ay = 14;
+    return makeSprite(w, h, ax, ay, function (g) {
+      drawCart(g, w, h, p, rng);
     });
   }
 
@@ -494,13 +597,15 @@
   PaperEngine.prototype._buildSprites = function () {
     var p = this.theme.palette;
     var i;
-    var s = { trees: [], houses: [], mountains: [], rocks: [], towers: [], carts: [] };
-    for (i = 0; i < 6; i++) s.trees.push(makeTree(0x1200 + i * 131, p));
+    var s = { trees: [], houses: [], mountains: [], rocks: [], towers: [], carts: [], hills: [] };
+    for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1200 + i * 131, p, false));
+    for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1e00 + i * 167, p, true));
     for (i = 0; i < 5; i++) s.houses.push(makeHouse(0x3400 + i * 173, p));
     for (i = 0; i < 6; i++) s.mountains.push(makeMountain(0x5600 + i * 211, p));
     for (i = 0; i < 3; i++) s.rocks.push(makeRock(0x7800 + i * 97, p));
     for (i = 0; i < 2; i++) s.towers.push(makeTower(0x9a00 + i * 151, p));
     for (i = 0; i < 2; i++) s.carts.push(makeCart(0xbc00 + i * 89, p));
+    for (i = 0; i < 4; i++) s.hills.push(makeHill(0xde00 + i * 73, p));
     this._sprites = s;
   };
 
@@ -608,6 +713,47 @@
       if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
     }
     g.closePath();
+  };
+
+  /* ---------- реки ---------- */
+
+  PaperEngine.prototype._buildRivers = function () {
+    var W = this.W, H = this.H;
+    var list = this.theme.rivers || [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var src = list[i].points || [];
+      var pts = [];
+      for (var k = 0; k < src.length; k++) {
+        pts.push({ x: src[k][0] * W, y: src[k][1] * H });
+      }
+      pts = chaikin(pts, 3);
+      var cum = [0];
+      for (var q = 1; q < pts.length; q++) {
+        cum.push(cum[q - 1] + Math.hypot(pts[q].x - pts[q - 1].x,
+                                          pts[q].y - pts[q - 1].y));
+      }
+      out.push({
+        points: pts,
+        cum: cum,
+        length: cum[cum.length - 1],
+        width: list[i].width || 2.2
+      });
+    }
+    this.rivers = out;
+  };
+
+  PaperEngine.prototype._nearRiver = function (x, y, pad) {
+    var rivers = this.rivers || [];
+    for (var i = 0; i < rivers.length; i++) {
+      var pts = rivers[i].points;
+      var w = rivers[i].width;
+      for (var k = 1; k < pts.length; k++) {
+        if (distToSegment(x, y, pts[k - 1].x, pts[k - 1].y,
+                          pts[k].x, pts[k].y) < pad + w) return true;
+      }
+    }
+    return false;
   };
 
   /* ---------- зарезервированные места ---------- */
@@ -798,6 +944,7 @@
     var rng = mulberry32(this._seed);
 
     this._buildLakes(rng);
+    this._buildRivers();
     this._buildReserved();
     this._buildBlocked();
 
@@ -815,6 +962,7 @@
       var x = 80 + rng() * (W - 160);
       var y = 80 + rng() * (H - 160);
       if (this._inLake(x, y, 34)) continue;
+      if (this._nearRiver(x, y, 24)) continue;
       if (this._inReserved(x, y, 30)) continue;
       var ok = true;
       for (var c = 0; c < cities.length; c++) {
@@ -875,6 +1023,7 @@
     function free(x, y, r) {
       if (x < 8 || x > W - 8 || y < 18 || y > H - 6) return false;
       if (self._inLake(x, y, 10)) return false;
+      if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
       for (var k = 0; k < placed.length; k++) {
         var d = Math.hypot(placed[k].x - x, placed[k].y - y);
@@ -899,7 +1048,7 @@
     }
 
     /* 1. горные гряды — самое крупное, ставим первыми */
-    var ranges = Math.round(6 + this.params.density * 10);
+    var ranges = Math.round(12 + this.params.density * 14);
     for (var m = 0; m < ranges; m++) {
       var cx = 0, cy = 0, found = false;
       for (var mt = 0; mt < 80 && !found; mt++) {
@@ -924,13 +1073,25 @@
       }
     }
 
-    /* 2. города: башня и деревня вокруг */
+    /* 2. города: сначала башни, потом полоса под подпись, потом дома */
     for (var ci = 0; ci < cities.length; ci++) {
-      var city = cities[ci];
-      put('tower', this._sprites.towers, city.x, city.y,
+      var cityT = cities[ci];
+      put('tower', this._sprites.towers, cityT.x, cityT.y,
           0.92 + rng() * 0.12, 13, 0);
+    }
 
-      var hn = 4 + Math.floor(rng() * 4);
+    for (var cn = 0; cn < cities.length; cn++) {
+      this._reserved.push({
+        x: cities[cn].x - 80,
+        y: cities[cn].y - 70,
+        w: 160,
+        h: 26
+      });
+    }
+
+    for (var cj = 0; cj < cities.length; cj++) {
+      var city = cities[cj];
+      var hn = 6 + Math.floor(rng() * 4);
       for (var hk = 0; hk < hn; hk++) {
         var ha = rng() * TAU;
         var hr = 22 + rng() * 58;
@@ -942,7 +1103,7 @@
     }
 
     /* 3. леса: группы деревьев, а не равномерная сыпь */
-    var clusters = Math.round(10 + this.params.forest * 20);
+    var clusters = Math.round(24 + this.params.forest * 30);
     for (var fc = 0; fc < clusters; fc++) {
       var fx = 0, fy = 0, fFound = false;
       for (var ft = 0; ft < 70 && !fFound; ft++) {
@@ -955,34 +1116,43 @@
       }
       if (!fFound) continue;
 
-      var fn = 3 + Math.floor(rng() * 6);
+      var fn = 5 + Math.floor(rng() * 8);
       var fr = 26 + rng() * 50;
       for (var fk = 0; fk < fn; fk++) {
         var fa = rng() * TAU;
         var frad = Math.sqrt(rng()) * fr;
         var tx = fx + Math.cos(fa) * frad;
         var ty = fy + Math.sin(fa) * frad * 0.66;
-        var ts = 0.80 + rng() * 0.35;
-        put('tree', this._sprites.trees, tx, ty, ts, 8 * ts, 10);
+        var ts = 0.72 + rng() * 0.32;
+        put('tree', this._sprites.trees, tx, ty, ts, 6 * ts, 9);
       }
     }
 
     /* 4. одиночные деревья */
-    var lone = Math.round(8 + this.params.forest * 16);
+    var lone = Math.round(16 + this.params.forest * 24);
     for (var lt = 0; lt < lone; lt++) {
       var lx = 20 + rng() * (W - 40);
       var ly = 40 + rng() * (H - 60);
       var ls = 0.72 + rng() * 0.36;
-      put('tree', this._sprites.trees, lx, ly, ls, 8 * ls, 8);
+      put('tree', this._sprites.trees, lx, ly, ls, 6 * ls, 8);
     }
 
     /* 5. камни */
-    var rocks = Math.round(12 + this.params.density * 18);
+    var rocks = Math.round(16 + this.params.density * 22);
     for (var rk = 0; rk < rocks; rk++) {
       var rx = 20 + rng() * (W - 40);
       var ry = 40 + rng() * (H - 60);
       var rs = 0.80 + rng() * 0.45;
       put('rock', this._sprites.rocks, rx, ry, rs, 6 * rs, 8);
+    }
+
+    /* 6. холмики: заполняют пустой пергамент, как на образце */
+    var hills = Math.round(26 + this.params.density * 30);
+    for (var hl = 0; hl < hills; hl++) {
+      var hx2 = 20 + rng() * (W - 40);
+      var hy2 = 40 + rng() * (H - 60);
+      var hs2 = 0.8 + rng() * 0.4;
+      put('hill', this._sprites.hills, hx2, hy2, hs2, 5, 6);
     }
 
     objects.sort(function (a, b) { return a.y - b.y; });
@@ -991,7 +1161,8 @@
       cities: cities,
       roads: roads,
       objects: objects,
-      lakes: this.lakes
+      lakes: this.lakes,
+      rivers: this.rivers
     };
     this.worldDirty = false;
     this.bakeDirty = true;
@@ -1017,15 +1188,16 @@
     var mc = document.createElement('canvas');
     mc.width = mw; mc.height = mh;
     var mg = mc.getContext('2d');
+    var base = hexToRgb(p.paper);
     var img = mg.createImageData(mw, mh);
     var data = img.data;
     for (var y = 0; y < mh; y++) {
       for (var x = 0; x < mw; x++) {
         var v = fbm(x * 0.065 + 3.7, y * 0.065 + 9.1, 4);
         var i = (y * mw + x) * 4;
-        data[i] = 214 + (v - 0.5) * 30;
-        data[i + 1] = 196 + (v - 0.5) * 28;
-        data[i + 2] = 160 + (v - 0.5) * 24;
+        data[i] = base[0] + (v - 0.5) * 30;
+        data[i + 1] = base[1] + (v - 0.5) * 28;
+        data[i + 2] = base[2] + (v - 0.5) * 24;
         data[i + 3] = 255;
       }
     }
@@ -1115,6 +1287,35 @@
     }
   };
 
+  PaperEngine.prototype._drawRivers = function (g) {
+    var rivers = this.rivers || [];
+    if (!rivers.length) return;
+    var p = this.theme.palette;
+
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (var i = 0; i < rivers.length; i++) {
+      var pts = rivers[i].points;
+      var w = rivers[i].width;
+
+      g.strokeStyle = 'rgba(228,210,168,0.55)';
+      g.lineWidth = w + 2.5;
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (var a = 1; a < pts.length; a++) g.lineTo(pts[a].x, pts[a].y);
+      g.stroke();
+
+      g.strokeStyle = p.river;
+      g.lineWidth = w;
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
+      g.stroke();
+    }
+    g.restore();
+  };
+
   PaperEngine.prototype._drawRoads = function (g) {
     var roads = (this.world && this.world.roads) || [];
     if (!roads.length) return;
@@ -1146,9 +1347,9 @@
     g.restore();
   };
 
-  PaperEngine.prototype._drawSpacedText = function (g, text, x, y, size, color, track, halo) {
+  PaperEngine.prototype._drawSpacedText = function (g, text, x, y, size, color, track, halo, italic) {
     g.save();
-    g.font = '600 ' + size + 'px "Liberation Serif", Georgia, "Times New Roman", serif';
+    g.font = (italic ? 'italic ' : '') + '600 ' + size + 'px "Liberation Serif", Georgia, "Times New Roman", serif';
     g.fillStyle = color;
     g.textBaseline = 'middle';
 
@@ -1186,27 +1387,23 @@
 
     for (var i = 0; i < labels.length; i++) {
       var l = labels[i];
-      var size = l.size || 14;
-      var tw = this._drawSpacedText(g, l.text, l.x * W, l.y * H, size,
-                                    'rgba(90,70,48,0.46)', l.track || 3);
-
-      g.strokeStyle = 'rgba(90,70,48,0.18)';
-      g.lineWidth = 0.8;
-      g.beginPath();
-      g.moveTo(l.x * W - tw * 0.5, l.y * H + size * 0.95);
-      g.lineTo(l.x * W + tw * 0.5, l.y * H + size * 0.95);
-      g.stroke();
+      this._drawSpacedText(g, l.text, l.x * W, l.y * H, l.size || 13,
+                           'rgba(90,67,34,0.66)', l.track || 0, null, true);
     }
   };
 
-  PaperEngine.prototype._drawLakeNames = function (g) {
-    var lakes = this.lakes || [];
-    for (var i = 0; i < lakes.length; i++) {
-      var lake = lakes[i];
-      if (!lake.name) continue;
-      this._drawSpacedText(g, lake.name, lake.cx, lake.cy + lake.ry * 0.45,
-                           9, 'rgba(90,70,48,0.42)', 1.6,
-                           'rgba(205,187,150,0.45)');
+  // Города подписаны своим именем, как на старых картах. Подпись ставится
+  // над башней, чтобы её не закрывали дома; повторов нет.
+  PaperEngine.prototype._drawCityNames = function (g) {
+    var cities = (this.world && this.world.cities) || [];
+    var names = this.theme.cityNames || [];
+    if (!names.length) return;
+
+    for (var i = 0; i < cities.length; i++) {
+      var c = cities[i];
+      this._drawSpacedText(g, names[i % names.length], c.x, c.y - 54,
+                           12, 'rgba(90,67,34,0.68)', 0,
+                           'rgba(214,190,144,0.55)', true);
     }
   };
 
@@ -1341,15 +1538,16 @@
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     g.drawImage(this._paper, 0, 0, this.W, this.H);
+    this._drawRivers(g);
     this._drawLakes(g);
     this._drawRoads(g);
     this._drawLabels(g);
     this._drawClearings(g);
     this._drawObjects(g);
-    this._drawLakeNames(g);
+    this._drawCityNames(g);
     this._drawCompass(g);
     this._drawVignette(g);
-    this._drawFrame(g);
+    if (this.theme.frame !== false) this._drawFrame(g);
 
     this.bakeMs = performance.now() - t0;
     this.bakeDirty = false;
