@@ -15,6 +15,11 @@ mintland (0.3.2) unstable; urgency=medium
   * Move lakes away from icon islands when icons are dragged, and pull the
     rivers to the new lake centres.
   * Keep forest trees off the roads, so dotted road lines stay readable.
+  * Modernise the lake boat into a three-masted sailing ship.
+  * Add a lighthouse with a slowly turning beam on the largest lake.
+  * Add a pumpkin and a "Witch" label beside the witch's hut.
+  * Redraw the compass rose with 16 points and N/S/E/W letters.
+  * Pace animation frames evenly instead of skipping every other one.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
