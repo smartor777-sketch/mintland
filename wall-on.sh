@@ -27,6 +27,7 @@ for pid in /proc/[0-9]*; do
   p=$(basename "$pid")
   [ "$p" = "$$" ] && continue
   [ "$p" = "$PPID" ] && continue
+  [ -r "$pid/cmdline" ] || continue
   cmd=$(tr '\0' ' ' < "$pid/cmdline" 2>/dev/null)
   case "$cmd" in
     *"mintland/themehost.py"*) kill "$p" 2>/dev/null ;;
