@@ -176,6 +176,11 @@ THEME_INFO = {
         "desc": "Плоские деревья на траве; вокруг иконок — пустые поляны.",
         "thumb": "docs/theme-forest.gif",
     },
+    "worldmap": {
+        "name": "Старая карта",
+        "desc": "Плотная рисованная карта: замки, леса, горы, реки и озёра.",
+        "thumb": "docs/theme-worldmap.gif",
+    },
 }
 
 GROUP_LABELS = {
@@ -183,6 +188,7 @@ GROUP_LABELS = {
     "meadow": ["Вокруг иконок", "Облака", "Персонажи"],
     "night": ["Иконки", "Небо", "Туман", "Воздух"],
     "forest": ["Лес"],
+    "worldmap": ["Карта"],
 }
 
 PARAM_LABELS = {
@@ -214,6 +220,12 @@ PARAM_LABELS = {
         "trees": "Деревья",
         "glade": "Поляна",
     },
+    "worldmap": {
+        "density": "Плотность",
+        "forest": "Леса",
+        "roads": "Замки и дороги",
+        "units": "Повозки",
+    },
 }
 
 # Наши подобранные значения по умолчанию (в themes.json у Beach 4 пальмы,
@@ -222,7 +234,7 @@ DEFAULT_OVERRIDES = {
     "beach": {"palms": 2, "kayaks": 1, "birds": 1},
 }
 
-THEME_ORDER = {"beach": 0, "meadow": 1, "night": 2, "forest": 3}
+THEME_ORDER = {"beach": 0, "meadow": 1, "night": 2, "forest": 3, "worldmap": 4}
 
 # Единицы только латиницей/по-русски. Счётчики (пальмы, каяки, чайки)
 # показываем без единиц: число и так понятно.
@@ -231,6 +243,7 @@ UNIT_LABELS = {
     "meadow": {"sigma": "px"},
     "night": {"halo": "px", "shoot": "шт", "fireflies": "шт"},
     "forest": {"trees": "шт", "glade": "px"},
+    "worldmap": {"units": "шт"},
 }
 
 
@@ -331,6 +344,16 @@ UI = {
                     "glade": "Clearing",
                 },
                 "variants": {"forest": "Forest"},
+            },
+            "worldmap": {
+                "name": "Old map",
+                "desc": "A dense hand-drawn map: castles, forests, mountains, rivers and lakes.",
+                "groups": ["Map"],
+                "params": {
+                    "density": "Density", "forest": "Forests",
+                    "roads": "Castles and roads", "units": "Carts",
+                },
+                "variants": {"worldmap": "Old map"},
             },
         },
     },
@@ -585,7 +608,7 @@ class Switcher(Gtk.Window):
         self._busy_until = 0.0
         self._updating = False
 
-        self.set_default_size(880, 700)
+        self.set_default_size(1210, 760)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_border_width(12)
         self.set_icon_name("preferences-desktop-wallpaper")

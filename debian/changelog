@@ -1,3 +1,14 @@
+mintland (0.3.2) unstable; urgency=medium
+
+  * Add the "Old map" theme: a dense hand-drawn parchment world with
+    castles, forests, mountains, rivers, lakes and moving carts.
+  * Rebuild only the icon overlay when icons move; the static map stays
+    baked, so dragging icons no longer redraws the whole scene.
+  * Register worldmap in themes.json and the switcher with density,
+    forest, castles/roads and carts controls.
+
+ -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
+
 mintland (0.3.1) unstable; urgency=medium
 
   * Use English as the default UI language for all locales except Russian.
