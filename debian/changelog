@@ -19,6 +19,9 @@ mintland (0.4.0) unstable; urgency=medium
     main loop and the WebKit frame clock never stall.
   * Cache-bust the theme scripts as well as the page.
   * Show the package version in the switcher window title.
+  * Give river tributaries the same width as their parent channel.
+  * Check the full castle sprite footprint before placing a town,
+    so no road ends at an empty spot under an icon island.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 12:00:00 +0300
 
