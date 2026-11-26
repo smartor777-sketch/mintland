@@ -1813,8 +1813,8 @@
         points: pts,
         cum: cum2,
         length: cum2[cum2.length - 1],
-        width: 0.95,
-        taper: true
+        width: main.width,
+        taper: false
       });
       return true;
     }
@@ -2117,6 +2117,134 @@
     return false;
   };
 
+  // Сеть дорог между замками: минимальное остовное дерево плюс пара
+  // коротких хорд. Вынесено в метод, потому что сеть приходится
+  // пересобирать, если какой-то замок не встал на карту.
+  // Помещается ли спрайт замка в точке (x, y) с учётом островков,
+  // воды и зарезервированных мест. Замок высокий (около 60 px над
+  // подошвой), поэтому проверять одну точку мало: иначе город
+  // оставался «фантомом», а дорога вела в пустое место.
+  PaperEngine.prototype._castleFits = function (x, y, scale) {
+    var sprites = this._sprites && this._sprites.castles;
+    if (!sprites || !sprites.length) return true;
+    var spr = sprites[0];
+    var sc = scale || 1;
+    var pad = this._islandPad() + 8;
+
+    var x0 = x - spr.ax * sc;
+    var y0 = y - spr.ay * sc;
+    var x1 = x0 + spr.w * sc;
+    var y1 = y0 + spr.h * sc;
+
+    if (x0 < 6 || y0 < 6 || x1 > this.W - 6 || y1 > this.H - 6) return false;
+
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      if (x0 < r.x + r.w + pad && x1 > r.x - pad &&
+          y0 < r.y + r.h + pad && y1 > r.y - pad) {
+        return false;
+      }
+    }
+
+    if (this._inLake(x, y, 22)) return false;
+    if (this._nearRiver(x, y, 18)) return false;
+    if (this._inReserved(x, y, 12)) return false;
+    return true;
+  };
+
+  PaperEngine.prototype._buildRoadNetwork = function (castles) {
+    var W = this.W, H = this.H;
+    if (castles.length < 2) return [];
+
+    var edges = [];
+    for (var i = 0; i < castles.length; i++) {
+      for (var j = i + 1; j < castles.length; j++) {
+        edges.push({
+          a: i, b: j,
+          d: Math.hypot(castles[i].x - castles[j].x,
+                        castles[i].y - castles[j].y)
+        });
+      }
+    }
+    edges.sort(function (p, q) { return p.d - q.d; });
+
+    var uf = [];
+    for (var u = 0; u < castles.length; u++) uf[u] = u;
+    function find(a) {
+      while (uf[a] !== a) { uf[a] = uf[uf[a]]; a = uf[a]; }
+      return a;
+    }
+
+    var roadPaths = [];
+    var used = {};
+    for (var e = 0; e < edges.length &&
+         roadPaths.length < castles.length - 1; e++) {
+      var ed = edges[e];
+      var ra = find(ed.a), rb = find(ed.b);
+      if (ra === rb) continue;
+      var pts = this._route(castles[ed.a], castles[ed.b]);
+      if (!pts || pts.length < 3) continue;
+      uf[ra] = rb;
+      used[ed.a + ':' + ed.b] = true;
+      roadPaths.push(pts);
+    }
+
+    // Пара коротких хорд: у образца сеть, а не одна цепочка.
+    var chords = 0;
+    for (var e2 = 0; e2 < edges.length && chords < 2; e2++) {
+      var ed2 = edges[e2];
+      if (used[ed2.a + ':' + ed2.b]) continue;
+      if (ed2.d > Math.min(W, H) * 0.85) continue;
+      var extra = this._route(castles[ed2.a], castles[ed2.b]);
+      if (extra && extra.length >= 3) {
+        used[ed2.a + ':' + ed2.b] = true;
+        roadPaths.push(extra);
+        chords++;
+      }
+    }
+
+    var roads = [];
+    for (var rp = 0; rp < roadPaths.length; rp++) {
+      var p = roadPaths[rp];
+      var cum = [0];
+      for (var q = 1; q < p.length; q++) {
+        cum.push(cum[q - 1] + Math.hypot(p[q].x - p[q - 1].x,
+                                          p[q].y - p[q - 1].y));
+      }
+      roads.push({ points: p, cum: cum, length: cum[cum.length - 1] });
+    }
+    return roads;
+  };
+
+  // Мосты: точки, где дорога пересекает реку или протоку.
+  PaperEngine.prototype._buildBridges = function (roads) {
+    var out = [];
+    var waters = (this.rivers || []).concat(this.lakeLinks || []);
+
+    for (var bi = 0; bi < roads.length; bi++) {
+      var rpts = roads[bi].points;
+      for (var bk = 1; bk < rpts.length; bk++) {
+        for (var ri = 0; ri < waters.length; ri++) {
+          var vpts = waters[ri].points;
+          for (var rk = 1; rk < vpts.length; rk++) {
+            var hit = segCross(rpts[bk - 1].x, rpts[bk - 1].y,
+                               rpts[bk].x, rpts[bk].y,
+                               vpts[rk - 1].x, vpts[rk - 1].y,
+                               vpts[rk].x, vpts[rk].y);
+            if (hit) {
+              out.push({
+                x: hit.x, y: hit.y,
+                angle: Math.atan2(rpts[bk].y - rpts[bk - 1].y,
+                                  rpts[bk].x - rpts[bk - 1].x)
+              });
+            }
+          }
+        }
+      }
+    }
+    return out;
+  };
+
   PaperEngine.prototype.buildWorld = function () {
     var self = this;
     var W = this.W, H = this.H;
@@ -2168,6 +2296,7 @@
         if (this._nearRiver(x, y, 26)) continue;
         if (this._inReserved(x, y, 30)) continue;
         if (this._inIconZone(x, y, this._islandPad() + 10)) continue;
+        if (!this._castleFits(x, y, 0.95)) continue;
         var ok = true;
         for (var k = 0; k < castles.length; k++) {
           if (Math.hypot(castles[k].x - x, castles[k].y - y) < minD) {
@@ -2191,6 +2320,7 @@
       if (this._nearRiver(rx, ry, 26)) continue;
       if (this._inReserved(rx, ry, 30)) continue;
       if (this._inIconZone(rx, ry, 50)) continue;
+      if (!this._castleFits(rx, ry, 0.95)) continue;
       var ok2 = true;
       for (var k2 = 0; k2 < castles.length; k2++) {
         if (Math.hypot(castles[k2].x - rx, castles[k2].y - ry) < minD * 0.75) {
@@ -2201,90 +2331,9 @@
       if (ok2) castles.push({ x: rx, y: ry });
     }
 
-    /* --- сеть дорог: минимальное остовное дерево --- */
-    var edges = [];
-    for (var i = 0; i < castles.length; i++) {
-      for (var j = i + 1; j < castles.length; j++) {
-        edges.push({
-          a: i, b: j,
-          d: Math.hypot(castles[i].x - castles[j].x, castles[i].y - castles[j].y)
-        });
-      }
-    }
-    edges.sort(function (p, q) { return p.d - q.d; });
-
-    var uf = [];
-    for (var u = 0; u < castles.length; u++) uf[u] = u;
-    function find(a) {
-      while (uf[a] !== a) { uf[a] = uf[uf[a]]; a = uf[a]; }
-      return a;
-    }
-
-    var roadPaths = [];
-    var used = {};
-    for (var e = 0; e < edges.length && roadPaths.length < castles.length - 1; e++) {
-      var ed = edges[e];
-      var ra = find(ed.a), rb = find(ed.b);
-      if (ra === rb) continue;
-      var pts = this._route(castles[ed.a], castles[ed.b]);
-      if (!pts || pts.length < 3) continue;
-      uf[ra] = rb;
-      used[ed.a + ':' + ed.b] = true;
-      roadPaths.push(pts);
-    }
-
-    // Пара коротких хорд, чтобы дороги шли не только цепочкой:
-    // у образца сеть, а не одна линия.
-    var chords = 0;
-    for (var e2 = 0; e2 < edges.length && chords < 2; e2++) {
-      var ed2 = edges[e2];
-      if (used[ed2.a + ':' + ed2.b]) continue;
-      if (ed2.d > Math.min(W, H) * 0.85) continue;
-      var extra = this._route(castles[ed2.a], castles[ed2.b]);
-      if (extra && extra.length >= 3) {
-        used[ed2.a + ':' + ed2.b] = true;
-        roadPaths.push(extra);
-        chords++;
-      }
-    }
-
-    var roads = [];
-    for (var rp = 0; rp < roadPaths.length; rp++) {
-      var p = roadPaths[rp];
-      var cum = [0];
-      for (var q = 1; q < p.length; q++) {
-        cum.push(cum[q - 1] + Math.hypot(p[q].x - p[q - 1].x,
-                                          p[q].y - p[q - 1].y));
-      }
-      roads.push({ points: p, cum: cum, length: cum[cum.length - 1] });
-    }
+    var roads = this._buildRoadNetwork(castles);
     this._roadsForPlacement = roads;
-
-    // Мосты: дороги могут пересекать реку, и это должно выглядеть
-    // намеренно, а не как разрыв.
-    this.bridges = [];
-    for (var bi = 0; bi < roads.length; bi++) {
-      var rpts = roads[bi].points;
-      for (var bk = 1; bk < rpts.length; bk++) {
-        var waters = (this.rivers || []).concat(this.lakeLinks || []);
-        for (var ri = 0; ri < waters.length; ri++) {
-          var vpts = waters[ri].points;
-          for (var rk = 1; rk < vpts.length; rk++) {
-            var hit = segCross(rpts[bk - 1].x, rpts[bk - 1].y,
-                               rpts[bk].x, rpts[bk].y,
-                               vpts[rk - 1].x, vpts[rk - 1].y,
-                               vpts[rk].x, vpts[rk].y);
-            if (hit) {
-              this.bridges.push({
-                x: hit.x, y: hit.y,
-                angle: Math.atan2(rpts[bk].y - rpts[bk - 1].y,
-                                  rpts[bk].x - rpts[bk - 1].x)
-              });
-            }
-          }
-        }
-      }
-    }
+    this.bridges = this._buildBridges(roads);
 
     /* --- объекты --- */
     var objects = [];
@@ -2423,11 +2472,23 @@
       }
     }
 
-    /* 2. замки: сначала башни, потом полоса под подпись, потом дома */
+    /* 2. Замки. Ставим спрайт и проверяем результат: если put отказал,
+     * город убираем и пересобираем дороги, иначе дорога ведёт в пустое
+     * место под островком иконки. */
+    var placedCastles = [];
     for (var ci = 0; ci < castles.length; ci++) {
       var castleT = castles[ci];
-      put('castle', this._sprites.castles, castleT.x, castleT.y,
-          0.92 + rng() * 0.12, 23, 0);
+      if (put('castle', this._sprites.castles, castleT.x, castleT.y,
+              0.92 + rng() * 0.12, 23, 0)) {
+        placedCastles.push(castleT);
+      }
+    }
+
+    if (placedCastles.length !== castles.length) {
+      castles = placedCastles;
+      roads = this._buildRoadNetwork(castles);
+      this._roadsForPlacement = roads;
+      this.bridges = this._buildBridges(roads);
     }
 
     for (var cn = 0; cn < castles.length; cn++) {
@@ -2795,16 +2856,8 @@
       g.stroke();
 
       g.strokeStyle = p.river;
-      if (rivers[i].taper) {
-        // Рукав истончается к концу: рисуем посегментно.
-        for (var q3 = 1; q3 < pts.length; q3++) {
-          var tq = q3 / (pts.length - 1);
-          g.lineWidth = Math.max(0.35, w * (1 - tq * 0.85));
-          g.beginPath();
-          g.moveTo(pts[q3 - 1].x, pts[q3 - 1].y);
-          g.lineTo(pts[q3].x, pts[q3].y);
-          g.stroke();
-        }
+      if (false) {
+        // (оставлено на случай возврата сужения)
       } else {
         g.lineWidth = w;
         g.beginPath();
@@ -2851,6 +2904,24 @@
 
     for (var i = 0; i < roads.length; i++) {
       var pts = roads[i].points;
+
+      // Продлеваем концы на несколько пикселей: спрайт замка стоит
+      // подошвой на конечной точке и иначе визуально «срезает» дорогу,
+      // из-за чего кажется, что она не доходит до ворот.
+      if (pts.length > 3) {
+        var ext = 7;
+        var p0 = pts[0], p1 = pts[1];
+        var d0 = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
+        var head = { x: p0.x - (p1.x - p0.x) / d0 * ext,
+                     y: p0.y - (p1.y - p0.y) / d0 * ext };
+
+        var q0 = pts[pts.length - 1], q1 = pts[pts.length - 2];
+        var d1 = Math.hypot(q0.x - q1.x, q0.y - q1.y) || 1;
+        var tail = { x: q0.x + (q0.x - q1.x) / d1 * ext,
+                     y: q0.y + (q0.y - q1.y) / d1 * ext };
+
+        pts = [head].concat(pts, [tail]);
+      }
 
       // Старая карта: у дороги тёмные края и светлая середина, а по
       // центру идёт пунктир. Тёмный кант делает дорогу читаемой на
