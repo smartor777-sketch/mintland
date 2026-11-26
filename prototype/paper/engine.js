@@ -705,6 +705,235 @@
     });
   }
 
+  /* Кораблик: широкий корпус, мачта и один косой парус.
+   * Привязка — ватерлиния, чтобы покачивание шло вокруг воды. */
+  function makeBoat(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 42, h = 40, ax = 21, ay = 32;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+
+      g.fillStyle = 'rgba(70,51,29,0.10)';
+      g.beginPath();
+      g.ellipse(1, 1, 13, 2.4, 0, 0, TAU);
+      g.fill();
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.2;
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+
+      // Корпус: заметная лодка с высокими бортами.
+      g.fillStyle = p.wood;
+      g.beginPath();
+      g.moveTo(-15, -5);
+      g.quadraticCurveTo(-12, 4, 0, 5);
+      g.quadraticCurveTo(12, 4, 15, -5);
+      g.quadraticCurveTo(0, 0, -15, -5);
+      g.closePath();
+      g.fill(); g.stroke();
+
+      // Доска по борту.
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(-12, -1.5);
+      g.quadraticCurveTo(0, 2.5, 12, -1.5);
+      g.stroke();
+
+      // Мачта.
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.moveTo(-1, -4);
+      g.lineTo(-1, -30);
+      g.stroke();
+
+      // Косой парус: прямая передняя шкаторина у мачты и выпуклый
+      // задний край. Треугольник, а не «зонтик».
+      g.fillStyle = p.stoneDark;
+      g.beginPath();
+      g.moveTo(0.5, -28);
+      g.lineTo(10, -13);
+      g.quadraticCurveTo(5, -9, 0.5, -8);
+      g.closePath();
+      g.fill(); g.stroke();
+
+      // Пара штрихов на парусе.
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(2, -23); g.lineTo(6.5, -17);
+      g.moveTo(2, -17); g.lineTo(5, -13.5);
+      g.stroke();
+
+      // Небольшой вымпел.
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1;
+      g.fillStyle = p.roofLeft;
+      g.beginPath();
+      g.moveTo(-1, -29);
+      g.lineTo(3.5, -27.6);
+      g.lineTo(-1, -26.2);
+      g.closePath();
+      g.fill(); g.stroke();
+    });
+  }
+
+  /* Избушка ведьмы: кривая крыша, труба с дымком, покосившийся забор
+   * и лужица. Ставится в самом пустом месте карты. */
+  function makeWitch(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 56, h = 52, ax = 28, ay = 44;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+
+      g.fillStyle = p.shadow;
+      g.beginPath();
+      g.ellipse(2, 0, 17, 3.6, 0, 0, TAU);
+      g.fill();
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.2;
+      g.lineJoin = 'round';
+
+      // Лужица справа от избы.
+      g.fillStyle = p.sea;
+      g.beginPath();
+      g.ellipse(18, 0.5, 8, 2.6, 0, 0, TAU);
+      g.fill();
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(14, 0.5); g.lineTo(22, 0.5);
+      g.stroke();
+
+      // Изба, слегка покосившаяся.
+      g.save();
+      g.rotate(-0.035);
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.2;
+
+      g.fillStyle = p.wallLeft;
+      g.beginPath();
+      g.moveTo(-9, 0); g.lineTo(0, 4); g.lineTo(0, -17); g.lineTo(-9, -21);
+      g.closePath(); g.fill(); g.stroke();
+
+      g.fillStyle = p.wallRight;
+      g.beginPath();
+      g.moveTo(0, 4); g.lineTo(9, 0); g.lineTo(9, -21); g.lineTo(0, -17);
+      g.closePath(); g.fill(); g.stroke();
+
+      // Брёвна на стене.
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      for (var k = 1; k <= 3; k++) {
+        var yy = -4 - k * 4;
+        g.beginPath();
+        g.moveTo(-8.5, yy - 1);
+        g.lineTo(-0.5, yy + 2.5);
+        g.stroke();
+      }
+
+      // Кривая крыша.
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.2;
+      g.fillStyle = p.roofLeft;
+      g.beginPath();
+      g.moveTo(-13, -20);
+      g.lineTo(0, -14);
+      g.lineTo(13, -20);
+      g.quadraticCurveTo(9, -30, 5, -36);
+      g.quadraticCurveTo(1, -31, -5, -34);
+      g.quadraticCurveTo(-9, -28, -13, -20);
+      g.closePath();
+      g.fill(); g.stroke();
+
+      // Труба и дымок.
+      g.fillStyle = p.stoneDark;
+      g.fillRect(4, -33, 4, 7);
+      g.strokeRect(4, -33, 4, 7);
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.9;
+      g.beginPath();
+      g.moveTo(6, -35);
+      g.quadraticCurveTo(9, -38, 6.5, -41);
+      g.quadraticCurveTo(4, -44, 7, -46);
+      g.stroke();
+
+      // Дверь и окошко.
+      g.fillStyle = 'rgba(90,70,48,0.6)';
+      g.fillRect(2, -8, 4, 9);
+      g.fillStyle = 'rgba(244,232,204,0.8)';
+      g.fillRect(-6, -14, 3.5, 3.5);
+      g.strokeStyle = p.ink;
+      g.lineWidth = 0.9;
+      g.strokeRect(-6, -14, 3.5, 3.5);
+
+      g.restore();
+
+      // Забор слева.
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1;
+      for (var f = 0; f < 3; f++) {
+        var fx = -20 + f * 5;
+        g.beginPath();
+        g.moveTo(fx, 0);
+        g.lineTo(fx, -7);
+        g.stroke();
+      }
+      g.beginPath();
+      g.moveTo(-21, -4.5);
+      g.lineTo(-9, -4.5);
+      g.stroke();
+    });
+  }
+
+  /* Ворон: два кадра взмаха. Силуэт, чтобы читался на любом фоне. */
+  function makeBird(seed, p, flap) {
+    var w = 18, h = 12, ax = 9, ay = 6;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+      g.fillStyle = p.ink;
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.1;
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+
+      g.beginPath();
+      g.ellipse(0, 0, 2.4, 1.3, 0, 0, TAU);
+      g.fill();
+      g.beginPath();
+      g.arc(2.4, -0.8, 1.2, 0, TAU);
+      g.fill();
+
+      g.beginPath();
+      if (flap) {
+        g.moveTo(-0.5, 0);
+        g.quadraticCurveTo(-5, -6, -9, -4.5);
+        g.quadraticCurveTo(-5.5, -2.2, -0.5, 0);
+        g.moveTo(0.5, 0);
+        g.quadraticCurveTo(5, -6, 8.5, -4);
+        g.quadraticCurveTo(5, -1.8, 0.5, 0);
+      } else {
+        g.moveTo(-0.5, 0);
+        g.quadraticCurveTo(-6, -1, -9, 2);
+        g.quadraticCurveTo(-5, 1.2, -0.5, 0);
+        g.moveTo(0.5, 0);
+        g.quadraticCurveTo(5.5, -0.5, 8.5, 2.2);
+        g.quadraticCurveTo(4.8, 1.2, 0.5, 0);
+      }
+      g.fill();
+
+      g.beginPath();
+      g.moveTo(-2, 0);
+      g.lineTo(-5, 1.6);
+      g.lineTo(-2, 0.8);
+      g.closePath();
+      g.fill();
+    });
+  }
+
   /* ---------- движок ---------- */
 
   function PaperEngine(canvas, theme) {
@@ -726,6 +955,11 @@
     this.display = document.createElement('canvas');
     this.displayCtx = this.display.getContext('2d', { alpha: false });
     this.displayDirty = true;
+
+    // Слой воды: реки и озёра рисуются отдельно, затем вокруг иконок
+    // вырезается мягкая «бухта», и только потом слой кладётся на бумагу.
+    this.water = document.createElement('canvas');
+    this.waterCtx = this.water.getContext('2d');
     this.theme = theme;
     this.params = Object.assign({}, theme.defaults);
     this.W = 1;
@@ -744,8 +978,6 @@
     this._paperVig = null;
     this._paperKey = '';
     this._sprites = null;
-    this._clearing = null;
-    this._clearingSig = '';
     this.overlayDirty = true;
     this.displayDirty = true;
     this._blocked = null;
@@ -760,7 +992,7 @@
   PaperEngine.prototype._buildSprites = function () {
     var p = this.theme.palette;
     var i;
-    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [] };
+    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [], boats: [], witches: [], birds: [] };
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1200 + i * 131, p, false));
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1e00 + i * 167, p, true));
     for (i = 0; i < 5; i++) s.houses.push(makeHouse(0x3400 + i * 173, p));
@@ -771,6 +1003,9 @@
     for (i = 0; i < 4; i++) s.hills.push(makeHill(0xde00 + i * 73, p));
     for (i = 0; i < 4; i++) s.bushes.push(makeBush(0xf000 + i * 59, p));
     for (i = 0; i < 3; i++) s.fields.push(makeField(0xfa00 + i * 41, p));
+    for (i = 0; i < 3; i++) s.boats.push(makeBoat(0xfc00 + i * 37, p));
+    for (i = 0; i < 2; i++) s.witches.push(makeWitch(0xfe00 + i * 61, p));
+    for (i = 0; i < 2; i++) s.birds.push(makeBird(0xff00 + i * 29, p, i === 0));
     this._sprites = s;
   };
 
@@ -779,7 +1014,6 @@
     this.params = Object.assign({}, theme.defaults);
     this._seed = theme.seed || 0x51ed270b;
     this._paperKey = '';
-    this._clearingSig = '';
     this.overlayDirty = true;
     this.displayDirty = true;
     this._buildSprites();
@@ -807,7 +1041,6 @@
     var after = this._iconSig();
 
     // Немедленно обновляем поляны — при перетаскивании это дешёвый слой.
-    this._clearingSig = '';
     this.overlayDirty = true;
     this.displayDirty = true;
     this.lastIconMove = performance.now();
@@ -854,8 +1087,11 @@
     this.displayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.displayDirty = true;
 
+    this.water.width = this.cv.width;
+    this.water.height = this.cv.height;
+    this.waterCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
     this._paperKey = '';
-    this._clearingSig = '';
     this.overlayDirty = true;
     this.worldDirty = true;
     this.bakeDirty = true;
@@ -879,7 +1115,102 @@
         name: cfg.name || ''
       });
     }
+    this._lakeHome = out.map(function (l) { return { cx: l.cx, cy: l.cy }; });
     this.lakes = out;
+    this._dodgeLakes();
+  };
+
+  // Если озеро попало под иконки, отодвигаем его в сторону, пока оно не
+  // освободит островки. Это и есть «карта строится вокруг иконок»:
+  // вода уходит, а не просвечивает под значком.
+  PaperEngine.prototype._dodgeLakes = function () {
+    if (!this.icons.length) return;
+    var W = this.W, H = this.H;
+
+    for (var li = 0; li < this.lakes.length; li++) {
+      var lake = this.lakes[li];
+      for (var iter = 0; iter < 14; iter++) {
+        var worst = null, worstOverlap = 0;
+        for (var i = 0; i < this.icons.length; i++) {
+          var r = this.icons[i];
+          var pad = 28;
+          var ix0 = r.x - pad, iy0 = r.y - pad;
+          var ix1 = r.x + r.w + pad, iy1 = r.y + r.h + pad;
+          var lx0 = lake.cx - lake.rx * 1.05;
+          var lx1 = lake.cx + lake.rx * 1.05;
+          var ly0 = lake.cy - lake.ry * 1.05;
+          var ly1 = lake.cy + lake.ry * 1.05;
+          var ox = Math.min(ix1, lx1) - Math.max(ix0, lx0);
+          var oy = Math.min(iy1, ly1) - Math.max(iy0, ly0);
+          if (ox > 0 && oy > 0) {
+            var overlap = Math.min(ox, oy);
+            if (overlap > worstOverlap) {
+              worstOverlap = overlap;
+              worst = r;
+            }
+          }
+        }
+        if (!worst) break;
+
+        var dx = lake.cx - (worst.x + worst.w * 0.5);
+        var dy = lake.cy - (worst.y + worst.h * 0.5);
+        var len = Math.hypot(dx, dy);
+        if (len < 1) { dx = 1; dy = 0; len = 1; }
+        // Уводим озеро по горизонтали: вода в центре экрана не должна
+        // уползать вверх, иначе она попадает под верхние иконки.
+        var push = worstOverlap + 12;
+        lake.cx += (dx >= 0 ? 1 : -1) * push;
+        lake.cy += (dy / len) * push * 0.25;
+
+        // Не уводим озеро целиком за экран.
+        lake.cx = clamp(lake.cx, -lake.rx * 0.55, W + lake.rx * 0.55);
+        lake.cy = clamp(lake.cy, -lake.ry * 0.55, H + lake.ry * 0.55);
+      }
+    }
+
+    this._snapRiversToLakes();
+  };
+
+  // Концы рек, которые были привязаны к старым центрам озёр, тянем к
+  // новым — иначе река обрывается в пустоте.
+  PaperEngine.prototype._snapRiversToLakes = function () {
+    if (!this._riverSrc || !this._lakeHome) return;
+    for (var li = 0; li < this.lakes.length; li++) {
+      var home = this._lakeHome[li];
+      var lake = this.lakes[li];
+      if (Math.abs(home.cx - lake.cx) < 1 && Math.abs(home.cy - lake.cy) < 1) {
+        continue;
+      }
+      for (var ri = 0; ri < this._riverSrc.length; ri++) {
+        var pts = this._riverSrc[ri].points || [];
+        for (var pi = 0; pi < pts.length; pi++) {
+          if (Math.hypot(pts[pi][0] - home.cx, pts[pi][1] - home.cy) < 34) {
+            pts[pi][0] = lake.cx;
+            pts[pi][1] = lake.cy;
+          }
+        }
+      }
+    }
+  };
+
+  // По одному кораблику на озеро. Ходит по внутреннему эллипсу,
+  // поэтому никогда не вылезает на берег; покачивание — в рендере.
+  PaperEngine.prototype._buildBoats = function (rng) {
+    var out = [];
+    var lakes = this.lakes || [];
+    for (var i = 0; i < lakes.length; i++) {
+      var l = lakes[i];
+      if (l.rx < 34 || l.ry < 20) continue;
+      out.push({
+        lake: i,
+        phase: rng() * TAU,
+        speed: 0.000028 + rng() * 0.000014,
+        turn: rng() * TAU,
+        bob: 0.6 + rng() * 0.8,
+        v: Math.floor(rng() * 3)
+      });
+    }
+    this.boats = out;
   };
 
   PaperEngine.prototype._lakeEdge = function (lake, ang) {
@@ -919,17 +1250,48 @@
 
   /* ---------- реки ---------- */
 
-  PaperEngine.prototype._buildRivers = function () {
+  PaperEngine.prototype._initRiverSrc = function () {
     var W = this.W, H = this.H;
+    var list = this.theme.rivers || [];
+    this._riverSrc = list.map(function (item) {
+      return {
+        width: item.width || 2.2,
+        points: (item.points || []).map(function (q) {
+          return [q[0] * W, q[1] * H];
+        })
+      };
+    });
+  };
+
+  PaperEngine.prototype._buildRivers = function () {
     var list = this.theme.rivers || [];
     var out = [];
     for (var i = 0; i < list.length; i++) {
-      var src = list[i].points || [];
+      var src = this._riverSrc[i].points;
       var pts = [];
       for (var k = 0; k < src.length; k++) {
-        pts.push({ x: src[k][0] * W, y: src[k][1] * H });
+        pts.push({ x: src[k][0], y: src[k][1] });
       }
       pts = chaikin(pts, 3);
+
+      // Река плавно обходит островки иконок. Сдвигаем точки, попавшие
+      // в зону, и сглаживаем; сильного излома не будет.
+      if (this.icons.length) {
+        for (var pass = 0; pass < 8; pass++) {
+          for (var pi = 1; pi < pts.length - 1; pi++) {
+            if (this._inIconZone(pts[pi].x, pts[pi].y, 18)) {
+              var pushed = this._pushOutOfIcons(pts[pi].x, pts[pi].y, 22);
+              pts[pi].x = pushed.x;
+              pts[pi].y = pushed.y;
+            }
+          }
+          for (var pj = 1; pj < pts.length - 1; pj++) {
+            pts[pj].x = (pts[pj - 1].x + 2 * pts[pj].x + pts[pj + 1].x) / 4;
+            pts[pj].y = (pts[pj - 1].y + 2 * pts[pj].y + pts[pj + 1].y) / 4;
+          }
+        }
+      }
+
       var cum = [0];
       for (var q = 1; q < pts.length; q++) {
         cum.push(cum[q - 1] + Math.hypot(pts[q].x - pts[q - 1].x,
@@ -1005,6 +1367,41 @@
   // Прямоугольники иконок с запасом: сюда нельзя ставить объекты и
   // прокладывать дороги. Именно из этого получается «карта вокруг
   // рабочего стола минус иконки», а не подложка поверх рисунка.
+  // Ближайшая точка вне островка иконки: используется реками и
+  // корабликами, которым нельзя стоять на «суше» под значком.
+  PaperEngine.prototype._pushOutOfIcons = function (x, y, pad) {
+    var best = { x: x, y: y };
+    var bestD = Infinity;
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      var l = r.x - pad, t = r.y - pad;
+      var rr = r.x + r.w + pad, b = r.y + r.h + pad;
+      if (x <= l || x >= rr || y <= t || y >= b) continue;
+      var cand = [
+        { x: l, y: y, d: x - l },
+        { x: rr, y: y, d: rr - x },
+        { x: x, y: t, d: y - t },
+        { x: x, y: b, d: b - y }
+      ];
+      for (var k = 0; k < cand.length; k++) {
+        if (cand[k].d < bestD) { bestD = cand[k].d; best = cand[k]; }
+      }
+    }
+    return best;
+  };
+
+  PaperEngine.prototype._distToIcons = function (x, y) {
+    var best = Infinity;
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      var dx = Math.max(r.x - x, 0, x - (r.x + r.w));
+      var dy = Math.max(r.y - y, 0, y - (r.y + r.h));
+      var d = Math.hypot(dx, dy);
+      if (d < best) best = d;
+    }
+    return best;
+  };
+
   PaperEngine.prototype._inIconZone = function (x, y, pad) {
     var icons = this.icons;
     for (var i = 0; i < icons.length; i++) {
@@ -1163,8 +1560,12 @@
     // Плотность на пиксель должна быть одинаковой на любом разрешении.
     var areaScale = clamp((W * H) / (1280 * 720), 0.6, 3.2);
 
+    // Исходные точки рек нужны до смещения озёр: _dodgeLakes поправит
+    // те, что привязаны к центрам.
+    this._initRiverSrc();
     this._buildLakes(rng);
     this._buildRivers();
+    this._buildBoats(rng);
     this._buildReserved();
     this._buildBlocked();
 
@@ -1503,6 +1904,41 @@
 
     objects.sort(function (a, b) { return a.y - b.y; });
 
+    /* 7.5. Избушка ведьмы в самом пустом месте карты.
+     * Считаем расстояния по грубой сетке, чтобы не сканировать всё поле
+     * на каждый кандидат. */
+    var witch = null;
+    var bestScore = -1;
+    var STEP = 64;
+    for (var wy = 80; wy < H - 80; wy += STEP) {
+      for (var wx = 80; wx < W - 80; wx += STEP) {
+        var px = wx + (rng() - 0.5) * STEP * 0.8;
+        var py = wy + (rng() - 0.5) * STEP * 0.8;
+        if (this._inLake(px, py, 30)) continue;
+        if (this._nearRiver(px, py, 26)) continue;
+        if (this._nearRoad(px, py, 26)) continue;
+        if (this._inIconZone(px, py, 60)) continue;
+        if (this._inReserved(px, py, 50)) continue;
+
+        // Ближайший объект: чем дальше, тем «пустее» место.
+        var near = 1e9;
+        for (var oi = 0; oi < objects.length; oi++) {
+          var d = Math.hypot(objects[oi].x - px, objects[oi].y - py);
+          if (d < near) near = d;
+        }
+        if (near > bestScore) { bestScore = near; witch = { x: px, y: py }; }
+      }
+    }
+    if (witch) {
+      var wsc = 0.95 + rng() * 0.08;
+      objects.push({
+        type: 'witch', x: witch.x, y: witch.y, s: wsc,
+        v: Math.floor(rng() * this._sprites.witches.length),
+        r: 20 * wsc
+      });
+      objects.sort(function (a, b) { return a.y - b.y; });
+    }
+
     /* 8. травяные штрихи: самый мелкий слой, без проверок на пересечения */
     var tufts = [];
     var tuftCount = Math.round((900 + this.params.density * 600) * Math.min(areaScale, 1.8));
@@ -1523,7 +1959,8 @@
       objects: objects,
       lakes: this.lakes,
       rivers: this.rivers,
-      tufts: tufts
+      tufts: tufts,
+      witch: witch
     };
     this.worldDirty = false;
     this.bakeDirty = true;
@@ -1878,73 +2315,12 @@
     return s;
   };
 
-  PaperEngine.prototype._buildClearing = function () {
-    var icons = this.icons;
-    if (!icons.length) return null;
-
-    // Маска в 1/8 разрешения: края получаются мягкими, как у поляны.
-    var ms = 0.125;
-    var mw = Math.max(1, Math.round(this.W * ms));
-    var mh = Math.max(1, Math.round(this.H * ms));
-
-    var mask = document.createElement('canvas');
-    mask.width = mw;
-    mask.height = mh;
-    var mg = mask.getContext('2d');
-    mg.scale(ms, ms);
-    mg.fillStyle = '#fff';
-
-    for (var i = 0; i < icons.length; i++) {
-      var r = icons[i];
-      var pad = 14;
-      var x = r.x - pad, y = r.y - pad;
-      var w = r.w + pad * 2, h = r.h + pad * 2;
-      var cx = x + w * 0.5, cy = y + h * 0.5;
-      var rx = w * 0.5, ry = h * 0.5;
-      var rng = mulberry32(Math.round(r.x * 13 + r.y * 7 + r.w * 3 + r.h));
-      var pts = [];
-      var n = 18;
-      for (var k = 0; k < n; k++) {
-        var a = k / n * TAU;
-        var wob = 0.90 + rng() * 0.10;
-        pts.push([cx + Math.cos(a) * rx * wob,
-                  cy + Math.sin(a) * ry * wob]);
-      }
-      blobPath(mg, pts);
-      mg.fill();
-    }
-
-    // Внутри поляны — та же бумага с теми же пятнами и виньеткой.
-    // Поэтому островок не выглядит наклейкой: видно только то, что
-    // под ним нет деревьев и дорог.
-    var out = document.createElement('canvas');
-    out.width = Math.round(this.W * this.dpr);
-    out.height = Math.round(this.H * this.dpr);
-    var og = out.getContext('2d');
-    og.imageSmoothingEnabled = true;
-    og.scale(this.dpr, this.dpr);
-
-    if (this._paperVig) {
-      og.drawImage(this._paperVig, 0, 0, this.W, this.H);
-    } else {
-      og.fillStyle = this.theme.palette.paper;
-      og.fillRect(0, 0, this.W, this.H);
-      this._drawVignette(og);
-    }
-
-    // Никакого осветления: островок должен быть той же бумагой, что и
-    // вокруг, иначе получается «прожектор» вокруг иконки.
-
-    og.setTransform(1, 0, 0, 1, 0, 0);
-    og.globalCompositeOperation = 'destination-in';
-    og.drawImage(mask, 0, 0, out.width, out.height);
-
-    return out;
-  };
+  var SPRITE_KEYS = { witch: 'witches', bush: 'bushes' };
 
   PaperEngine.prototype._spriteFor = function (o) {
-    var list = this._sprites[o.type + 's'];
-    if (!list) return null;
+    var key = SPRITE_KEYS[o.type] || (o.type + 's');
+    var list = this._sprites[key];
+    if (!list || !list.length) return null;
     return list[o.v % list.length];
   };
 
@@ -1986,6 +2362,20 @@
     g.restore();
   };
 
+  // Слой воды с мягкими бухтами вокруг иконок. Иконки не «заклеивают»
+  // воду прямоугольником: берег плавно отступает, как настоящая бухта.
+  PaperEngine.prototype._buildWater = function () {
+    var g = this.waterCtx;
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, this.W, this.H);
+
+    this._drawRivers(g);
+    this._drawLakes(g);
+
+    return this.water;
+  };
+
   PaperEngine.prototype.bake = function () {
     var t0 = performance.now();
     if (this.worldDirty || !this.world) this.buildWorld();
@@ -1995,8 +2385,7 @@
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     g.drawImage(this._paper, 0, 0, this.W, this.H);
-    this._drawRivers(g);
-    this._drawLakes(g);
+    g.drawImage(this._buildWater(), 0, 0);
     this._drawTufts(g);
     this._drawRoads(g);
     this._drawBridges(g);
@@ -2021,30 +2410,83 @@
     g.clearRect(0, 0, this.overlay.width, this.overlay.height);
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    var sig = this._iconSig();
-    if (!this.icons.length) {
-      this._clearingSig = sig;
-      this._clearing = null;
-      this.overlayDirty = false;
-      this.overlayMs = 0;
-      return;
-    }
-
-    if (this._clearingSig !== sig) {
-      this._clearingSig = sig;
-      this._clearing = this._buildClearing();
-    }
-    if (this._clearing) {
-      g.imageSmoothingEnabled = true;
-      g.drawImage(this._clearing, 0, 0, this.W, this.H);
-    }
-
+    // Поляна больше не нужна: карта строится вокруг иконок, а вода
+    // вырезается мягкой бухтой. Слой оставлен пустым, чтобы не ломать
+    // композицию кадра.
     this.overlayMs = performance.now() - t0;
     this.overlayDirty = false;
     this.displayDirty = true;
   };
 
+  PaperEngine.prototype._drawBoats = function (g, t) {
+    var boats = this.boats || [];
+    var sprites = this._sprites.boats || [];
+    if (!boats.length || !sprites.length) return;
+
+    var icons = this.icons;
+    for (var i = 0; i < boats.length; i++) {
+      var b = boats[i];
+      var lake = this.lakes[b.lake];
+      if (!lake) continue;
+
+      // Эллипс внутри озера; угол медленно растёт. 0.34 радиуса —
+      // с запасом от берега, иначе кораблик «стоит» на суше.
+      var a = b.phase + t * b.speed;
+      var x = lake.cx + Math.cos(a) * lake.rx * 0.22;
+      var y = lake.cy + Math.sin(a) * lake.ry * 0.16;
+
+      // Не заходим на островки иконок.
+      if (this._inIconZone(x, y, 18)) continue;
+
+      // Кораблик на карте всегда стоит upright: поворот по касательной
+      // переворачивал его вверх килем. Только лёгкое покачивание.
+      var rock = Math.sin(t * 0.0016 + b.phase) * 0.045;
+      var dy = Math.sin(t * 0.0021 + b.phase) * b.bob;
+
+      var spr = sprites[b.v % sprites.length];
+
+      // Масштаб от размера озера: на маленьком озере кораблик меньше,
+      // иначе он выглядит как лодка в луже.
+      var sc = clamp(Math.min(lake.rx, lake.ry) / 38, 0.50, 0.92);
+
+      g.save();
+      g.translate(x, y + dy);
+      g.rotate(rock);
+      g.drawImage(spr.c, -spr.ax * sc, -spr.ay * sc,
+                  spr.w * sc, spr.h * sc);
+      g.restore();
+    }
+  };
+
+  // Ворон кружит над избушкой ведьмы: медленный эллипс и два кадра
+  // взмаха. Двигается только в динамическом слое.
+  PaperEngine.prototype._drawBirds = function (g, t) {
+    var witch = this.world && this.world.witch;
+    var sprites = this._sprites.birds || [];
+    if (!witch || !sprites.length) return;
+
+    var cx = witch.x;
+    var cy = witch.y - 82;
+    var a = t * 0.00042 + 1.7;
+    var bx = cx + Math.cos(a) * 74;
+    var by = cy + Math.sin(a) * 26;
+
+    if (this._inIconZone(bx, by, 24)) return;
+
+    var spr = sprites[Math.floor(t * 0.007) % sprites.length];
+    var s = 1.0;
+    g.save();
+    g.translate(bx, by);
+    // Лёгкий наклон по направлению движения.
+    g.rotate(Math.cos(a) * 0.12);
+    g.drawImage(spr.c, -spr.ax * s, -spr.ay * s, spr.w * s, spr.h * s);
+    g.restore();
+  };
+
   PaperEngine.prototype._drawUnits = function (g, t) {
+    this._drawBoats(g, t);
+    this._drawBirds(g, t);
+
     var n = Math.max(0, Math.min(10, Math.round(this.params.units || 0)));
     var roads = (this.world && this.world.roads) || [];
     if (!n || !roads.length) return;

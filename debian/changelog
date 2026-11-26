@@ -10,6 +10,10 @@ mintland (0.3.2) unstable; urgency=medium
     icon rectangles instead of being covered by an opaque patch.
   * Rebuild the world shortly after an icon stops moving, not mid-drag.
   * Show the package version in the switcher window title.
+  * Add sailing boats to every lake: small, upright, gently rocking.
+  * Add a witch's hut with a circling raven in the emptiest part of the map.
+  * Move lakes away from icon islands when icons are dragged, and pull the
+    rivers to the new lake centres.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
