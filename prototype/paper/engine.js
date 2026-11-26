@@ -1836,7 +1836,7 @@
         data[r * cols + c] =
           (x < 18 || x > W - 18 || y < 18 || y > H - 18 ||
            this._inLake(x, y, 22) ||
-           this._inIconZone(x, y, this._islandPad() * 0.5)) ? 1 : 0;
+           this._inIconZone(x, y, this._islandPad() + 12)) ? 1 : 0;
       }
     }
     this._blocked = { step: step, cols: cols, rows: rows, data: data };
@@ -1939,7 +1939,38 @@
     }
     pts[0] = { x: a.x, y: a.y };
     pts[pts.length - 1] = { x: b.x, y: b.y };
-    return chaikin(pts, 2);
+    pts = chaikin(pts, 2);
+
+    // Держим дорогу на небольшом отдалении от края островка: иначе
+    // пунктир идёт ровно по береговой линии и сливается с контуром.
+    if (this.icons.length) {
+      var margin = this._islandPad() + 10;
+      var lastX = pts[0].x, lastY = pts[0].y;
+      for (var pi = 1; pi < pts.length - 1; pi++) {
+        if (this._inIconZone(pts[pi].x, pts[pi].y, margin)) {
+          var push = this._pushOutOfIcons(pts[pi].x, pts[pi].y, margin);
+          var dx = push.x - pts[pi].x;
+          var dy = push.y - pts[pi].y;
+          var len2 = Math.hypot(dx, dy) || 1;
+          // Минимальный сдвиг наружу — не рвём линию.
+          pts[pi].x += dx / len2 * 10;
+          pts[pi].y += dy / len2 * 10;
+        }
+      }
+      // Сгладить сдвиг, сохранив удаление от зоны.
+      for (var pass = 0; pass < 6; pass++) {
+        for (var pj = 1; pj < pts.length - 1; pj++) {
+          var nx = (pts[pj - 1].x + 2 * pts[pj].x + pts[pj + 1].x) / 4;
+          var ny = (pts[pj - 1].y + 2 * pts[pj].y + pts[pj + 1].y) / 4;
+          if (!this._inIconZone(nx, ny, margin - 2)) {
+            pts[pj].x = nx;
+            pts[pj].y = ny;
+          }
+        }
+      }
+    }
+
+    return pts;
   };
 
   /* ---------- мир ---------- */
