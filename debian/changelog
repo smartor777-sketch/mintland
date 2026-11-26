@@ -14,6 +14,7 @@ mintland (0.3.2) unstable; urgency=medium
   * Add a witch's hut with a circling raven in the emptiest part of the map.
   * Move lakes away from icon islands when icons are dragged, and pull the
     rivers to the new lake centres.
+  * Keep forest trees off the roads, so dotted road lines stay readable.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 

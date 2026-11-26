@@ -1862,7 +1862,10 @@
         if (this._inReserved(fx, fy, 24)) continue;
         if (this._nearCastle(castles, fx, fy, 55)) continue;
         var ts = 0.68 + rng() * 0.34;
-        put('tree', this._sprites.trees, fx, fy, ts, 4.8 * ts, 0);
+        // Деревья не стоят на дороге: иначе ствол закрывает пунктир.
+        // Отступ чуть больше радиуса кроны, но меньше, чем у городов, —
+        // лес по-прежнему подступает к обочине.
+        put('tree', this._sprites.trees, fx, fy, ts, 4.8 * ts, 9);
       }
     }
 
@@ -2465,20 +2468,23 @@
     var sprites = this._sprites.birds || [];
     if (!witch || !sprites.length) return;
 
+    // Круг над избушкой: медленно, по вытянутому эллипсу. Проверяем
+    // несколько точек орбиты, чтобы ворон не пропадал под иконкой.
     var cx = witch.x;
-    var cy = witch.y - 82;
+    var cy = witch.y - 92;
     var a = t * 0.00042 + 1.7;
-    var bx = cx + Math.cos(a) * 74;
-    var by = cy + Math.sin(a) * 26;
+    var bx = cx + Math.cos(a) * 62;
+    var by = cy + Math.sin(a) * 22;
 
     if (this._inIconZone(bx, by, 24)) return;
 
-    var spr = sprites[Math.floor(t * 0.007) % sprites.length];
+    var spr = sprites[Math.floor(t * 0.0045) % sprites.length];
     var s = 1.0;
     g.save();
     g.translate(bx, by);
     // Лёгкий наклон по направлению движения.
-    g.rotate(Math.cos(a) * 0.12);
+    g.rotate(Math.cos(a) * 0.10);
+    g.scale(1.35, 1.35);
     g.drawImage(spr.c, -spr.ax * s, -spr.ay * s, spr.w * s, spr.h * s);
     g.restore();
   };
