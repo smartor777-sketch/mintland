@@ -1578,73 +1578,18 @@
   PaperEngine.prototype._buildRivers = function () {
     var list = this.theme.rivers || [];
     var out = [];
-    var clean = this.icons.length > 0;
 
     for (var i = 0; i < list.length; i++) {
-      // Маршрутизируем по ИСХОДНЫМ путевым точкам, а не по каждому
-      // сглаженному пикселю: иначе на каждый шаг запускается A*.
       var src = this._riverSrc[i].points;
-      var way = [];
+      var pts = [];
       for (var k = 0; k < src.length; k++) {
-        way.push({ x: src[k][0], y: src[k][1] });
+        pts.push({ x: src[k][0], y: src[k][1] });
       }
 
-      // Линия проходит через промежуточные точки. Если между ними
-      // больше ~70 px, режем отрезок пополам: иначе огибание островка
-      // получается слишком грубым.
-      var chain = [way[0]];
-      for (var w = 1; w < way.length; w++) {
-        var a = chain[chain.length - 1], b = way[w];
-        var d = Math.hypot(b.x - a.x, b.y - a.y);
-        var n = Math.max(1, Math.round(d / 70));
-        for (var q = 1; q <= n; q++) {
-          chain.push({ x: a.x + (b.x - a.x) * q / n,
-                       y: a.y + (b.y - a.y) * q / n });
-        }
-      }
-
-      var pts = chain;
-
-      if (clean && this._riverGrid) {
-        var routed = [];
-        for (var wp = 1; wp < chain.length; wp++) {
-          var seg = this._routeRiverSegment(chain[wp - 1], chain[wp]);
-          if (!seg) { routed = null; break; }
-          if (routed.length) seg = seg.slice(1);
-          routed = routed.concat(seg);
-        }
-        if (routed && routed.length > 2) pts = routed;
-      }
-
-      pts = chaikin(pts, 2);
-
-      // Финальная страховка: ни одна точка, включая концы, не должна
-      // оставаться внутри островка. Это работает и когда A* не нашёл
-      // путь (например, точка старта за экраном).
-      if (clean) {
-        var clearPad = this._islandPad() + 26;
-        pts = densify(pts, 8);
-        for (var it = 0; it < 4; it++) {
-          for (var cq = 0; cq < pts.length; cq++) {
-            if (this._inIconZone(pts[cq].x, pts[cq].y, clearPad)) {
-              var pp = this._pushOutOfIcons(pts[cq].x, pts[cq].y, clearPad);
-              pts[cq].x = pp.x;
-              pts[cq].y = pp.y;
-            }
-          }
-          pts = densify(pts, 8);
-        }
-        for (var sm = 0; sm < 3; sm++) {
-          for (var si = 1; si < pts.length - 1; si++) {
-            var nx = (pts[si - 1].x + 2 * pts[si].x + pts[si + 1].x) / 4;
-            var ny = (pts[si - 1].y + 2 * pts[si].y + pts[si + 1].y) / 4;
-            if (!this._inIconZone(nx, ny, clearPad - 2)) {
-              pts[si].x = nx;
-              pts[si].y = ny;
-            }
-          }
-        }
-      }
+      // Река — гладкая авторская линия. Островки иконок непрозрачны,
+      // поэтому вода под ними просто не видна: обводить их не нужно.
+      // A* давал ступеньки и развилки, поэтому от него отказались.
+      pts = chaikin(pts, 4);
 
       var cum = [0];
       for (var c2 = 1; c2 < pts.length; c2++) {
@@ -1660,146 +1605,6 @@
     }
     this.rivers = out;
   };
-
-  // Сетка проходимости для рек: запрещены только островки иконок.
-  // Озёра и дороги реку не останавливают.
-  PaperEngine.prototype._buildRiverGrid = function () {
-    var W = this.W, H = this.H;
-    var step = 20;
-    var cols = Math.ceil(W / step) + 2;
-    var rows = Math.ceil(H / step) + 2;
-    var data = new Uint8Array(cols * rows);
-    var pad = this._islandPad() + 20;
-
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        var x = c * step, y = r * step;
-        data[r * cols + c] =
-          (x < 8 || x > W - 8 || y < 8 || y > H - 8 ||
-           this._inIconZone(x, y, pad)) ? 1 : 0;
-      }
-    }
-    this._riverGrid = { step: step, cols: cols, rows: rows, data: data };
-  };
-
-  PaperEngine.prototype._routeRiverSegment = function (a, b) {
-    var G = this._riverGrid;
-    if (!G) return null;
-
-    var step = G.step, cols = G.cols, rows = G.rows, data = G.data;
-    var total = cols * rows;
-
-    function nearest(x, y) {
-      var c0 = clamp(Math.round(x / step), 0, cols - 1);
-      var r0 = clamp(Math.round(y / step), 0, rows - 1);
-      for (var rad = 0; rad <= 8; rad++) {
-        for (var dr = -rad; dr <= rad; dr++) {
-          for (var dc = -rad; dc <= rad; dc++) {
-            if (Math.max(Math.abs(dr), Math.abs(dc)) !== rad) continue;
-            var c = c0 + dc, r = r0 + dr;
-            if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
-            var i = r * cols + c;
-            if (data[i] === 0) return i;
-          }
-        }
-      }
-      return -1;
-    }
-
-    var start = nearest(a.x, a.y);
-    var goal = nearest(b.x, b.y);
-    if (start < 0 || goal < 0) return null;
-
-    var gScore = new Float32Array(total);
-    gScore.fill(1e9);
-    var parent = new Int32Array(total);
-    parent.fill(-1);
-    var closed = new Uint8Array(total);
-
-    function octile(i) {
-      var gr = (goal / cols) | 0, gc = goal - gr * cols;
-      var r = (i / cols) | 0, c = i - r * cols;
-      var dx = Math.abs(gc - c), dy = Math.abs(gr - r);
-      return Math.max(dx, dy) + 0.414 * Math.min(dx, dy);
-    }
-
-    var dirs = [
-      [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
-      [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]
-    ];
-
-    var open = new MinHeap();
-    gScore[start] = 0;
-    open.push({ i: start, f: octile(start) });
-
-    var found = false;
-    while (open.size()) {
-      var cur = open.pop();
-      var ci = cur.i;
-      if (closed[ci]) continue;
-      closed[ci] = 1;
-      if (ci === goal) { found = true; break; }
-
-      var cr = (ci / cols) | 0;
-      var cc = ci - cr * cols;
-      for (var d = 0; d < 8; d++) {
-        var dc2 = dirs[d][0], dr2 = dirs[d][1], w = dirs[d][2];
-        var nc = cc + dc2, nr = cr + dr2;
-        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
-        var ni = nr * cols + nc;
-        if (data[ni]) continue;
-        if (dc2 && dr2 && (data[cr * cols + nc] || data[nr * cols + cc])) continue;
-        var ng = gScore[ci] + w;
-        if (ng < gScore[ni]) {
-          gScore[ni] = ng;
-          parent[ni] = ci;
-          open.push({ i: ni, f: ng + octile(ni) });
-        }
-      }
-    }
-
-    if (!found && goal !== start) return null;
-
-    var path = [];
-    var cur2 = goal;
-    while (cur2 >= 0) {
-      path.push(cur2);
-      if (cur2 === start) break;
-      cur2 = parent[cur2];
-    }
-    if (path[path.length - 1] !== start) return null;
-    path.reverse();
-
-    var pts = [];
-    for (var p = 0; p < path.length; p++) {
-      var idx = path[p];
-      var rr = (idx / cols) | 0;
-      var cc3 = idx - rr * cols;
-      pts.push({ x: cc3 * step, y: rr * step });
-    }
-    pts[0] = { x: a.x, y: a.y };
-    pts[pts.length - 1] = { x: b.x, y: b.y };
-    return pts;
-  };
-
-  // Разбить длинные отрезки на короткие: иначе прямой участок между
-  // двумя точками вне зоны может «срезать» угол островка.
-  function densify(pts, maxLen) {
-    if (pts.length < 2) return pts;
-    var out = [pts[0]];
-    for (var i = 1; i < pts.length; i++) {
-      var a = out[out.length - 1], b = pts[i];
-      var d = Math.hypot(b.x - a.x, b.y - a.y);
-      var n = Math.max(1, Math.ceil(d / maxLen));
-      for (var k = 1; k <= n; k++) {
-        out.push({
-          x: a.x + (b.x - a.x) * k / n,
-          y: a.y + (b.y - a.y) * k / n
-        });
-      }
-    }
-    return out;
-  }
 
   PaperEngine.prototype._nearRiver = function (x, y, pad) {
     var rivers = this.rivers || [];
@@ -2069,7 +1874,6 @@
     // те, что привязаны к центрам.
     this._initRiverSrc();
     this._buildLakes(rng);
-    this._buildRiverGrid();
     this._buildRivers();
     this._buildBoats(rng);
     this._buildReserved();
@@ -3262,10 +3066,9 @@
       // Не заходим на островки иконок.
       if (this._inIconZone(x, y, 18)) continue;
 
-      // Кораблик на карте всегда стоит upright: поворот по касательной
-      // переворачивал его вверх килем. Только лёгкое покачивание.
-      var rock = Math.sin(t * 0.0016 + b.phase) * 0.045;
-      var dy = Math.sin(t * 0.0021 + b.phase) * b.bob;
+      // Покачивание только по вертикали и с целыми пикселями:
+      // вращение спрайта каждый кадр давало субпиксельное дрожание.
+      var dy = Math.round(Math.sin(t * 0.0021 + b.phase) * b.bob);
 
       var spr = sprites[b.v % sprites.length];
 
@@ -3274,8 +3077,7 @@
       var sc = clamp(Math.min(lake.rx, lake.ry) / 44, 0.52, 0.95);
 
       g.save();
-      g.translate(x, y + dy);
-      g.rotate(rock);
+      g.translate(Math.round(x), Math.round(y) + dy);
       g.drawImage(spr.c, -spr.ax * sc, -spr.ay * sc,
                   spr.w * sc, spr.h * sc);
       g.restore();
