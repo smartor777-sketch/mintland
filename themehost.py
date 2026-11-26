@@ -330,7 +330,13 @@ class ThemeHost:
         self._load_uri()
 
     def _load_uri(self):
-        uri = "file://" + str(self.html_path) + "?wallpaper=1"
+        # Версия по mtime: WebKit кэширует file:// и после правки темы
+        # показывал старую страницу. Для обоев кэш не нужен.
+        try:
+            ver = int(self.html_path.stat().st_mtime)
+        except OSError:
+            ver = 0
+        uri = "file://" + str(self.html_path) + "?wallpaper=1&v=" + str(ver)
         self._log("loading " + uri)
         self.view.load_uri(uri)
 

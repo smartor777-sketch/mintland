@@ -1862,7 +1862,7 @@
 
     for (var i = 0; i < icons.length; i++) {
       var r = icons[i];
-      var pad = 9;
+      var pad = 14;
       var x = r.x - pad, y = r.y - pad;
       var w = r.w + pad * 2, h = r.h + pad * 2;
       var cx = x + w * 0.5, cy = y + h * 0.5;
@@ -1897,6 +1897,14 @@
       og.fillRect(0, 0, this.W, this.H);
       this._drawVignette(og);
     }
+
+    // Поляна чуть светлее бумаги — иначе она невидима и кажется, что
+    // лес просто вырезан справа от иконки. Текстуру при этом сохраняем.
+    og.globalCompositeOperation = 'source-atop';
+    og.globalAlpha = 0.55;
+    og.fillStyle = this.theme.palette.paperLight;
+    og.fillRect(0, 0, this.W, this.H);
+    og.globalAlpha = 1;
 
     og.setTransform(1, 0, 0, 1, 0, 0);
     og.globalCompositeOperation = 'destination-in';
