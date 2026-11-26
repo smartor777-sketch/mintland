@@ -565,6 +565,42 @@
     });
   }
 
+  /* Поле: ромб с бороздами. Заполняет равнины вокруг замков, как на
+   * фэнтези-картах, и не спорит с лесом по силуэту. */
+  function drawField(g, w, h, p, rng) {
+    var ax = w * 0.5, ay = h - 4;
+    var spr = { ink: p.ink, inkSoft: p.inkSoft };
+
+    g.save();
+    g.translate(ax, ay);
+    setInk(g, spr, 1);
+
+    g.fillStyle = p.paperLight;
+    g.beginPath();
+    g.moveTo(-13, 0); g.lineTo(0, 6); g.lineTo(13, 0); g.lineTo(0, -6);
+    g.closePath();
+    g.fill(); g.stroke();
+
+    g.strokeStyle = p.inkSoft;
+    g.lineWidth = 0.75;
+    for (var k = 1; k <= 4; k++) {
+      var t = k / 5;
+      g.beginPath();
+      g.moveTo(-13 + 26 * t, 0 - 6 + 12 * t);
+      g.lineTo(-13 + 26 * t, 0 + 6 - 12 * t);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  function makeField(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 30, h = 18, ax = 15, ay = 14;
+    return makeSprite(w, h, ax, ay, function (g) {
+      drawField(g, w, h, p, rng);
+    });
+  }
+
   /* Кустик: маленькая крона без ствола, заполняет промежутки. */
   function drawBush(g, w, h, p, rng) {
     var ax = w * 0.5, ay = h - 3;
@@ -703,7 +739,7 @@
   PaperEngine.prototype._buildSprites = function () {
     var p = this.theme.palette;
     var i;
-    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [] };
+    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [] };
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1200 + i * 131, p, false));
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1e00 + i * 167, p, true));
     for (i = 0; i < 5; i++) s.houses.push(makeHouse(0x3400 + i * 173, p));
@@ -713,6 +749,7 @@
     for (i = 0; i < 2; i++) s.carts.push(makeCart(0xbc00 + i * 89, p));
     for (i = 0; i < 4; i++) s.hills.push(makeHill(0xde00 + i * 73, p));
     for (i = 0; i < 4; i++) s.bushes.push(makeBush(0xf000 + i * 59, p));
+    for (i = 0; i < 3; i++) s.fields.push(makeField(0xfa00 + i * 41, p));
     this._sprites = s;
   };
 
@@ -1050,6 +1087,8 @@
     var self = this;
     var W = this.W, H = this.H;
     var rng = mulberry32(this._seed);
+    // Плотность на пиксель должна быть одинаковой на любом разрешении.
+    var areaScale = clamp((W * H) / (1280 * 720), 0.6, 3.2);
 
     this._buildLakes(rng);
     this._buildRivers();
@@ -1058,28 +1097,67 @@
 
     var roadsCfg = this.theme.roads || { maxCastles: 6, castleSpacing: 0.30 };
 
-    /* --- замки --- */
+    /* --- замки: по одному на ячейку сетки, чтобы карта была
+     * заполнена равномерно, а не сбивалась в один угол. --- */
+    var areaK = Math.min(2.2, Math.sqrt((W * H) / (1280 * 720)));
+    var count = clamp(Math.round(this.params.roads * roadsCfg.maxCastles * areaK),
+                      2, Math.round(roadsCfg.maxCastles * 2.2));
+    var gridCols = count > 4 ? 3 : 2;
+    var gridRows = 2;
+    var cells = [];
+    for (var gr = 0; gr < gridRows; gr++) {
+      for (var gc = 0; gc < gridCols; gc++) cells.push([gc, gr]);
+    }
+    for (var ci = cells.length - 1; ci > 0; ci--) {
+      var cj = Math.floor(rng() * (ci + 1));
+      var tmp = cells[ci]; cells[ci] = cells[cj]; cells[cj] = tmp;
+    }
+
     var minD = Math.min(W, H) * roadsCfg.castleSpacing;
-    var count = clamp(Math.round(this.params.roads * roadsCfg.maxCastles),
-                      2, roadsCfg.maxCastles);
     var castles = [];
+    var cw = W / gridCols, ch = H / gridRows;
+
+    for (var cell = 0; cell < cells.length && castles.length < count; cell++) {
+      var cc = cells[cell][0], cr = cells[cell][1];
+      var placed = false;
+      for (var t = 0; t < 60 && !placed; t++) {
+        var x = (cc + 0.5) * cw + (rng() - 0.5) * cw * 0.60;
+        var y = (cr + 0.5) * ch + (rng() - 0.5) * ch * 0.60;
+        x = clamp(x, 70, W - 70);
+        y = clamp(y, 80, H - 80);
+        if (this._inLake(x, y, 34)) continue;
+        if (this._nearRiver(x, y, 26)) continue;
+        if (this._inReserved(x, y, 30)) continue;
+        var ok = true;
+        for (var k = 0; k < castles.length; k++) {
+          if (Math.hypot(castles[k].x - x, castles[k].y - y) < minD) {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok) continue;
+        castles.push({ x: x, y: y });
+        placed = true;
+      }
+    }
+
+    // Запасной вариант, если какая-то ячейка целиком занята водой.
     var tries = 0;
-    while (castles.length < count && tries < 1200) {
+    while (castles.length < count && tries < 800) {
       tries++;
-      if (tries % 200 === 0) minD *= 0.90;
-      var x = 80 + rng() * (W - 160);
-      var y = 80 + rng() * (H - 160);
-      if (this._inLake(x, y, 34)) continue;
-      if (this._nearRiver(x, y, 24)) continue;
-      if (this._inReserved(x, y, 30)) continue;
-      var ok = true;
-      for (var c = 0; c < castles.length; c++) {
-        if (Math.hypot(castles[c].x - x, castles[c].y - y) < minD) {
-          ok = false;
+      var rx = 70 + rng() * (W - 140);
+      var ry = 80 + rng() * (H - 160);
+      if (this._inLake(rx, ry, 34)) continue;
+      if (this._nearRiver(rx, ry, 26)) continue;
+      if (this._inReserved(rx, ry, 30)) continue;
+      var ok2 = true;
+      for (var k2 = 0; k2 < castles.length; k2++) {
+        if (Math.hypot(castles[k2].x - rx, castles[k2].y - ry) < minD * 0.75) {
+          ok2 = false;
           break;
         }
       }
-      if (ok) castles.push({ x: x, y: y });
+      if (ok2) castles.push({ x: rx, y: ry });
     }
 
     /* --- сеть дорог: минимальное остовное дерево --- */
@@ -1168,18 +1246,41 @@
 
     /* --- объекты --- */
     var objects = [];
-    var placed = [];
 
-    var EDGE = 180;
+    var EDGE = Math.max(180, Math.round(Math.min(W, H) * 0.24));
+
+    // Пространственный хэш: без него проверка пересечений на 4K
+    // превращается в десятки миллионов вызовов hypot.
+    var CELL = 56;
+    var buckets = new Map();
+    function bucketKey(cx, cy) { return cx + ',' + cy; }
+    function remember(x, y, r) {
+      var k = bucketKey(Math.floor(x / CELL), Math.floor(y / CELL));
+      var arr = buckets.get(k);
+      if (!arr) { arr = []; buckets.set(k, arr); }
+      arr.push({ x: x, y: y, r: r });
+    }
 
     function free(x, y, r) {
       if (x < -EDGE || x > W + EDGE || y < -EDGE || y > H + EDGE) return false;
       if (self._inLake(x, y, 10)) return false;
       if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
-      for (var k = 0; k < placed.length; k++) {
-        var d = Math.hypot(placed[k].x - x, placed[k].y - y);
-        if (d < placed[k].r + r) return false;
+
+      var pad = r + 22;
+      var c0 = Math.floor((x - pad) / CELL);
+      var c1 = Math.floor((x + pad) / CELL);
+      var r0 = Math.floor((y - pad) / CELL);
+      var r1 = Math.floor((y + pad) / CELL);
+      for (var cy = r0; cy <= r1; cy++) {
+        for (var cx = c0; cx <= c1; cx++) {
+          var arr = buckets.get(bucketKey(cx, cy));
+          if (!arr) continue;
+          for (var k = 0; k < arr.length; k++) {
+            var d = Math.hypot(arr[k].x - x, arr[k].y - y);
+            if (d < arr[k].r + r) return false;
+          }
+        }
       }
       return true;
     }
@@ -1195,12 +1296,12 @@
         v: Math.floor(rng() * variants.length),
         r: radius
       });
-      placed.push({ x: x, y: y, r: radius });
+      remember(x, y, radius);
       return true;
     }
 
     /* 1. горные гряды — самое крупное, ставим первыми */
-    var ranges = Math.round(20 + this.params.density * 18);
+    var ranges = Math.round((20 + this.params.density * 18) * areaScale);
     for (var m = 0; m < ranges; m++) {
       var cx = 0, cy = 0, found = false;
       for (var mt = 0; mt < 80 && !found; mt++) {
@@ -1235,7 +1336,7 @@
     for (var cn = 0; cn < castles.length; cn++) {
       this._reserved.push({
         x: castles[cn].x - 80,
-        y: castles[cn].y - 70,
+        y: castles[cn].y - 78,
         w: 160,
         h: 26
       });
@@ -1256,6 +1357,20 @@
       }
     }
 
+    /* Поля вокруг замков. */
+    for (var fi = 0; fi < castles.length; fi++) {
+      var fcst = castles[fi];
+      var fnum = 2 + Math.floor(rng() * 3);
+      for (var fk2 = 0; fk2 < fnum; fk2++) {
+        var fa2 = rng() * TAU;
+        var fr2 = 46 + rng() * 54;
+        var fpx = fcst.x + Math.cos(fa2) * fr2;
+        var fpy = fcst.y + Math.sin(fa2) * fr2 * 0.66;
+        var fs2 = 0.8 + rng() * 0.4;
+        put('field', this._sprites.fields, fpx, fpy, fs2, 9 * fs2, 8);
+      }
+    }
+
     /* 3. леса: плотные массивы по шуму. Так на карте появляются
      * настоящие лесные области, а не отдельные кучки деревьев. */
     var FSTEP = 21;
@@ -1269,15 +1384,13 @@
         if (this._inLake(fx, fy, 14)) continue;
         if (this._inReserved(fx, fy, 24)) continue;
         if (this._nearCastle(castles, fx, fy, 55)) continue;
-        if (this._nearRiver(fx, fy, 8)) continue;
-        if (this._nearRoad(fx, fy, 7)) continue;
         var ts = 0.68 + rng() * 0.34;
         put('tree', this._sprites.trees, fx, fy, ts, 4.8 * ts, 0);
       }
     }
 
     /* 4. одиночные деревья на открытых местах */
-    var lone = Math.round(24 + this.params.forest * 16);
+    var lone = Math.round((24 + this.params.forest * 16) * areaScale);
     for (var lt = 0; lt < lone; lt++) {
       var lx = -EDGE + rng() * (W + EDGE * 2);
       var ly = -EDGE + rng() * (H + EDGE * 2);
@@ -1286,7 +1399,7 @@
     }
 
     /* 5. камни */
-    var rocks = Math.round(24 + this.params.density * 30);
+    var rocks = Math.round((24 + this.params.density * 30) * areaScale);
     for (var rk = 0; rk < rocks; rk++) {
       var rx = -EDGE + rng() * (W + EDGE * 2);
       var ry = -EDGE + rng() * (H + EDGE * 2);
@@ -1295,7 +1408,7 @@
     }
 
     /* 6. кустики */
-    var bushes = Math.round(150 + this.params.forest * 130);
+    var bushes = Math.round((150 + this.params.forest * 130) * Math.min(areaScale, 2.2));
     for (var bu = 0; bu < bushes; bu++) {
       var bx = -EDGE + rng() * (W + EDGE * 2);
       var by = -EDGE + rng() * (H + EDGE * 2);
@@ -1304,7 +1417,7 @@
     }
 
     /* 7. холмики: заполняют пустой пергамент, как на образце */
-    var hills = Math.round(50 + this.params.density * 44);
+    var hills = Math.round((50 + this.params.density * 44) * areaScale);
     for (var hl = 0; hl < hills; hl++) {
       var hx2 = -EDGE + rng() * (W + EDGE * 2);
       var hy2 = -EDGE + rng() * (H + EDGE * 2);
@@ -1316,7 +1429,7 @@
 
     /* 8. травяные штрихи: самый мелкий слой, без проверок на пересечения */
     var tufts = [];
-    var tuftCount = Math.round(900 + this.params.density * 600);
+    var tuftCount = Math.round((900 + this.params.density * 600) * Math.min(areaScale, 1.8));
     for (var tf = 0; tf < tuftCount; tf++) {
       var tx2 = -EDGE + rng() * (W + EDGE * 2);
       var ty2 = -EDGE + rng() * (H + EDGE * 2);
@@ -1621,7 +1734,7 @@
 
     for (var i = 0; i < castles.length; i++) {
       var c = castles[i];
-      this._drawSpacedText(g, names[i % names.length], c.x, c.y - 54,
+      this._drawSpacedText(g, names[i % names.length], c.x, c.y - 62,
                            12, 'rgba(90,67,34,0.68)', 0,
                            'rgba(214,190,144,0.55)', true);
     }
@@ -1682,8 +1795,8 @@
     var icons = this.icons;
     if (!icons.length) return null;
 
-    // Маска в четверть разрешения: при растяжении края становятся
-    // мягкими, как у настоящей поляны, а не как у кнопки.
+    // Маска в четверть разрешения: края получаются мягкими, как у
+    // настоящей поляны, а не как у кнопки.
     var ms = 0.25;
     var mw = Math.max(1, Math.round(this.W * ms));
     var mh = Math.max(1, Math.round(this.H * ms));
@@ -1697,7 +1810,7 @@
 
     for (var i = 0; i < icons.length; i++) {
       var r = icons[i];
-      var pad = 24;
+      var pad = 10;
       var x = r.x - pad, y = r.y - pad;
       var w = r.w + pad * 2, h = r.h + pad * 2;
       var cx = x + w * 0.5, cy = y + h * 0.5;
@@ -1707,7 +1820,7 @@
       var n = 18;
       for (var k = 0; k < n; k++) {
         var a = k / n * TAU;
-        var wob = 0.90 + rng() * 0.10;
+        var wob = 0.91 + rng() * 0.09;
         pts.push([cx + Math.cos(a) * rx * wob,
                   cy + Math.sin(a) * ry * wob]);
       }
@@ -1715,25 +1828,32 @@
       mg.fill();
     }
 
-    var out = document.createElement('canvas');
-    out.width = Math.round(this.W * this.dpr);
-    out.height = Math.round(this.H * this.dpr);
-    var og = out.getContext('2d');
-    og.scale(this.dpr, this.dpr);
-
+    // Заливка — настоящая бумага, обрезанная по маске.
     var fill = document.createElement('canvas');
     fill.width = mw;
     fill.height = mh;
     var fg = fill.getContext('2d');
+    if (this._paper) {
+      fg.drawImage(this._paper, 0, 0, mw, mh);
+    } else {
+      fg.fillStyle = this.theme.palette.paper;
+      fg.fillRect(0, 0, mw, mh);
+    }
+    fg.globalCompositeOperation = 'destination-in';
     fg.drawImage(mask, 0, 0);
-    fg.globalCompositeOperation = 'source-in';
-    fg.fillStyle = this.theme.palette.paperLight;
-    fg.fillRect(0, 0, mw, mh);
 
-    og.save();
-    og.globalAlpha = 0.34;
+    // Лёгкая тень по краю — без жёсткого контура, иначе вокруг
+    // иконки появляется «капсула» из UI.
+    var out = document.createElement('canvas');
+    out.width = mw;
+    out.height = mh;
+    var og = out.getContext('2d');
     og.imageSmoothingEnabled = true;
-    og.drawImage(fill, 0, 0, this.W, this.H);
+    og.save();
+    og.shadowColor = 'rgba(70,51,29,0.22)';
+    og.shadowBlur = 4;
+    og.globalAlpha = 0.52;
+    og.drawImage(fill, 0, 0);
     og.restore();
 
     return out;
