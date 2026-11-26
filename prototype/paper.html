@@ -133,8 +133,10 @@
         h: (q[3] - q[1]) / k
       };
     }) : [];
-    engine.setIcons(icons);
-    engine.render(performance.now());
+    // При перетаскивании хост присылает много сообщений; слой
+    // полян пересобирается в ближайшем кадре, а не на каждое.
+    engine.setIconsSoon(icons);
+    if (paused || FREEZE) engine.render(performance.now());
   }
 
   engine.onFrame = function (e) {
@@ -145,7 +147,8 @@
     var world = e.world || {};
     dev.textContent =
       'Paper engine · ' + e.theme.id + '\n' +
-      'bake ' + e.bakeMs.toFixed(1) + ' ms · frame ' + e.frameMs.toFixed(1) + ' ms\n' +
+      'bake ' + e.bakeMs.toFixed(1) + ' ms · overlay ' + e.overlayMs.toFixed(1) +
+      ' ms · frame ' + e.frameMs.toFixed(1) + ' ms\n' +
       'objects ' + (world.objects ? world.objects.length : 0) +
       ' · roads ' + (world.roads ? world.roads.length : 0) +
       ' · icons ' + e.icons.length;
@@ -170,6 +173,7 @@
       lakes: world.lakes ? world.lakes.length : 0,
       rivers: world.rivers ? world.rivers.length : 0,
       bakeMs: engine.bakeMs,
+      overlayMs: engine.overlayMs,
       frameMs: engine.frameMs,
       dpr: engine.dpr
     };

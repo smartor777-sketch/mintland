@@ -710,8 +710,22 @@
   function PaperEngine(canvas, theme) {
     this.cv = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
-    this.baked = document.createElement('canvas');
-    this.bakedCtx = this.baked.getContext('2d', { alpha: false });
+
+    // Статическая основа: бумага, реки, дороги, лес, замки. Не зависит
+    // от иконок и пересобирается только при смене мира.
+    this.base = document.createElement('canvas');
+    this.baseCtx = this.base.getContext('2d', { alpha: false });
+
+    // Слой полян под иконками. Пересобирается при каждом сдвиге иконки,
+    // но это дешёвая операция: маска в четверть разрешения.
+    this.overlay = document.createElement('canvas');
+    this.overlayCtx = this.overlay.getContext('2d');
+
+    // Готовый кадр: основа + поляны. Пересобирается при сдвиге иконок,
+    // а каждый кадр — один блит.
+    this.display = document.createElement('canvas');
+    this.displayCtx = this.display.getContext('2d', { alpha: false });
+    this.displayDirty = true;
     this.theme = theme;
     this.params = Object.assign({}, theme.defaults);
     this.W = 1;
@@ -722,14 +736,18 @@
     this.worldDirty = true;
     this.bakeDirty = true;
     this.bakeMs = 0;
+    this.overlayMs = 0;
     this.frameMs = 0;
     this.onFrame = null;
     this._seed = theme.seed || 0x51ed270b;
     this._paper = null;
+    this._paperVig = null;
     this._paperKey = '';
     this._sprites = null;
     this._clearing = null;
     this._clearingSig = '';
+    this.overlayDirty = true;
+    this.displayDirty = true;
     this._blocked = null;
     this._roadsForPlacement = [];
     this._reserved = [];
@@ -758,6 +776,9 @@
     this.params = Object.assign({}, theme.defaults);
     this._seed = theme.seed || 0x51ed270b;
     this._paperKey = '';
+    this._clearingSig = '';
+    this.overlayDirty = true;
+    this.displayDirty = true;
     this._buildSprites();
     this.worldDirty = true;
     this.bakeDirty = true;
@@ -779,8 +800,19 @@
 
   PaperEngine.prototype.setIcons = function (icons) {
     this.icons = icons || [];
+    // Основа не трогается: меняются только поляны под иконками.
     this._clearingSig = '';
-    this.bakeDirty = true;
+    this.overlayDirty = true;
+    this.displayDirty = true;
+    this.lastIconMove = performance.now();
+  };
+
+  // Хост присылает прямоугольники на каждом шаге перетаскивания, часто
+  // чаще, чем успевает пересобраться слой. Тяжёлую работу откладываем
+  // до следующего кадра: render() всё равно соберёт её один раз.
+  PaperEngine.prototype.setIconsSoon = function (icons) {
+    this._pendingIcons = icons || [];
+    this._iconsPending = true;
   };
 
   PaperEngine.prototype.resize = function (w, h) {
@@ -795,11 +827,22 @@
     this.cv.style.height = this.H + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    this.baked.width = this.cv.width;
-    this.baked.height = this.cv.height;
-    this.bakedCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.base.width = this.cv.width;
+    this.base.height = this.cv.height;
+    this.baseCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    this.overlay.width = this.cv.width;
+    this.overlay.height = this.cv.height;
+    this.overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    this.display.width = this.cv.width;
+    this.display.height = this.cv.height;
+    this.displayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.displayDirty = true;
 
     this._paperKey = '';
+    this._clearingSig = '';
+    this.overlayDirty = true;
     this.worldDirty = true;
     this.bakeDirty = true;
   };
@@ -1529,6 +1572,16 @@
 
     this._paper = c;
     this._paperKey = key;
+
+    // Та же бумага с виньеткой: из неё вырезаются поляны под иконками.
+    var v = document.createElement('canvas');
+    v.width = c.width;
+    v.height = c.height;
+    var vg = v.getContext('2d');
+    vg.drawImage(c, 0, 0);
+    vg.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this._drawVignette(vg);
+    this._paperVig = v;
   };
 
   /* ---------- отрисовка ---------- */
@@ -1795,9 +1848,8 @@
     var icons = this.icons;
     if (!icons.length) return null;
 
-    // Маска в четверть разрешения: края получаются мягкими, как у
-    // настоящей поляны, а не как у кнопки.
-    var ms = 0.25;
+    // Маска в 1/8 разрешения: края получаются мягкими, как у поляны.
+    var ms = 0.125;
     var mw = Math.max(1, Math.round(this.W * ms));
     var mh = Math.max(1, Math.round(this.H * ms));
 
@@ -1810,7 +1862,7 @@
 
     for (var i = 0; i < icons.length; i++) {
       var r = icons[i];
-      var pad = 10;
+      var pad = 9;
       var x = r.x - pad, y = r.y - pad;
       var w = r.w + pad * 2, h = r.h + pad * 2;
       var cx = x + w * 0.5, cy = y + h * 0.5;
@@ -1820,7 +1872,7 @@
       var n = 18;
       for (var k = 0; k < n; k++) {
         var a = k / n * TAU;
-        var wob = 0.91 + rng() * 0.09;
+        var wob = 0.90 + rng() * 0.10;
         pts.push([cx + Math.cos(a) * rx * wob,
                   cy + Math.sin(a) * ry * wob]);
       }
@@ -1828,46 +1880,29 @@
       mg.fill();
     }
 
-    // Заливка — настоящая бумага, обрезанная по маске.
-    var fill = document.createElement('canvas');
-    fill.width = mw;
-    fill.height = mh;
-    var fg = fill.getContext('2d');
-    if (this._paper) {
-      fg.drawImage(this._paper, 0, 0, mw, mh);
-    } else {
-      fg.fillStyle = this.theme.palette.paper;
-      fg.fillRect(0, 0, mw, mh);
-    }
-    fg.globalCompositeOperation = 'destination-in';
-    fg.drawImage(mask, 0, 0);
-
-    // Лёгкая тень по краю — без жёсткого контура, иначе вокруг
-    // иконки появляется «капсула» из UI.
+    // Внутри поляны — та же бумага с теми же пятнами и виньеткой.
+    // Поэтому островок не выглядит наклейкой: видно только то, что
+    // под ним нет деревьев и дорог.
     var out = document.createElement('canvas');
-    out.width = mw;
-    out.height = mh;
+    out.width = Math.round(this.W * this.dpr);
+    out.height = Math.round(this.H * this.dpr);
     var og = out.getContext('2d');
     og.imageSmoothingEnabled = true;
-    og.save();
-    og.shadowColor = 'rgba(70,51,29,0.22)';
-    og.shadowBlur = 4;
-    og.globalAlpha = 0.52;
-    og.drawImage(fill, 0, 0);
-    og.restore();
+    og.scale(this.dpr, this.dpr);
+
+    if (this._paperVig) {
+      og.drawImage(this._paperVig, 0, 0, this.W, this.H);
+    } else {
+      og.fillStyle = this.theme.palette.paper;
+      og.fillRect(0, 0, this.W, this.H);
+      this._drawVignette(og);
+    }
+
+    og.setTransform(1, 0, 0, 1, 0, 0);
+    og.globalCompositeOperation = 'destination-in';
+    og.drawImage(mask, 0, 0, out.width, out.height);
 
     return out;
-  };
-
-  PaperEngine.prototype._drawClearings = function (g) {
-    if (!this.icons.length) return;
-    var sig = this._iconSig();
-    if (this._clearingSig !== sig) {
-      this._clearingSig = sig;
-      this._clearing = this._buildClearing();
-    }
-    if (!this._clearing) return;
-    g.drawImage(this._clearing, 0, 0, this.W, this.H);
   };
 
   PaperEngine.prototype._spriteFor = function (o) {
@@ -1878,8 +1913,6 @@
 
   PaperEngine.prototype._drawObjects = function (g) {
     var objects = (this.world && this.world.objects) || [];
-    var icons = this.icons;
-    var margin = (this.theme.objects && this.theme.objects.margin) || 22;
 
     for (var i = 0; i < objects.length; i++) {
       var o = objects[i];
@@ -1889,18 +1922,6 @@
       var sw = spr.w * o.s, sh = spr.h * o.s;
       var x0 = o.x - spr.ax * o.s;
       var y0 = o.y - spr.ay * o.s;
-
-      var hidden = false;
-      for (var k = 0; k < icons.length; k++) {
-        var r = icons[k];
-        if (x0 < r.x + r.w + margin && x0 + sw > r.x - margin &&
-            y0 < r.y + r.h + margin && y0 + sh > r.y - margin) {
-          hidden = true;
-          break;
-        }
-      }
-      if (hidden) continue;
-
       g.drawImage(spr.c, x0, y0, sw, sh);
     }
   };
@@ -1933,7 +1954,7 @@
     if (this.worldDirty || !this.world) this.buildWorld();
     this._ensurePaper();
 
-    var g = this.bakedCtx;
+    var g = this.baseCtx;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     g.drawImage(this._paper, 0, 0, this.W, this.H);
@@ -1943,7 +1964,6 @@
     this._drawRoads(g);
     this._drawBridges(g);
     this._drawLabels(g);
-    this._drawClearings(g);
     this._drawObjects(g);
     this._drawCastleNames(g);
     this._drawCompass(g);
@@ -1952,6 +1972,39 @@
 
     this.bakeMs = performance.now() - t0;
     this.bakeDirty = false;
+    this.displayDirty = true;
+  };
+
+  PaperEngine.prototype._ensureOverlay = function () {
+    if (!this.overlayDirty) return;
+    var t0 = performance.now();
+
+    var g = this.overlayCtx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, this.overlay.width, this.overlay.height);
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    var sig = this._iconSig();
+    if (!this.icons.length) {
+      this._clearingSig = sig;
+      this._clearing = null;
+      this.overlayDirty = false;
+      this.overlayMs = 0;
+      return;
+    }
+
+    if (this._clearingSig !== sig) {
+      this._clearingSig = sig;
+      this._clearing = this._buildClearing();
+    }
+    if (this._clearing) {
+      g.imageSmoothingEnabled = true;
+      g.drawImage(this._clearing, 0, 0, this.W, this.H);
+    }
+
+    this.overlayMs = performance.now() - t0;
+    this.overlayDirty = false;
+    this.displayDirty = true;
   };
 
   PaperEngine.prototype._drawUnits = function (g, t) {
@@ -1990,13 +2043,30 @@
     }
   };
 
+  PaperEngine.prototype._compose = function () {
+    if (!this.displayDirty) return;
+    var g = this.displayCtx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(this.base, 0, 0);
+    g.drawImage(this.overlay, 0, 0);
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.displayDirty = false;
+  };
+
   PaperEngine.prototype.render = function (t) {
     var t0 = performance.now();
+    if (this._iconsPending) {
+      this._iconsPending = false;
+      this.setIcons(this._pendingIcons);
+      this._pendingIcons = null;
+    }
     if (this.bakeDirty || this.worldDirty || !this.world) this.bake();
+    this._ensureOverlay();
+    this._compose();
 
     var g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.drawImage(this.baked, 0, 0);
+    g.drawImage(this.display, 0, 0);
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this._drawUnits(g, t || 0);
 
