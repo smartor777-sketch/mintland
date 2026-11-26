@@ -1613,8 +1613,11 @@
   // пределах 0.4–2.0 от базового значения.
   PaperEngine.prototype._islandPad = function () {
     var k = this.params.island;
-    if (typeof k !== 'number') k = 0.55;
-    return Math.round(10 + k * 34);
+    if (typeof k !== 'number') k = 31;
+    // В старых сохранениях island был долей 0..1. Понимаем оба формата,
+    // чтобы после обновления остров не схлопнулся в 1 px.
+    if (k <= 1.5) k = 6 + k * 46;
+    return clamp(Math.round(k), 0, 80);
   };
 
   PaperEngine.prototype._inIconZone = function (x, y, pad) {
@@ -2300,59 +2303,36 @@
 
     var rng = mulberry32(0x9e3779b9);
 
-    // Пятна по шуму: не ровные круги, а неровные кляксы, как на
-    // настоящем пергаменте. Считаем поле в низком разрешении и
-    // растягиваем — края получаются мягкими и органичными.
-    var pmw = Math.max(48, Math.ceil(W / 14));
-    var pmh = Math.max(32, Math.ceil(H / 14));
-    var pc = document.createElement('canvas');
-    pc.width = pmw;
-    pc.height = pmh;
-    var pg = pc.getContext('2d');
-    var pimg = pg.createImageData(pmw, pmh);
-    var pdata = pimg.data;
-    for (var py = 0; py < pmh; py++) {
-      for (var px = 0; px < pmw; px++) {
-        var n1 = fbm(px * 0.055 + 11.2, py * 0.055 - 4.3, 3);
-        var n2 = fbm(px * 0.16 - 2.7, py * 0.16 + 8.9, 2);
-        var v2 = n1 * 0.75 + n2 * 0.25;
-        // Только верхняя часть поля даёт пятна, остальное прозрачно.
-        var a2 = smooth01((v2 - 0.47) / 0.26);
-        var i2 = (py * pmw + px) * 4;
-        pdata[i2] = 112;
-        pdata[i2 + 1] = 84;
-        pdata[i2 + 2] = 44;
-        pdata[i2 + 3] = Math.round(a2 * 96);
-      }
-    }
-    pg.putImageData(pimg, 0, 0);
-    g.imageSmoothingEnabled = true;
-    g.drawImage(pc, 0, 0, W, H);
+    // Пятна — мелкие и разбросанные по всему листу. Крупные области
+    // давали «грязные» зоны; для старой бумаги нужна равномерная
+    // крапчатость, которую замечаешь только вблизи.
+    var spotCount = Math.round(110 * Math.min(2.4, (W * H) / (1280 * 720)));
+    for (var sp = 0; sp < spotCount; sp++) {
+      var sx = rng() * W;
+      var sy = rng() * H;
+      var sr = 22 + rng() * 74;
+      var alpha = 0.060 + rng() * 0.085;
 
-    // Ещё один слой мельче и плотнее — «затёки» по краям пятен.
-    var qmw = Math.max(64, Math.ceil(W / 8));
-    var qmh = Math.max(48, Math.ceil(H / 8));
-    var qc = document.createElement('canvas');
-    qc.width = qmw;
-    qc.height = qmh;
-    var qg = qc.getContext('2d');
-    var qimg = qg.createImageData(qmw, qmh);
-    var qdata = qimg.data;
-    for (var qy = 0; qy < qmh; qy++) {
-      for (var qx = 0; qx < qmw; qx++) {
-        var m1 = fbm(qx * 0.075 + 31.4, qy * 0.075 + 17.6, 3);
-        var m2 = fbm(qx * 0.21 + 5.1, qy * 0.21 - 9.4, 2);
-        var vv = m1 * 0.7 + m2 * 0.3;
-        var aa = smooth01((vv - 0.54) / 0.20);
-        var iq = (qy * qmw + qx) * 4;
-        qdata[iq] = 96;
-        qdata[iq + 1] = 70;
-        qdata[iq + 2] = 36;
-        qdata[iq + 3] = Math.round(aa * 52);
-      }
+      // Мягкий край без чёткой границы: радиальный градиент от центра.
+      var grad2 = g.createRadialGradient(sx, sy, 0, sx, sy, sr);
+      grad2.addColorStop(0, 'rgba(104,76,38,' + alpha.toFixed(3) + ')');
+      grad2.addColorStop(0.55, 'rgba(104,76,38,' + (alpha * 0.6).toFixed(3) + ')');
+      grad2.addColorStop(1, 'rgba(104,76,38,0)');
+      g.fillStyle = grad2;
+      g.beginPath();
+      g.arc(sx, sy, sr, 0, TAU);
+      g.fill();
     }
-    qg.putImageData(qimg, 0, 0);
-    g.drawImage(qc, 0, 0, W, H);
+
+    // Совсем мелкая «крапчатость», как пыль и поры бумаги.
+    for (var dp = 0; dp < 1500; dp++) {
+      var dx = rng() * W, dy = rng() * H;
+      var dr = 0.5 + rng() * 1.6;
+      g.fillStyle = 'rgba(96,70,36,' + (0.03 + rng() * 0.07).toFixed(3) + ')';
+      g.beginPath();
+      g.arc(dx, dy, dr, 0, TAU);
+      g.fill();
+    }
 
     // Немного светлых проплешин, чтобы карта «дышала».
     for (var s2 = 0; s2 < 7; s2++) {
@@ -2759,6 +2739,16 @@
     this._drawRivers(g);
     this._drawLakes(g);
 
+    // Вода обтекает островки иконок: вырезаем их силуэт с мягким краем,
+    // иначе озеро обрывается ровной кромкой под значком.
+    if (this.icons.length) {
+      var mask = this._iconIslandMask(this._islandPad() + 4);
+      g.globalCompositeOperation = 'destination-out';
+      g.imageSmoothingEnabled = true;
+      g.drawImage(mask.canvas, 0, 0, this.W, this.H);
+      g.globalCompositeOperation = 'source-over';
+    }
+
     return this.water;
   };
 
@@ -2900,16 +2890,15 @@
     fill.height = mask.h;
     var fg = fill.getContext('2d');
 
-    // Сначала ровный светлый пергамент — он гарантированно светлее
-    // карты, даже у затемнённого виньеткой края.
-    fg.fillStyle = palette.paperLight;
-    fg.fillRect(0, 0, mask.w, mask.h);
-
-    // Потом лёгкая текстура бумаги, чтобы остров не был «пластиковым».
-    if (this._paper) {
-      fg.globalAlpha = 0.30;
+    // Остров заливается тем же пергаментом, что и карта: он не должен
+    // выглядеть светлой заплаткой, только чистым местом без деталей.
+    if (this._paperVig) {
+      fg.drawImage(this._paperVig, 0, 0, mask.w, mask.h);
+    } else if (this._paper) {
       fg.drawImage(this._paper, 0, 0, mask.w, mask.h);
-      fg.globalAlpha = 1;
+    } else {
+      fg.fillStyle = palette.paper;
+      fg.fillRect(0, 0, mask.w, mask.h);
     }
 
     fg.globalCompositeOperation = 'destination-in';
