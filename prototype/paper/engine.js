@@ -99,6 +99,16 @@
     return pts;
   }
 
+  function segIntersect(a, b, c, d) {
+    var rx = b.x - a.x, ry = b.y - a.y;
+    var sx = d.x - c.x, sy = d.y - c.y;
+    var den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-9) return false;
+    var t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+    var u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+    return t > 0.02 && t < 0.98 && u > 0.02 && u < 0.98;
+  }
+
   function distToSegment(px, py, ax, ay, bx, by) {
     var dx = bx - ax, dy = by - ay;
     var len2 = dx * dx + dy * dy;
@@ -1480,29 +1490,99 @@
 
     this._lakeHome = out.map(function (l) { return { cx: l.cx, cy: l.cy }; });
     this.lakes = out;
-    this._snapRiversToLakes();
+    this._buildLakeLinks(rng);
   };
 
-  // Концы рек, которые были привязаны к старым центрам озёр, тянем к
-  // новым — иначе река обрывается в пустоте.
-  PaperEngine.prototype._snapRiversToLakes = function () {
-    if (!this._riverSrc || !this._lakeHome) return;
-    for (var li = 0; li < this.lakes.length; li++) {
-      var home = this._lakeHome[li];
-      var lake = this.lakes[li];
-      if (Math.abs(home.cx - lake.cx) < 1 && Math.abs(home.cy - lake.cy) < 1) {
-        continue;
+  // Водные линии между озёрами. Это не «канал по линейке»: дуга с
+  // заметным изгибом идёт в обход уже нарисованной воды. Если все
+  // варианты изгиба пересекают реку — линия не рисуется.
+  PaperEngine.prototype._buildLakeLinks = function (rng) {
+    var links = this.theme.lakeLinks || [];
+    var out = [];
+    var rivers = this.rivers || [];
+    var self = this;
+
+    function arc(p0, p1, bow) {
+      var dx = p1.x - p0.x, dy = p1.y - p0.y;
+      var len = Math.hypot(dx, dy) || 1;
+      var mx = (p0.x + p1.x) * 0.5 - dy / len * bow;
+      var my = (p0.y + p1.y) * 0.5 + dx / len * bow;
+      var pts = [];
+      var N = 32;
+      for (var k = 0; k <= N; k++) {
+        var t = k / N, mt = 1 - t;
+        pts.push({
+          x: mt * mt * p0.x + 2 * mt * t * mx + t * t * p1.x,
+          y: mt * mt * p0.y + 2 * mt * t * my + t * t * p1.y
+        });
       }
-      for (var ri = 0; ri < this._riverSrc.length; ri++) {
-        var pts = this._riverSrc[ri].points || [];
-        for (var pi = 0; pi < pts.length; pi++) {
-          if (Math.hypot(pts[pi][0] - home.cx, pts[pi][1] - home.cy) < 34) {
-            pts[pi][0] = lake.cx;
-            pts[pi][1] = lake.cy;
+      return pts;
+    }
+
+    function crossesWater(pts) {
+      var others = rivers.concat(out);
+      for (var oi = 0; oi < others.length; oi++) {
+        var op = others[oi].points;
+        for (var i = 2; i < pts.length - 2; i++) {
+          for (var j = 1; j < op.length; j += 2) {
+            if (segIntersect(pts[i - 1], pts[i], op[j - 1], op[j])) {
+              return true;
+            }
           }
         }
       }
+      return false;
     }
+
+    function rim(lake, tx, ty, k) {
+      var ang = Math.atan2((ty - lake.cy) / lake.ry, (tx - lake.cx) / lake.rx);
+      var rr = self._lakeEdge(lake, ang) * (k == null ? 0.7 : k);
+      return {
+        x: lake.cx + Math.cos(ang) * lake.rx * rr,
+        y: lake.cy + Math.sin(ang) * lake.ry * rr
+      };
+    }
+
+    for (var i = 0; i < links.length; i++) {
+      var cfg = links[i];
+      var a = this.lakes[cfg.from];
+      var b = this.lakes[cfg.to];
+      if (!a || !b) continue;
+      // Соединяем только те пары, что стоят не слишком далеко.
+
+      var p0 = rim(a, b.cx, b.cy, 0.62);
+      var p1 = rim(b, a.cx, a.cy, 0.62);
+      var len = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
+      // Слишком далёкие озёра не соединяем: линия через полкарты
+      // выглядит как отдельная река, а не протока.
+      if (len > 520) continue;
+
+      var bows = [0.16, -0.16, 0.28, -0.28, 0.42, -0.42, 0.60, -0.60];
+      var built = null;
+      for (var bi = 0; bi < bows.length; bi++) {
+        var pts = arc(p0, p1, bows[bi] * len);
+        if (!crossesWater(pts)) { built = pts; break; }
+      }
+      if (!built) continue;
+
+      // Протока заметно тоньше реки, поэтому сглаживаем сильнее:
+      // иначе у дуги видны грани сегментов.
+      built = chaikin(built, 2);
+
+      var cum = [0];
+      for (var q = 1; q < built.length; q++) {
+        cum.push(cum[q - 1] + Math.hypot(built[q].x - built[q - 1].x,
+                                          built[q].y - built[q - 1].y));
+      }
+      out.push({
+        points: built,
+        cum: cum,
+        length: cum[cum.length - 1],
+        width: cfg.width || 1.5
+      });
+    }
+
+    this.lakeLinks = out;
   };
 
   // По одному кораблику на озеро. Ходит по внутреннему эллипсу,
@@ -2530,7 +2610,8 @@
   };
 
   PaperEngine.prototype._drawRivers = function (g) {
-    var rivers = this.rivers || [];
+    // Реки и протоки между озёрами рисуются одинаково: это одна вода.
+    var rivers = (this.rivers || []).concat(this.lakeLinks || []);
     if (!rivers.length) return;
     var p = this.theme.palette;
 
@@ -2594,17 +2675,27 @@
     for (var i = 0; i < roads.length; i++) {
       var pts = roads[i].points;
 
+      // Старая карта: у дороги тёмные края и светлая середина, а по
+      // центру идёт пунктир. Тёмный кант делает дорогу читаемой на
+      // плотном лесу, где раньше она терялась.
       g.setLineDash([]);
-      g.strokeStyle = 'rgba(250,240,214,0.50)';
-      g.lineWidth = 4.5;
+      g.strokeStyle = 'rgba(70,50,24,0.42)';
+      g.lineWidth = 5.0;
       g.beginPath();
       g.moveTo(pts[0].x, pts[0].y);
       for (var a = 1; a < pts.length; a++) g.lineTo(pts[a].x, pts[a].y);
       g.stroke();
 
+      g.strokeStyle = 'rgba(246,236,210,0.75)';
+      g.lineWidth = 2.6;
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (var a2 = 1; a2 < pts.length; a2++) g.lineTo(pts[a2].x, pts[a2].y);
+      g.stroke();
+
       g.setLineDash([1.5, 5]);
       g.strokeStyle = p.road;
-      g.lineWidth = 1.6;
+      g.lineWidth = 1.5;
       g.beginPath();
       g.moveTo(pts[0].x, pts[0].y);
       for (var b = 1; b < pts.length; b++) g.lineTo(pts[b].x, pts[b].y);
