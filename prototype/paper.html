@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mintland · Карты</title>
+<!--
+  Mintland · семейство карт, первый прототип.
+
+  Это ещё не тема для панели, а страница для разработки движка:
+  изометрическая сетка, запекание статики, простые спрайты и юниты.
+  Контракт хоста тот же, что у остальных тем (см. docs/THEMES.md):
+
+    ?wallpaper=1  — режим обоев, страницу грузит themehost.py
+    ?freeze=1     — без requestAnimationFrame; кадр задаётся __renderAt(t)
+    ?variant=…    — id темы из prototype/paper/themes.js
+
+  Входящие сообщения:
+    {t:'icons',    vis:bool, r:[[l,t,r,b],...]}  — прямоугольники иконок, физ. пиксели
+    {t:'settings', v:{...}}                      — параметры темы, частичное обновление
+    {t:'reset',    v:{...}}                      — сброс к значениям по умолчанию
+    {t:'pause',    v:bool}                       — сцена на паузе
+  Исходящее: строка 'ready' через window.chrome.webview.postMessage.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e6d3a8; }
+  #art { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #dev {
+    position: fixed; left: 10px; top: 10px; z-index: 2;
+    padding: 5px 8px; border-radius: 6px;
+    background: rgba(45, 31, 16, 0.72); color: #f4e8cc;
+    font: 11px/1.45 monospace; white-space: pre; pointer-events: none;
+  }
+  body.wallpaper #dev { display: none; }
+</style>
+</head>
+<body>
+<canvas id="art"></canvas>
+<div id="dev"></div>
+<script src="paper/themes.js"></script>
+<script src="paper/engine.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var QS = new URLSearchParams(location.search);
+  var FREEZE = QS.has('freeze');
+  var WALLPAPER = QS.has('wallpaper');
+  var URL_VARIANT = QS.get('variant');
+
+  if (WALLPAPER) document.body.classList.add('wallpaper');
+
+  var themes = window.PaperThemes || {};
+  var theme = themes[URL_VARIANT] || themes.worldmap;
+  var cv = document.getElementById('art');
+  var dev = document.getElementById('dev');
+  var engine = new PaperEngine(cv, theme);
+
+  var paused = false;
+  var raf = false;
+  var last = 0;
+  var devAt = 0;
+
+  function schedule() {
+    if (raf || FREEZE) return;
+    raf = true;
+    requestAnimationFrame(frame);
+  }
+
+  function frame(now) {
+    raf = false;
+    if (paused) { last = 0; return; }
+    schedule();
+    if (engine.params.cap30 && now - last < 31) return;
+    last = now;
+    engine.render(now);
+  }
+
+  function resize() {
+    engine.resize(window.innerWidth, window.innerHeight);
+    engine.render(performance.now());
+  }
+
+  addEventListener('resize', function () {
+    resize();
+    if (!FREEZE && !paused) schedule();
+  });
+
+  function applySettings(v) {
+    if (!v) return;
+    if (typeof v.variant === 'string' && themes[v.variant] &&
+        v.variant !== engine.theme.id) {
+      theme = themes[v.variant];
+      engine.setTheme(theme);
+    }
+    engine.setParams(v);
+    engine.render(performance.now());
+  }
+
+  function reset(v) {
+    var next = (v && v.variant && themes[v.variant]) || theme || themes.worldmap;
+    theme = next;
+    engine.setTheme(next);
+    engine.setParams(Object.assign({}, next.defaults, v || {}));
+    engine.render(performance.now());
+  }
+
+  function handle(m) {
+    if (!m || !m.t) return;
+
+    if (m.t === 'pause') {
+      paused = !!m.v;
+      if (!paused) schedule();
+      return;
+    }
+    if (m.t === 'settings') {
+      applySettings(m.v || {});
+      return;
+    }
+    if (m.t === 'reset') {
+      reset(m.v || {});
+      return;
+    }
+    if (m.t !== 'icons') return;
+
+    var k = window.devicePixelRatio || 1;      // физические пиксели → CSS
+    var r = m.r || [];
+    var icons = m.vis ? r.map(function (q) {
+      return {
+        x: q[0] / k,
+        y: q[1] / k,
+        w: (q[2] - q[0]) / k,
+        h: (q[3] - q[1]) / k
+      };
+    }) : [];
+    engine.setIcons(icons);
+    engine.render(performance.now());
+  }
+
+  engine.onFrame = function (e) {
+    if (!dev || WALLPAPER) return;
+    var now = performance.now();
+    if (now - devAt < 500) return;
+    devAt = now;
+    var world = e.world || {};
+    dev.textContent =
+      'Paper engine · ' + e.theme.id + '\n' +
+      'bake ' + e.bakeMs.toFixed(1) + ' ms · frame ' + e.frameMs.toFixed(1) + ' ms\n' +
+      'objects ' + (world.objects ? world.objects.length : 0) +
+      ' · roads ' + (world.roads ? world.roads.length : 0) +
+      ' · icons ' + e.icons.length;
+  };
+
+  resize();
+
+  // Хуки для тестов и записи GIF-превью (на работу сцены не влияют).
+  window.__engine = engine;
+  window.__renderAt = function (t) { engine.render(t); };
+  window.__inject = handle;
+  window.__state = function () {
+    var world = engine.world || {};
+    return {
+      variant: engine.theme.id,
+      params: Object.assign({}, engine.params),
+      icons: engine.icons.length,
+      objects: world.objects ? world.objects.length : 0,
+      roads: world.roads ? world.roads.length : 0,
+      cities: world.cities ? world.cities.length : 0,
+      lakes: world.lakes ? world.lakes.length : 0,
+      bakeMs: engine.bakeMs,
+      frameMs: engine.frameMs,
+      dpr: engine.dpr
+    };
+  };
+
+  engine.render(0);
+  if (!FREEZE) schedule();
+
+  var host = window.chrome && window.chrome.webview;
+  if (host) {
+    host.addEventListener('message', function (ev) {
+      try { handle(JSON.parse(ev.data)); } catch (e) { /* ignore */ }
+    });
+    host.postMessage('ready');
+  }
+})();
+</script>
+</body>
+</html>
