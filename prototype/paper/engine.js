@@ -1620,20 +1620,6 @@
 
   /* ---------- отрисовка ---------- */
 
-  // Вода не должна затекать на островки иконок: вырезаем их из
-  // области рисования. Иконки всё равно сверху, поэтому край аккуратный.
-  PaperEngine.prototype._clipOutsideIcons = function (g, pad) {
-    if (!this.icons.length) return false;
-    g.beginPath();
-    g.rect(0, 0, this.W, this.H);
-    for (var i = 0; i < this.icons.length; i++) {
-      var r = this.icons[i];
-      g.rect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
-    }
-    g.clip('evenodd');
-    return true;
-  };
-
   PaperEngine.prototype._drawLakes = function (g) {
     var p = this.theme.palette;
     var lakes = this.lakes || [];
@@ -1946,13 +1932,8 @@
       this._drawVignette(og);
     }
 
-    // Поляна чуть светлее бумаги — иначе она невидима и кажется, что
-    // лес просто вырезан справа от иконки. Текстуру при этом сохраняем.
-    og.globalCompositeOperation = 'source-atop';
-    og.globalAlpha = 0.16;
-    og.fillStyle = this.theme.palette.paperLight;
-    og.fillRect(0, 0, this.W, this.H);
-    og.globalAlpha = 1;
+    // Никакого осветления: островок должен быть той же бумагой, что и
+    // вокруг, иначе получается «прожектор» вокруг иконки.
 
     og.setTransform(1, 0, 0, 1, 0, 0);
     og.globalCompositeOperation = 'destination-in';
@@ -2014,11 +1995,8 @@
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     g.drawImage(this._paper, 0, 0, this.W, this.H);
-    g.save();
-    var clipped = this._clipOutsideIcons(g, 10);
     this._drawRivers(g);
     this._drawLakes(g);
-    if (clipped) g.restore();
     this._drawTufts(g);
     this._drawRoads(g);
     this._drawBridges(g);
