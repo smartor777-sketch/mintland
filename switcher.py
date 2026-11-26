@@ -608,7 +608,7 @@ class Switcher(Gtk.Window):
         self._busy_until = 0.0
         self._updating = False
 
-        self.set_default_size(1210, 760)
+        self.set_default_size(1010, 690)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_border_width(12)
         self.set_icon_name("preferences-desktop-wallpaper")
@@ -770,7 +770,7 @@ class Switcher(Gtk.Window):
 
     def _make_thumb(self, tid):
         info = THEME_INFO.get(tid, {})
-        width, height = 208, 117
+        width, height = 176, 99
         path = self._thumb_path(tid, self.state["params"].get(tid, {}).get("variant"))
         try:
             return AnimatedThumb(path, width, height)
