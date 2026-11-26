@@ -6,8 +6,10 @@ A port of the Windows program [Deskland](https://github.com/BLEZZ0102/Deskland)
 to Linux Mint (Cinnamon / X11). Deskland draws adaptive wallpaper: the scene
 reacts to the positions of your desktop icons.
 
-**Status:** functional version v0.3 — beach and meadow behind the icons, icons
-stay clickable, on/off works repeatedly, auto-pause, a graphical theme switcher.
+**Status:** functional version **v0.4.1** — beach, meadow, night, forest and the
+new **Old map** theme; icons stay clickable, on/off works repeatedly,
+auto-pause, a graphical theme switcher. The window title shows the package
+version.
 
 Measured on an ASUS Vivobook X1502ZA laptop (Intel Core i7-12700H, 14 cores /
 20 threads, 2560×1440): an active scene takes **~65% of one core, i.e. ~3.2% of
@@ -31,9 +33,9 @@ tests) — see [`docs/en/WAYLAND.md`](docs/en/WAYLAND.md).
 ---
 **Themes** — animated previews (GIF):
 
-| Beach | Meadow | Night | Forest |
-|---|---|---|---|
-| ![Beach](docs/theme-beach.gif) | ![Meadow](docs/theme-meadow.gif) | ![Night](docs/theme-night.gif) | ![Forest](docs/theme-forest.gif) |
+| Beach | Meadow | Night | Forest | Old map |
+|---|---|---|---|---|
+| ![Beach](docs/theme-beach.gif) | ![Meadow](docs/theme-meadow.gif) | ![Night](docs/theme-night.gif) | ![Forest](docs/theme-forest.gif) | ![Old map](docs/theme-worldmap.gif) |
 
 *The previews are recorded from these same scenes; on the Deskland website the
 top block is a live WebGL iframe, not a video file.*
@@ -52,6 +54,14 @@ top block is a live WebGL iframe, not a video file.*
 - The Meadow theme has a boy with a kite and a black kitten: PNG sprites live in
   `prototype/assets/` and are loaded into the scene (WebKit is allowed `file://`
   access for this).
+- The **Old map** theme (`prototype/paper.html`) is drawn with canvas 2D:
+  parchment, mountains, forests, fields, castles, roads, rivers, lakes, ships,
+  a lighthouse, a witch's hut and birds. The static map is baked once; moving
+  an icon only rebuilds a cheap island overlay.
+- Lakes form one river chain with no dead-end tributaries. A town is created
+  only when the whole castle sprite fits, so roads never end at an empty spot.
+  Lakes keep a little more clearance from the bottom edge, where the panel
+  with the Start button sits.
 - One entry in the applications menu — **Mintland**. Everything is controlled
   from the app. There is no tray icon yet; the state is visible in
   the scene and in the working log (`run/wall.log` in the repository,
@@ -75,7 +85,10 @@ top block is a live WebGL iframe, not a video file.*
   the scene. After launch, `deskwall -u` raises the `nemo-desktop` window, so the
   icons end up above the scene and stay clickable. The Mintland protocol: the
   host sends `{t:'icons', vis, r:[[l,t,r,b],...]}` and `{t:'pause', v}`; the
-  page also understands `settings`/`reset`.
+  page also understands `settings`/`reset` and reports `ready`. Preview capture
+  uses `?freeze=1` and the `__inject` / `__renderAt` hooks. Icon and window
+  polling runs in background threads so GTK and WebKit do not stall.
+  Scripts are loaded with `?v=...` so updates are not stuck in the cache.
 - `deskwall.c` → `bin/deskwall` (built locally): an X11 utility. Only `-u` is
   used now — raise `nemo-desktop` above the layer. The other modes are kept as
   experiments: `-r 0xWINID` (restack a window below nemo), `--` (fork a command
@@ -85,6 +98,11 @@ top block is a live WebGL iframe, not a video file.*
   virtual icons from `~/.config/nemo/desktop-metadata`, grid
   `desktop-grid-adjust`.
 - `start-layer.sh`: launches the host (WebKit hardware acceleration).
+- `prototype/paper.html`: the Old map page; receives icon rectangles in
+  physical pixels and divides them by `devicePixelRatio` for the engine.
+- `prototype/paper/engine.js`: the canvas map engine: lakes, mountains, rivers,
+  castles, roads, bridges, objects, static baking and the icon overlay.
+- `prototype/paper/themes.js`: the map palette and object sprite sets.
 - `switcher.py`: the GTK3 switcher. Keeps the choice in
   `~/.config/mintland/settings.json` and writes `control.json` in the working
   directory (`run/` in the repository, `~/.cache/mintland/` in an installed
@@ -114,6 +132,11 @@ Cinnamon/X11, 2560×1440, flat.html theme, 30 fps**.
 |---|---:|---:|---:|
 | Beach (`flat.html`, WebGL) | **~65%** | **~3.2%** | ~0.5% |
 | Night (`night.html`, canvas 2D) | **~50%** | **~2.5%** | ~0.4% |
+
+For the Old map the stages are measured separately: a full world rebuild takes
+~124 ms, baking the static base ~9 ms, a frame ~0 ms, and rebuilding the icon
+overlay ~11 ms. The whole map is not redrawn every frame: only ships, birds and
+carts move over the baked scene.
 
 For comparison: the old "12–20%" figures from the first measurements are also
 percentages of one core, i.e. 0.6–1.0% of total load. The new numbers are higher
@@ -145,7 +168,10 @@ workable option.
 | `iconsource.py` | Icon positions: `gio` + `desktop-metadata`, grid `desktop-grid-adjust` |
 | `themehost.py` | GTK3+WebKit2 host: DESKTOP window, WebKit, `icons`/`pause`/`settings` protocol |
 | `switcher.py` | GTK3 theme and parameter switcher, layer on/off |
-| `prototype/` | Themes and assets: `flat.html` (beach), `meadow.html` (meadow), `night.html` (night, no assets), `themes.json`, `assets/`, `thumbs/` |
+| `prototype/` | Themes and assets: `flat.html` (beach), `meadow.html` (meadow), `night.html` (night), `paper.html` (Old map), `themes.json`, `assets/`, `thumbs/` |
+| `prototype/paper/engine.js` | Old map engine: water, castles, roads, objects, scene baking |
+| `prototype/paper/themes.js` | Map palette and object sprites |
+| `prototype/paper.html` | Map page with the Mintland protocol and preview hooks |
 | `start-layer.sh` | Launches the host (default theme `flat.html`; selection in `switcher.py`) |
 | `wall-on.sh` / `wall-off.sh` | Service start/stop (called by `switcher.py`); restarts nemo after removing the layer |
 | `README.md` | The Russian documentation (the only `.md` in the root) |
@@ -186,8 +212,8 @@ buttons are pressed.
 
 Launch: **Mintland** in the applications menu, or `python3 switcher.py`.
 
-- cards for the ready themes from `prototype/themes.json` (Beach, Meadow, Night, Forest)
-  with animated GIF previews;
+- cards for the ready themes from `prototype/themes.json` (Beach, Meadow, Night,
+  Forest, Old map) with animated GIF previews;
 - **Turn layer on** / **Turn layer off** buttons;
 - parameter sliders for the selected theme: palms, kayaks, gulls, clouds,
   characters, aurora, mist;
@@ -199,6 +225,9 @@ Launch: **Mintland** in the applications menu, or `python3 switcher.py`.
 - in the Forest theme — trees of seven kinds on grass drawn with strokes; your
   icons sit in clearings, and trees that ended up under an icon sink into the
   ground and grow back;
+- in the Old map theme — density, forests, castles and roads, carts, icon
+  clearance (4–70 px) and birds; all six sliders fit without scrolling, and the
+  window title shows the package version;
 - the interface language switch is in the status row: Russian (the development
   language) and English. The choice is stored in `~/.config/mintland/lang`;
   without a saved choice the language comes from `LANG`.
@@ -208,6 +237,11 @@ available in this build — they have no HTML pages.
 
 How to add your own theme — see [`docs/en/THEMES.md`](docs/en/THEMES.md). What
 could be improved and in what order — [`docs/en/IMPROVEMENTS.md`](docs/en/IMPROVEMENTS.md).
+
+## Releases
+
+The current release is **[v0.4.1](https://github.com/smartor777-sketch/mintland/releases/tag/v0.4.1)**.
+Its Assets contain `mintland_0.4.1_amd64.deb` and the checksum file.
 
 ## Safety (Dark Mode)
 
@@ -239,7 +273,7 @@ cc -O2 -Wall deskwall.c -lX11 -lXext -o bin/deskwall
 ```bash
 sudo apt install debhelper devscripts lintian
 dpkg-buildpackage -us -uc -b
-sudo apt install ../mintland_0.3.0_amd64.deb
+sudo apt install ../mintland_0.4.1_amd64.deb
 ```
 
 The package installs the code into `/usr/lib/mintland`, themes and previews into
@@ -256,8 +290,9 @@ rather than next to the code, because `/usr/lib/mintland` is read-only.
 - [x] Step 5: icons above the scene and clickable; on/off/on cycle — verified
 - [x] Step 6: graphical theme switcher (Beach/Meadow/Night), on/off and parameters — MVP
 - [x] Step 7: theme contract, check tools and preview capture (`THEMES.md`, `tools/`)
-- [ ] Step 8: autostart, tray, .deb/AppImage
-- [ ] Step 9: front click-through layer (a bonus above the icons)
+- [x] Step 8: Old map canvas theme and the `.deb` package 0.4.1
+- [ ] Step 9: autostart and tray
+- [ ] Step 10: front click-through layer (a bonus above the icons)
 
 ## Known limitations
 
