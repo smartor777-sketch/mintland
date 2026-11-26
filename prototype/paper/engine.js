@@ -1005,20 +1005,6 @@
   // Прямоугольники иконок с запасом: сюда нельзя ставить объекты и
   // прокладывать дороги. Именно из этого получается «карта вокруг
   // рабочего стола минус иконки», а не подложка поверх рисунка.
-  PaperEngine.prototype._iconZones = function (pad) {
-    var out = [];
-    for (var i = 0; i < this.icons.length; i++) {
-      var r = this.icons[i];
-      out.push({
-        x: r.x - pad,
-        y: r.y - pad,
-        w: r.w + pad * 2,
-        h: r.h + pad * 2
-      });
-    }
-    return out;
-  };
-
   PaperEngine.prototype._inIconZone = function (x, y, pad) {
     var icons = this.icons;
     for (var i = 0; i < icons.length; i++) {
@@ -1043,7 +1029,7 @@
         data[r * cols + c] =
           (x < 18 || x > W - 18 || y < 18 || y > H - 18 ||
            this._inLake(x, y, 22) ||
-           this._inIconZone(x, y, 14)) ? 1 : 0;
+           this._inIconZone(x, y, 20)) ? 1 : 0;
       }
     }
     this._blocked = { step: step, cols: cols, rows: rows, data: data };
@@ -1215,7 +1201,7 @@
         if (this._inLake(x, y, 34)) continue;
         if (this._nearRiver(x, y, 26)) continue;
         if (this._inReserved(x, y, 30)) continue;
-        if (this._inIconZone(x, y, 40)) continue;
+        if (this._inIconZone(x, y, 50)) continue;
         var ok = true;
         for (var k = 0; k < castles.length; k++) {
           if (Math.hypot(castles[k].x - x, castles[k].y - y) < minD) {
@@ -1238,7 +1224,7 @@
       if (this._inLake(rx, ry, 34)) continue;
       if (this._nearRiver(rx, ry, 26)) continue;
       if (this._inReserved(rx, ry, 30)) continue;
-      if (this._inIconZone(rx, ry, 40)) continue;
+      if (this._inIconZone(rx, ry, 50)) continue;
       var ok2 = true;
       for (var k2 = 0; k2 < castles.length; k2++) {
         if (Math.hypot(castles[k2].x - rx, castles[k2].y - ry) < minD * 0.75) {
@@ -1355,7 +1341,7 @@
       if (self._inLake(x, y, 10)) return false;
       if (self._nearRiver(x, y, r + 2)) return false;
       if (self._inReserved(x, y, r)) return false;
-      if (self._inIconZone(x, y, r + 10)) return false;
+      if (self._inIconZone(x, y, r + 18)) return false;
 
       var pad = r + 22;
       var c0 = Math.floor((x - pad) / CELL);
@@ -1633,6 +1619,20 @@
   };
 
   /* ---------- отрисовка ---------- */
+
+  // Вода не должна затекать на островки иконок: вырезаем их из
+  // области рисования. Иконки всё равно сверху, поэтому край аккуратный.
+  PaperEngine.prototype._clipOutsideIcons = function (g, pad) {
+    if (!this.icons.length) return false;
+    g.beginPath();
+    g.rect(0, 0, this.W, this.H);
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      g.rect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+    }
+    g.clip('evenodd');
+    return true;
+  };
 
   PaperEngine.prototype._drawLakes = function (g) {
     var p = this.theme.palette;
@@ -2014,8 +2014,11 @@
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     g.drawImage(this._paper, 0, 0, this.W, this.H);
+    g.save();
+    var clipped = this._clipOutsideIcons(g, 10);
     this._drawRivers(g);
     this._drawLakes(g);
+    if (clipped) g.restore();
     this._drawTufts(g);
     this._drawRoads(g);
     this._drawBridges(g);

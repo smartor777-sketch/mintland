@@ -174,6 +174,15 @@
 
   // Хуки для тестов и записи GIF-превью (на работу сцены не влияют).
   window.__engine = engine;
+  window.__setIconsForTest = function (list) {
+    var rects = (list || []).map(function (q) {
+      return { x: q[0], y: q[1], w: q[2] - q[0], h: q[3] - q[1] };
+    });
+    engine.setIcons(rects);
+    engine._needsWorldRebuild = false;
+    engine.worldDirty = true;
+    engine.render(performance.now());
+  };
   window.__renderAt = function (t) { engine.render(t); };
   window.__inject = handle;
   window.__state = function () {
