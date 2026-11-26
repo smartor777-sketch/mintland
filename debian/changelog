@@ -43,6 +43,8 @@ mintland (0.3.2) unstable; urgency=medium
   * Draw dark edges on roads so they read over dense forest.
   * Add short water channels between nearby lakes.
   * Keep the lake boat steady: no per-frame rotation.
+  * Keep a wider margin between lakes and the sheet edge.
+  * Cache-bust the theme scripts, not just the page.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
