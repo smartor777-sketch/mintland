@@ -1901,7 +1901,7 @@
     // Поляна чуть светлее бумаги — иначе она невидима и кажется, что
     // лес просто вырезан справа от иконки. Текстуру при этом сохраняем.
     og.globalCompositeOperation = 'source-atop';
-    og.globalAlpha = 0.55;
+    og.globalAlpha = 0.30;
     og.fillStyle = this.theme.palette.paperLight;
     og.fillRect(0, 0, this.W, this.H);
     og.globalAlpha = 1;
