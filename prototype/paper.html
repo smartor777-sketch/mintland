@@ -59,6 +59,8 @@
   var paused = false;
   var raf = false;
   var last = 0;
+  var nextFrame = 0;
+  var STEP30 = 1000 / 30;
   var devAt = 0;
 
   function schedule() {
@@ -69,9 +71,21 @@
 
   function frame(now) {
     raf = false;
-    if (paused) { last = 0; return; }
+    if (paused) { last = 0; nextFrame = 0; return; }
     schedule();
-    if (engine.params.cap30 && now - last < 31) return;
+
+    // Ровный шаг вместо «пропустить кадр, если прошло меньше 31 мс»:
+    // иначе на 60-Гц экране интервалы скачут 33/50 мс и картинка
+    // дёргается. Держим сетку времени и догоняем её.
+    if (engine.params.cap30) {
+      if (!nextFrame) nextFrame = now;
+      if (now < nextFrame) return;
+      nextFrame += STEP30;
+      if (now - nextFrame > STEP30 * 2) nextFrame = now + STEP30;
+      engine.render(now);
+      return;
+    }
+
     last = now;
     engine.render(now);
   }

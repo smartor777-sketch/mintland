@@ -705,83 +705,269 @@
     });
   }
 
-  /* Кораблик: широкий корпус, мачта и один косой парус.
+  /* Кораблик: трёхмачтовый парусник, как на референсе. Прямые паруса
+   * ярусами, тёмный корпус с ватерлинией, тень-отражение под днищем.
    * Привязка — ватерлиния, чтобы покачивание шло вокруг воды. */
   function makeBoat(seed, p) {
     var rng = mulberry32(seed);
-    var w = 42, h = 40, ax = 21, ay = 32;
+    var w = 56, h = 62, ax = 28, ay = 50;
     return makeSprite(w, h, ax, ay, function (g) {
       g.translate(ax, ay);
 
-      g.fillStyle = 'rgba(70,51,29,0.10)';
-      g.beginPath();
-      g.ellipse(1, 1, 13, 2.4, 0, 0, TAU);
-      g.fill();
-
       g.strokeStyle = p.ink;
-      g.lineWidth = 1.2;
+      g.lineWidth = 1.15;
       g.lineJoin = 'round';
       g.lineCap = 'round';
 
-      // Корпус: заметная лодка с высокими бортами.
+      // Отражение и ватерлиния.
+      g.fillStyle = 'rgba(70,51,29,0.14)';
+      g.beginPath();
+      g.ellipse(1, 9.5, 16, 2.4, 0, 0, TAU);
+      g.fill();
+
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(-17, 7); g.lineTo(17, 7);
+      g.stroke();
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.15;
+
+      // Корпус: высокий борт, крутой нос и корма.
       g.fillStyle = p.wood;
       g.beginPath();
-      g.moveTo(-15, -5);
-      g.quadraticCurveTo(-12, 4, 0, 5);
-      g.quadraticCurveTo(12, 4, 15, -5);
-      g.quadraticCurveTo(0, 0, -15, -5);
+      g.moveTo(-16, -3);
+      g.quadraticCurveTo(-13, 5, -6, 6.5);
+      g.lineTo(7, 6.5);
+      g.quadraticCurveTo(14, 5, 17, -3);
+      g.quadraticCurveTo(9, 1.5, 0, 1.5);
+      g.quadraticCurveTo(-9, 1.5, -16, -3);
       g.closePath();
       g.fill(); g.stroke();
 
-      // Доска по борту.
-      g.strokeStyle = p.inkSoft;
-      g.lineWidth = 0.8;
+      // Тёмная нижняя часть борта.
+      g.save();
       g.beginPath();
-      g.moveTo(-12, -1.5);
-      g.quadraticCurveTo(0, 2.5, 12, -1.5);
-      g.stroke();
-
-      // Мачта.
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1.3;
-      g.beginPath();
-      g.moveTo(-1, -4);
-      g.lineTo(-1, -30);
-      g.stroke();
-
-      // Косой парус: прямая передняя шкаторина у мачты и выпуклый
-      // задний край. Треугольник, а не «зонтик».
-      g.fillStyle = p.stoneDark;
-      g.beginPath();
-      g.moveTo(0.5, -28);
-      g.lineTo(10, -13);
-      g.quadraticCurveTo(5, -9, 0.5, -8);
+      g.moveTo(-16, -3);
+      g.quadraticCurveTo(-13, 5, -6, 6.5);
+      g.lineTo(7, 6.5);
+      g.quadraticCurveTo(14, 5, 17, -3);
+      g.quadraticCurveTo(9, 1.5, 0, 1.5);
+      g.quadraticCurveTo(-9, 1.5, -16, -3);
       g.closePath();
-      g.fill(); g.stroke();
+      g.clip();
+      g.fillStyle = p.roofRight;
+      g.globalAlpha = 0.55;
+      g.fillRect(-18, 1, 36, 7);
+      g.globalAlpha = 1;
+      g.restore();
 
-      // Пара штрихов на парусе.
+      // Палуба.
       g.strokeStyle = p.inkSoft;
       g.lineWidth = 0.8;
       g.beginPath();
-      g.moveTo(2, -23); g.lineTo(6.5, -17);
-      g.moveTo(2, -17); g.lineTo(5, -13.5);
+      g.moveTo(-13, -1.2);
+      g.quadraticCurveTo(0, 2.2, 13, -1.2);
       g.stroke();
 
-      // Небольшой вымпел.
-      g.strokeStyle = p.ink;
-      g.lineWidth = 1;
+      // Мачты: фок, грот, бизань.
+      function mast(mx, top) {
+        g.strokeStyle = p.ink;
+        g.lineWidth = 1.25;
+        g.beginPath();
+        g.moveTo(mx, -1);
+        g.lineTo(mx, top);
+        g.stroke();
+      }
+
+      // Прямой парус: прямоугольник с выпуклыми шкаторинами.
+      function sail(cx, top, bottom, halfW) {
+        var mid = (top + bottom) * 0.5;
+        g.fillStyle = p.paperLight;
+        g.strokeStyle = p.ink;
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(cx - halfW, top);
+        g.lineTo(cx + halfW, top);
+        g.quadraticCurveTo(cx + halfW * 0.72, mid, cx + halfW, bottom);
+        g.lineTo(cx - halfW, bottom);
+        g.quadraticCurveTo(cx - halfW * 0.72, mid, cx - halfW, top);
+        g.closePath();
+        g.fill(); g.stroke();
+
+        // Рейхи — тонкие линии сверху и снизу.
+        g.strokeStyle = p.ink;
+        g.lineWidth = 1.1;
+        g.beginPath();
+        g.moveTo(cx - halfW - 1.2, top);
+        g.lineTo(cx + halfW + 1.2, top);
+        g.moveTo(cx - halfW - 1.2, bottom);
+        g.lineTo(cx + halfW + 1.2, bottom);
+        g.stroke();
+      }
+
+      var jitter = (rng() - 0.5) * 0.6;
+
+      mast(-9, -30);
+      mast(0, -44);
+      mast(10, -26);
+
+      // Фок: два яруса.
+      sail(-9, -27 + jitter, -19, 7);
+      sail(-9, -17, -9, 8);
+
+      // Грот: два широких яруса.
+      sail(0, -41, -32, 8.5);
+      sail(0, -29, -18, 9.5);
+
+      // Бизань.
+      sail(10, -23, -13, 6);
+
+      // Вымпелы на верхушках.
       g.fillStyle = p.roofLeft;
+      g.strokeStyle = p.ink;
+      g.lineWidth = 0.9;
       g.beginPath();
-      g.moveTo(-1, -29);
-      g.lineTo(3.5, -27.6);
-      g.lineTo(-1, -26.2);
+      g.moveTo(0, -44);
+      g.lineTo(6, -42.4);
+      g.lineTo(0, -40.8);
+      g.closePath();
+      g.fill(); g.stroke();
+
+      g.beginPath();
+      g.moveTo(-9, -30);
+      g.lineTo(-4.5, -28.8);
+      g.lineTo(-9, -27.6);
       g.closePath();
       g.fill(); g.stroke();
     });
   }
 
-  /* Избушка ведьмы: кривая крыша, труба с дымком, покосившийся забор
-   * и лужица. Ставится в самом пустом месте карты. */
+  /* Тыковка у избушки: приплюснутый плод с долками и хвостиком. */
+  function makePumpkin(seed, p) {
+    var rng = mulberry32(seed);
+    var w = 26, h = 22, ax = 13, ay = 18;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+
+      g.fillStyle = p.shadow;
+      g.beginPath();
+      g.ellipse(1, 0, 8.5, 2.2, 0, 0, TAU);
+      g.fill();
+
+      var fill = p.roofLeft;
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1;
+
+      // Три дольки: средняя выше, боковые ниже.
+      var lobes = [
+        [-5.2, 7, 6.4],
+        [0, 8, 7.4],
+        [5.2, 7, 6.4]
+      ];
+      g.fillStyle = fill;
+      for (var i = 0; i < lobes.length; i++) {
+        g.beginPath();
+        g.ellipse(lobes[i][0], -lobes[i][2] + 1.5, lobes[i][1] * 0.72,
+                  lobes[i][2], 0, 0, TAU);
+        g.fill();
+        g.stroke();
+      }
+
+      // Бороздки между долек.
+      g.strokeStyle = p.inkSoft;
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(-2.4, -12); g.lineTo(-2.4, -1);
+      g.moveTo(2.4, -12); g.lineTo(2.4, -1);
+      g.stroke();
+
+      // Хвостик.
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.6;
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(1.5, -13.5);
+      g.quadraticCurveTo(3.2, -16.5, 1, -18);
+      g.stroke();
+    });
+  }
+
+  /* Маяк: сужающаяся полосатая башня, галерея, фонарь и купол. */
+  function makeLighthouse(seed, p) {
+    var w = 30, h = 56, ax = 15, ay = 49;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+
+      g.fillStyle = p.shadow;
+      g.beginPath();
+      g.ellipse(2, 0, 11, 2.8, 0, 0, TAU);
+      g.fill();
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.2;
+      g.lineJoin = 'round';
+
+      g.fillStyle = p.mountain;
+      g.beginPath();
+      g.moveTo(-12, 0); g.lineTo(-9, -6); g.lineTo(-3, -9);
+      g.lineTo(4, -8); g.lineTo(10, -4); g.lineTo(13, 0);
+      g.closePath(); g.fill(); g.stroke();
+
+      g.fillStyle = p.stone;
+      g.beginPath();
+      g.moveTo(-7, -8); g.lineTo(-4, -34); g.lineTo(4, -34); g.lineTo(7, -8);
+      g.closePath(); g.fill(); g.stroke();
+
+      g.save();
+      g.beginPath();
+      g.moveTo(-7, -8); g.lineTo(-4, -34); g.lineTo(4, -34); g.lineTo(7, -8);
+      g.closePath();
+      g.clip();
+      g.fillStyle = p.roofLeft;
+      g.fillRect(-8, -16, 16, 4.5);
+      g.fillRect(-8, -25, 16, 4);
+      g.restore();
+
+      g.strokeStyle = p.ink;
+      g.lineWidth = 1.1;
+      g.fillStyle = p.stoneDark;
+      g.beginPath();
+      g.moveTo(-6.5, -34); g.lineTo(6.5, -34);
+      g.lineTo(5.5, -37.5); g.lineTo(-5.5, -37.5);
+      g.closePath(); g.fill(); g.stroke();
+
+      g.fillStyle = 'rgba(244,232,204,0.95)';
+      g.fillRect(-3.2, -44, 6.4, 6.5);
+      g.strokeRect(-3.2, -44, 6.4, 6.5);
+
+      g.fillStyle = p.roofLeft;
+      g.beginPath();
+      g.moveTo(-4.4, -44); g.lineTo(0, -49); g.lineTo(4.4, -44);
+      g.closePath(); g.fill(); g.stroke();
+    });
+  }
+
+  /* Лучик маяка: конус света, рисуется в динамическом слое. */
+  function makeBeam(seed, p) {
+    var w = 64, h = 26, ax = 6, ay = 13;
+    return makeSprite(w, h, ax, ay, function (g) {
+      g.translate(ax, ay);
+      var grad = g.createLinearGradient(0, 0, w * 0.85, 0);
+      grad.addColorStop(0, 'rgba(250,240,206,0.42)');
+      grad.addColorStop(1, 'rgba(250,240,206,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.moveTo(0, -2.5);
+      g.lineTo(w * 0.85, -h * 0.42);
+      g.lineTo(w * 0.85, h * 0.42);
+      g.lineTo(0, 2.5);
+      g.closePath();
+      g.fill();
+    });
+  }
+
   function makeWitch(seed, p) {
     var rng = mulberry32(seed);
     var w = 56, h = 52, ax = 28, ay = 44;
@@ -992,7 +1178,7 @@
   PaperEngine.prototype._buildSprites = function () {
     var p = this.theme.palette;
     var i;
-    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [], boats: [], witches: [], birds: [] };
+    var s = { trees: [], houses: [], mountains: [], rocks: [], castles: [], carts: [], hills: [], bushes: [], fields: [], boats: [], witches: [], birds: [], lighthouses: [], beams: [], pumpkins: [] };
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1200 + i * 131, p, false));
     for (i = 0; i < 3; i++) s.trees.push(makeTree(0x1e00 + i * 167, p, true));
     for (i = 0; i < 5; i++) s.houses.push(makeHouse(0x3400 + i * 173, p));
@@ -1006,6 +1192,9 @@
     for (i = 0; i < 3; i++) s.boats.push(makeBoat(0xfc00 + i * 37, p));
     for (i = 0; i < 2; i++) s.witches.push(makeWitch(0xfe00 + i * 61, p));
     for (i = 0; i < 2; i++) s.birds.push(makeBird(0xff00 + i * 29, p, i === 0));
+    for (i = 0; i < 2; i++) s.lighthouses.push(makeLighthouse(0xaa00 + i * 43, p));
+    for (i = 0; i < 2; i++) s.beams.push(makeBeam(0xab00 + i * 47, p));
+    for (i = 0; i < 3; i++) s.pumpkins.push(makePumpkin(0xac00 + i * 31, p));
     this._sprites = s;
   };
 
@@ -1277,10 +1466,10 @@
       // Река плавно обходит островки иконок. Сдвигаем точки, попавшие
       // в зону, и сглаживаем; сильного излома не будет.
       if (this.icons.length) {
-        for (var pass = 0; pass < 8; pass++) {
+        for (var pass = 0; pass < 12; pass++) {
           for (var pi = 1; pi < pts.length - 1; pi++) {
-            if (this._inIconZone(pts[pi].x, pts[pi].y, 18)) {
-              var pushed = this._pushOutOfIcons(pts[pi].x, pts[pi].y, 22);
+            if (this._inIconZone(pts[pi].x, pts[pi].y, 30)) {
+              var pushed = this._pushOutOfIcons(pts[pi].x, pts[pi].y, 34);
               pts[pi].x = pushed.x;
               pts[pi].y = pushed.y;
             }
@@ -1803,6 +1992,30 @@
       }
     }
 
+    /* 1.5. Маяк на берегу самого большого озера. Ищем точку у кромки
+     * воды, снаружи, чтобы башня стояла на суше. */
+    this.lighthouses = [];
+    var biggest = null;
+    for (var li = 0; li < this.lakes.length; li++) {
+      var lk = this.lakes[li];
+      if (!biggest || lk.rx * lk.ry > biggest.rx * biggest.ry) biggest = lk;
+    }
+    if (biggest) {
+      for (var la = 0; la < TAU; la += 0.18) {
+        var lx = biggest.cx + Math.cos(la) * biggest.rx * 1.22;
+        var ly = biggest.cy + Math.sin(la) * biggest.ry * 1.22;
+        if (this._inLake(lx, ly, 14)) continue;
+        if (this._inIconZone(lx, ly, 34)) continue;
+        if (this._inReserved(lx, ly, 24)) continue;
+        if (this._nearRoad(lx, ly, 20)) continue;
+        var lsc = 0.95;
+        if (put('lighthouse', this._sprites.lighthouses, lx, ly, lsc, 12, 0)) {
+          this.lighthouses.push({ x: lx, y: ly - 42 * lsc, phase: rng() * TAU });
+          break;
+        }
+      }
+    }
+
     /* 2. замки: сначала башни, потом полоса под подпись, потом дома */
     for (var ci = 0; ci < castles.length; ci++) {
       var castleT = castles[ci];
@@ -1925,10 +2138,19 @@
 
         // Ближайший объект: чем дальше, тем «пустее» место.
         var near = 1e9;
+        var labelBlocked = false;
         for (var oi = 0; oi < objects.length; oi++) {
-          var d = Math.hypot(objects[oi].x - px, objects[oi].y - py);
+          var oo = objects[oi];
+          var d = Math.hypot(oo.x - px, oo.y - py);
           if (d < near) near = d;
+          // Над избой нужна чистая полоса под подпись «Witch».
+          if (oo.x > px - 34 && oo.x < px + 34 &&
+              oo.y > py - 56 && oo.y < py - 16) {
+            labelBlocked = true;
+            break;
+          }
         }
+        if (labelBlocked) continue;
         if (near > bestScore) { bestScore = near; witch = { x: px, y: py }; }
       }
     }
@@ -1939,6 +2161,18 @@
         v: Math.floor(rng() * this._sprites.witches.length),
         r: 20 * wsc
       });
+
+      // Тыковка у крыльца: маленькая, чуть впереди и сбоку, чтобы
+      // читалась рядом с избой, а не под ней.
+      var pumpkinX = witch.x + 26;
+      var pumpkinY = witch.y + 8;
+      objects.push({
+        type: 'pumpkin', x: pumpkinX, y: pumpkinY, s: 0.55 + rng() * 0.12,
+        v: Math.floor(rng() * this._sprites.pumpkins.length),
+        r: 8
+      });
+
+      this._witchLabel = { x: witch.x, y: witch.y };
       objects.sort(function (a, b) { return a.y - b.y; });
     }
 
@@ -1952,7 +2186,7 @@
       if (this._nearRiver(tx2, ty2, 3)) continue;
       if (this._nearRoad(tx2, ty2, 5)) continue;
       if (this._inReserved(tx2, ty2, 4)) continue;
-      if (this._inIconZone(tx2, ty2, 8)) continue;
+      if (this._inIconZone(tx2, ty2, 26)) continue;
       tufts.push({ x: tx2, y: ty2, s: 0.7 + rng() * 0.6, a: rng() * TAU });
     }
 
@@ -2267,6 +2501,15 @@
     }
   };
 
+  // Подпись избушки ведьмы — как у замков, только мельче.
+  PaperEngine.prototype._drawWitchLabel = function (g) {
+    var w = this._witchLabel;
+    if (!w) return;
+    this._drawSpacedText(g, 'Witch', w.x, w.y - 44,
+                         11, 'rgba(90,67,34,0.62)', 0,
+                         'rgba(214,190,144,0.5)', true);
+  };
+
   PaperEngine.prototype._drawCompass = function (g) {
     var cp = this.theme.compass;
     if (!cp) return;
@@ -2276,33 +2519,58 @@
     g.save();
     g.translate(cx, cy);
     g.strokeStyle = p.inkSoft;
-    g.fillStyle = p.inkSoft;
     g.lineWidth = 0.9;
 
+    // Двойное кольцо.
     g.beginPath(); g.arc(0, 0, r, 0, TAU); g.stroke();
-    g.beginPath(); g.arc(0, 0, r * 0.72, 0, TAU); g.stroke();
+    g.beginPath(); g.arc(0, 0, r * 0.80, 0, TAU); g.stroke();
 
-    for (var i = 0; i < 8; i++) {
-      var ang = i * TAU / 8 - Math.PI * 0.5;
-      var len = (i % 2 === 0) ? r * 0.92 : r * 0.54;
-      var wdt = (i % 2 === 0) ? 0.15 : 0.10;
+    // 16 лучей: 4 главных, 4 промежуточных, 8 малых.
+    for (var i = 0; i < 16; i++) {
+      var ang = i * TAU / 16 - Math.PI * 0.5;
+      var major = (i % 4 === 0);
+      var mid = (i % 2 === 0);
+      var len = major ? r * 0.98 : (mid ? r * 0.70 : r * 0.46);
+      var half = major ? 0.085 : (mid ? 0.065 : 0.045);
+      var base = r * 0.10;
+
       g.beginPath();
       g.moveTo(Math.cos(ang) * len, Math.sin(ang) * len);
-      g.lineTo(Math.cos(ang + wdt) * r * 0.18, Math.sin(ang + wdt) * r * 0.18);
-      g.lineTo(Math.cos(ang - wdt) * r * 0.18, Math.sin(ang - wdt) * r * 0.18);
+      g.lineTo(Math.cos(ang + half) * base, Math.sin(ang + half) * base);
+      g.lineTo(Math.cos(ang - half) * base, Math.sin(ang - half) * base);
       g.closePath();
-      if (i % 2 === 0) {
-        g.fillStyle = i === 0 ? p.inkSoft : 'rgba(90,70,48,0.22)';
+
+      if (i === 0) {
+        // Северная стрелка — тёмная, остальные светлее.
+        g.fillStyle = 'rgba(90,67,34,0.72)';
+        g.fill();
+      } else if (major) {
+        g.fillStyle = 'rgba(90,67,34,0.38)';
+        g.fill();
+      } else if (mid) {
+        g.fillStyle = 'rgba(90,67,34,0.22)';
         g.fill();
       }
+      g.strokeStyle = 'rgba(90,67,34,0.38)';
+      g.lineWidth = 0.6;
       g.stroke();
     }
 
-    g.font = '600 10px "Liberation Serif", Georgia, serif';
+    // Центральный кружок.
+    g.beginPath(); g.arc(0, 0, r * 0.075, 0, TAU);
+    g.fillStyle = p.inkSoft;
+    g.fill();
+
+    // Буквы.
+    g.font = '600 11px "Liberation Serif", Georgia, serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillStyle = 'rgba(90,70,48,0.55)';
-    g.fillText('N', 0, -r - 8);
+    g.fillStyle = 'rgba(90,67,34,0.62)';
+    g.fillText('N', 0, -r - 9);
+    g.fillStyle = 'rgba(90,67,34,0.42)';
+    g.fillText('S', 0, r + 9);
+    g.fillText('E', r + 9, 0);
+    g.fillText('W', -r - 9, 0);
     g.restore();
   };
 
@@ -2318,7 +2586,7 @@
     return s;
   };
 
-  var SPRITE_KEYS = { witch: 'witches', bush: 'bushes' };
+  var SPRITE_KEYS = { witch: 'witches', bush: 'bushes', pumpkin: 'pumpkins' };
 
   PaperEngine.prototype._spriteFor = function (o) {
     var key = SPRITE_KEYS[o.type] || (o.type + 's');
@@ -2395,6 +2663,7 @@
     this._drawLabels(g);
     this._drawObjects(g);
     this._drawCastleNames(g);
+    this._drawWitchLabel(g);
     this._drawCompass(g);
     this._drawVignette(g);
     if (this.theme.frame !== false) this._drawFrame(g);
@@ -2404,6 +2673,44 @@
     this.displayDirty = true;
   };
 
+  // Островки иконок: как на референсе — не карточка, а береговая линия
+  // вокруг группы значков. Внутри пусто (объекты туда не ставятся),
+  // снаружи двойной контур тушью. Пересобирается только при сдвиге.
+  PaperEngine.prototype._iconIslandMask = function () {
+    var ms = 1;
+    var mw = Math.max(1, Math.round(this.W * ms));
+    var mh = Math.max(1, Math.round(this.H * ms));
+    var mask = document.createElement('canvas');
+    mask.width = mw;
+    mask.height = mh;
+    var mg = mask.getContext('2d');
+    mg.scale(ms, ms);
+    mg.fillStyle = '#fff';
+
+    for (var i = 0; i < this.icons.length; i++) {
+      var r = this.icons[i];
+      // Большой отступ: соседние значки дают один общий остров, а не
+      // гирлянду из отдельных кружков.
+      var pad = 36;
+      var x = r.x - pad, y = r.y - pad;
+      var w = r.w + pad * 2, h = r.h + pad * 2;
+      var cx = x + w * 0.5, cy = y + h * 0.5;
+      var rx = w * 0.5, ry = h * 0.5;
+      var rng = mulberry32(Math.round(r.x * 13 + r.y * 7 + r.w * 3 + r.h));
+      var pts = [];
+      var n = 20;
+      for (var k = 0; k < n; k++) {
+        var a = k / n * TAU;
+        var wob = 0.88 + rng() * 0.12;
+        pts.push([cx + Math.cos(a) * rx * wob,
+                  cy + Math.sin(a) * ry * wob]);
+      }
+      blobPath(mg, pts);
+      mg.fill();
+    }
+    return { canvas: mask, w: mw, h: mh };
+  };
+
   PaperEngine.prototype._ensureOverlay = function () {
     if (!this.overlayDirty) return;
     var t0 = performance.now();
@@ -2411,14 +2718,98 @@
     var g = this.overlayCtx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.overlay.width, this.overlay.height);
-    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    // Поляна больше не нужна: карта строится вокруг иконок, а вода
-    // вырезается мягкой бухтой. Слой оставлен пустым, чтобы не ломать
-    // композицию кадра.
+    if (!this.icons.length) {
+      this.overlayMs = performance.now() - t0;
+      this.overlayDirty = false;
+      this.displayDirty = true;
+      return;
+    }
+
+    var mask = this._iconIslandMask();
+    var palette = this.theme.palette;
+
+    // Две тонкие линии по контуру: внутренняя у самой кромки и внешняя
+    // на отступе. Так остров читается как берег, а не как обводка UI.
+    function band(inner, outer, alpha) {
+      var c = document.createElement('canvas');
+      c.width = mask.w;
+      c.height = mask.h;
+      var cg = c.getContext('2d');
+
+      // Внешняя граница: маска, расширенная на outer.
+      var dil = document.createElement('canvas');
+      dil.width = mask.w;
+      dil.height = mask.h;
+      var dg = dil.getContext('2d');
+      for (var d = 0; d < outer; d++) {
+        dg.drawImage(mask.canvas, -d, 0);
+        dg.drawImage(mask.canvas, d, 0);
+        dg.drawImage(mask.canvas, 0, -d);
+        dg.drawImage(mask.canvas, 0, d);
+      }
+      dg.globalCompositeOperation = 'destination-out';
+      // Вырезаем всё, что ближе inner: получается полосая рамка.
+      for (var e = 0; e < inner; e++) {
+        var tmp = document.createElement('canvas');
+        tmp.width = mask.w;
+        tmp.height = mask.h;
+        var tg = tmp.getContext('2d');
+        for (var f = 0; f < inner; f++) {
+          tg.drawImage(mask.canvas, -f, 0);
+          tg.drawImage(mask.canvas, f, 0);
+          tg.drawImage(mask.canvas, 0, -f);
+          tg.drawImage(mask.canvas, 0, f);
+        }
+        dg.drawImage(tmp, 0, 0);
+        break;
+      }
+      dg.globalCompositeOperation = 'source-in';
+      dg.fillStyle = palette.ink;
+      dg.fillRect(0, 0, dil.width, dil.height);
+
+      cg.globalAlpha = alpha;
+      cg.drawImage(dil, 0, 0);
+      return c;
+    }
+
+    var outer = band(4, 6, 0.30);
+    var inner = band(0, 2, 0.26);
+
+    g.save();
+    g.imageSmoothingEnabled = true;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(outer, 0, 0, this.overlay.width, this.overlay.height);
+    g.drawImage(inner, 0, 0, this.overlay.width, this.overlay.height);
+    g.restore();
+
     this.overlayMs = performance.now() - t0;
     this.overlayDirty = false;
     this.displayDirty = true;
+  };
+
+  // Луч маяка медленно поворачивается и слегка тускнеет.
+  PaperEngine.prototype._drawLighthouseBeams = function (g, t) {
+    var beams = this._sprites.beams || [];
+    var lighthouses = this.lighthouses || [];
+    if (!beams.length || !lighthouses.length) return;
+
+    for (var i = 0; i < lighthouses.length; i++) {
+      var lh = lighthouses[i];
+      var a = t * 0.00035 + lh.phase;
+      var pulse = 0.45 + 0.25 * Math.sin(t * 0.0011 + lh.phase);
+      var spr = beams[i % beams.length];
+
+      g.save();
+      g.globalAlpha = pulse;
+      g.translate(lh.x, lh.y);
+      g.rotate(a);
+      g.drawImage(spr.c, -spr.ax, -spr.ay, spr.w, spr.h);
+      g.rotate(Math.PI);
+      g.globalAlpha = pulse * 0.55;
+      g.drawImage(spr.c, -spr.ax, -spr.ay, spr.w, spr.h);
+      g.restore();
+    }
   };
 
   PaperEngine.prototype._drawBoats = function (g, t) {
@@ -2450,7 +2841,7 @@
 
       // Масштаб от размера озера: на маленьком озере кораблик меньше,
       // иначе он выглядит как лодка в луже.
-      var sc = clamp(Math.min(lake.rx, lake.ry) / 38, 0.50, 0.92);
+      var sc = clamp(Math.min(lake.rx, lake.ry) / 44, 0.52, 0.95);
 
       g.save();
       g.translate(x, y + dy);
@@ -2490,6 +2881,7 @@
   };
 
   PaperEngine.prototype._drawUnits = function (g, t) {
+    this._drawLighthouseBeams(g, t);
     this._drawBoats(g, t);
     this._drawBirds(g, t);
 
