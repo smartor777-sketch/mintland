@@ -34,6 +34,8 @@ mintland (0.3.2) unstable; urgency=medium
   * Fill icon islands with the main map parchment colour.
   * Let water flow around icon islands instead of cutting off at them.
   * Make the icon island slider a real pixel offset (6-52 px).
+  * Route rivers with clamp-smoothing so they keep a clear margin from
+    icon islands without visible kinks.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
