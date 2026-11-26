@@ -56,8 +56,9 @@ top block is a live WebGL iframe, not a video file.*
   access for this).
 - The **Old map** theme (`prototype/paper.html`) is drawn with canvas 2D:
   parchment, mountains, forests, fields, castles, roads, rivers, lakes, ships,
-  a lighthouse, a witch's hut and birds. The static map is baked once; moving
-  an icon only rebuilds a cheap island overlay.
+  a lighthouse, a witch's hut and birds. Moving an icon **rebuilds the whole
+  map**: icon positions affect object placement, so the world and the baked
+  scene are generated again, but only after the icon stops, not on every frame.
 - Lakes form one river chain with no dead-end tributaries. A town is created
   only when the whole castle sprite fits, so roads never end at an empty spot.
   Lakes keep a little more clearance from the bottom edge, where the panel
@@ -101,7 +102,8 @@ top block is a live WebGL iframe, not a video file.*
 - `prototype/paper.html`: the Old map page; receives icon rectangles in
   physical pixels and divides them by `devicePixelRatio` for the engine.
 - `prototype/paper/engine.js`: the canvas map engine: lakes, mountains, rivers,
-  castles, roads, bridges, objects, static baking and the icon overlay.
+  castles, roads, bridges, objects, scene baking and a full map rebuild when
+  icons change.
 - `prototype/paper/themes.js`: the map palette and object sprite sets.
 - `switcher.py`: the GTK3 switcher. Keeps the choice in
   `~/.config/mintland/settings.json` and writes `control.json` in the working
@@ -134,9 +136,10 @@ Cinnamon/X11, 2560×1440, flat.html theme, 30 fps**.
 | Night (`night.html`, canvas 2D) | **~50%** | **~2.5%** | ~0.4% |
 
 For the Old map the stages are measured separately: a full world rebuild takes
-~124 ms, baking the static base ~9 ms, a frame ~0 ms, and rebuilding the icon
-overlay ~11 ms. The whole map is not redrawn every frame: only ships, birds and
-carts move over the baked scene.
+~124 ms, baking the map ~9 ms, a frame ~0 ms, and rebuilding the icon mask
+~11 ms. The full rebuild is triggered after an icon stops moving, not on every
+drag frame. In a normal frame only ships, birds and carts move over the
+ready scene.
 
 For comparison: the old "12–20%" figures from the first measurements are also
 percentages of one core, i.e. 0.6–1.0% of total load. The new numbers are higher
