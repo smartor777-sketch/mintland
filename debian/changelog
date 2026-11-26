@@ -29,6 +29,11 @@ mintland (0.3.2) unstable; urgency=medium
   * Keep the whole sprite footprint out of icon islands, not just the feet.
   * Fill icon islands as solid squircles so no gaps show between icons.
   * Darken the compass rose and draw it above the icon islands.
+  * Scatter small parchment specks across the sheet instead of large
+    dark patches.
+  * Fill icon islands with the main map parchment colour.
+  * Let water flow around icon islands instead of cutting off at them.
+  * Make the icon island slider a real pixel offset (6-52 px).
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
