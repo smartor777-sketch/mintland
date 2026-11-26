@@ -1473,47 +1473,78 @@
   PaperEngine.prototype._buildRivers = function () {
     var list = this.theme.rivers || [];
     var out = [];
+    var clean = this.icons.length > 0;
+
     for (var i = 0; i < list.length; i++) {
+      // Маршрутизируем по ИСХОДНЫМ путевым точкам, а не по каждому
+      // сглаженному пикселю: иначе на каждый шаг запускается A*.
       var src = this._riverSrc[i].points;
-      var pts = [];
+      var way = [];
       for (var k = 0; k < src.length; k++) {
-        pts.push({ x: src[k][0], y: src[k][1] });
+        way.push({ x: src[k][0], y: src[k][1] });
       }
-      pts = chaikin(pts, 3);
 
-      // Река обходит островки иконок: сглаживаем линию и после каждого
-      // прохода возвращаем точки, попавшие в запретную зону, на её
-      // границу. Кривая остаётся гладкой, но не заходит на островок.
-      if (this.icons.length) {
-        var clearPad = this._islandPad() + 34;
-
-        for (var pi0 = 1; pi0 < pts.length - 1; pi0++) {
-          if (this._inIconZone(pts[pi0].x, pts[pi0].y, clearPad)) {
-            var pushed0 = this._pushOutOfIcons(pts[pi0].x, pts[pi0].y, clearPad);
-            pts[pi0].x = pushed0.x;
-            pts[pi0].y = pushed0.y;
-          }
+      // Линия проходит через промежуточные точки. Если между ними
+      // больше ~70 px, режем отрезок пополам: иначе огибание островка
+      // получается слишком грубым.
+      var chain = [way[0]];
+      for (var w = 1; w < way.length; w++) {
+        var a = chain[chain.length - 1], b = way[w];
+        var d = Math.hypot(b.x - a.x, b.y - a.y);
+        var n = Math.max(1, Math.round(d / 70));
+        for (var q = 1; q <= n; q++) {
+          chain.push({ x: a.x + (b.x - a.x) * q / n,
+                       y: a.y + (b.y - a.y) * q / n });
         }
+      }
 
-        for (var pass = 0; pass < 24; pass++) {
-          for (var pj = 1; pj < pts.length - 1; pj++) {
-            pts[pj].x = (pts[pj - 1].x + 2 * pts[pj].x + pts[pj + 1].x) / 4;
-            pts[pj].y = (pts[pj - 1].y + 2 * pts[pj].y + pts[pj + 1].y) / 4;
+      var pts = chain;
+
+      if (clean && this._riverGrid) {
+        var routed = [];
+        for (var wp = 1; wp < chain.length; wp++) {
+          var seg = this._routeRiverSegment(chain[wp - 1], chain[wp]);
+          if (!seg) { routed = null; break; }
+          if (routed.length) seg = seg.slice(1);
+          routed = routed.concat(seg);
+        }
+        if (routed && routed.length > 2) pts = routed;
+      }
+
+      pts = chaikin(pts, 2);
+
+      // Финальная страховка: ни одна точка, включая концы, не должна
+      // оставаться внутри островка. Это работает и когда A* не нашёл
+      // путь (например, точка старта за экраном).
+      if (clean) {
+        var clearPad = this._islandPad() + 26;
+        pts = densify(pts, 8);
+        for (var it = 0; it < 4; it++) {
+          for (var cq = 0; cq < pts.length; cq++) {
+            if (this._inIconZone(pts[cq].x, pts[cq].y, clearPad)) {
+              var pp = this._pushOutOfIcons(pts[cq].x, pts[cq].y, clearPad);
+              pts[cq].x = pp.x;
+              pts[cq].y = pp.y;
+            }
           }
-          for (var pc = 1; pc < pts.length - 1; pc++) {
-            if (this._inIconZone(pts[pc].x, pts[pc].y, clearPad)) {
-              var pushed = this._pushOutOfIcons(pts[pc].x, pts[pc].y, clearPad);
-              pts[pc].x = pushed.x;
-              pts[pc].y = pushed.y;
+          pts = densify(pts, 8);
+        }
+        for (var sm = 0; sm < 3; sm++) {
+          for (var si = 1; si < pts.length - 1; si++) {
+            var nx = (pts[si - 1].x + 2 * pts[si].x + pts[si + 1].x) / 4;
+            var ny = (pts[si - 1].y + 2 * pts[si].y + pts[si + 1].y) / 4;
+            if (!this._inIconZone(nx, ny, clearPad - 2)) {
+              pts[si].x = nx;
+              pts[si].y = ny;
             }
           }
         }
       }
 
       var cum = [0];
-      for (var q = 1; q < pts.length; q++) {
-        cum.push(cum[q - 1] + Math.hypot(pts[q].x - pts[q - 1].x,
-                                          pts[q].y - pts[q - 1].y));
+      for (var c2 = 1; c2 < pts.length; c2++) {
+        cum.push(cum[c2 - 1] + Math.hypot(pts[c2].x - pts[c2 - 1].x,
+                                           pts[c2].y - pts[c2 - 1].y));
       }
       out.push({
         points: pts,
@@ -1524,6 +1555,146 @@
     }
     this.rivers = out;
   };
+
+  // Сетка проходимости для рек: запрещены только островки иконок.
+  // Озёра и дороги реку не останавливают.
+  PaperEngine.prototype._buildRiverGrid = function () {
+    var W = this.W, H = this.H;
+    var step = 20;
+    var cols = Math.ceil(W / step) + 2;
+    var rows = Math.ceil(H / step) + 2;
+    var data = new Uint8Array(cols * rows);
+    var pad = this._islandPad() + 20;
+
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var x = c * step, y = r * step;
+        data[r * cols + c] =
+          (x < 8 || x > W - 8 || y < 8 || y > H - 8 ||
+           this._inIconZone(x, y, pad)) ? 1 : 0;
+      }
+    }
+    this._riverGrid = { step: step, cols: cols, rows: rows, data: data };
+  };
+
+  PaperEngine.prototype._routeRiverSegment = function (a, b) {
+    var G = this._riverGrid;
+    if (!G) return null;
+
+    var step = G.step, cols = G.cols, rows = G.rows, data = G.data;
+    var total = cols * rows;
+
+    function nearest(x, y) {
+      var c0 = clamp(Math.round(x / step), 0, cols - 1);
+      var r0 = clamp(Math.round(y / step), 0, rows - 1);
+      for (var rad = 0; rad <= 8; rad++) {
+        for (var dr = -rad; dr <= rad; dr++) {
+          for (var dc = -rad; dc <= rad; dc++) {
+            if (Math.max(Math.abs(dr), Math.abs(dc)) !== rad) continue;
+            var c = c0 + dc, r = r0 + dr;
+            if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
+            var i = r * cols + c;
+            if (data[i] === 0) return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    var start = nearest(a.x, a.y);
+    var goal = nearest(b.x, b.y);
+    if (start < 0 || goal < 0) return null;
+
+    var gScore = new Float32Array(total);
+    gScore.fill(1e9);
+    var parent = new Int32Array(total);
+    parent.fill(-1);
+    var closed = new Uint8Array(total);
+
+    function octile(i) {
+      var gr = (goal / cols) | 0, gc = goal - gr * cols;
+      var r = (i / cols) | 0, c = i - r * cols;
+      var dx = Math.abs(gc - c), dy = Math.abs(gr - r);
+      return Math.max(dx, dy) + 0.414 * Math.min(dx, dy);
+    }
+
+    var dirs = [
+      [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+      [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]
+    ];
+
+    var open = new MinHeap();
+    gScore[start] = 0;
+    open.push({ i: start, f: octile(start) });
+
+    var found = false;
+    while (open.size()) {
+      var cur = open.pop();
+      var ci = cur.i;
+      if (closed[ci]) continue;
+      closed[ci] = 1;
+      if (ci === goal) { found = true; break; }
+
+      var cr = (ci / cols) | 0;
+      var cc = ci - cr * cols;
+      for (var d = 0; d < 8; d++) {
+        var dc2 = dirs[d][0], dr2 = dirs[d][1], w = dirs[d][2];
+        var nc = cc + dc2, nr = cr + dr2;
+        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+        var ni = nr * cols + nc;
+        if (data[ni]) continue;
+        if (dc2 && dr2 && (data[cr * cols + nc] || data[nr * cols + cc])) continue;
+        var ng = gScore[ci] + w;
+        if (ng < gScore[ni]) {
+          gScore[ni] = ng;
+          parent[ni] = ci;
+          open.push({ i: ni, f: ng + octile(ni) });
+        }
+      }
+    }
+
+    if (!found && goal !== start) return null;
+
+    var path = [];
+    var cur2 = goal;
+    while (cur2 >= 0) {
+      path.push(cur2);
+      if (cur2 === start) break;
+      cur2 = parent[cur2];
+    }
+    if (path[path.length - 1] !== start) return null;
+    path.reverse();
+
+    var pts = [];
+    for (var p = 0; p < path.length; p++) {
+      var idx = path[p];
+      var rr = (idx / cols) | 0;
+      var cc3 = idx - rr * cols;
+      pts.push({ x: cc3 * step, y: rr * step });
+    }
+    pts[0] = { x: a.x, y: a.y };
+    pts[pts.length - 1] = { x: b.x, y: b.y };
+    return pts;
+  };
+
+  // Разбить длинные отрезки на короткие: иначе прямой участок между
+  // двумя точками вне зоны может «срезать» угол островка.
+  function densify(pts, maxLen) {
+    if (pts.length < 2) return pts;
+    var out = [pts[0]];
+    for (var i = 1; i < pts.length; i++) {
+      var a = out[out.length - 1], b = pts[i];
+      var d = Math.hypot(b.x - a.x, b.y - a.y);
+      var n = Math.max(1, Math.ceil(d / maxLen));
+      for (var k = 1; k <= n; k++) {
+        out.push({
+          x: a.x + (b.x - a.x) * k / n,
+          y: a.y + (b.y - a.y) * k / n
+        });
+      }
+    }
+    return out;
+  }
 
   PaperEngine.prototype._nearRiver = function (x, y, pad) {
     var rivers = this.rivers || [];
@@ -1793,6 +1964,7 @@
     // те, что привязаны к центрам.
     this._initRiverSrc();
     this._buildLakes(rng);
+    this._buildRiverGrid();
     this._buildRivers();
     this._buildBoats(rng);
     this._buildReserved();
