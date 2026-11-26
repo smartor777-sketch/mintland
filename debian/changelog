@@ -20,6 +20,11 @@ mintland (0.3.2) unstable; urgency=medium
   * Add a pumpkin and a "Witch" label beside the witch's hut.
   * Redraw the compass rose with 16 points and N/S/E/W letters.
   * Pace animation frames evenly instead of skipping every other one.
+  * Move xprop/gio/xwininfo polling into background threads so the GTK
+    main loop and the WebKit frame clock never stall.
+  * Lighten the icon islands, keep them free of trees, and add an
+    "Icon island size" slider.
+  * Add more parchment stains and faded patches to the paper.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
