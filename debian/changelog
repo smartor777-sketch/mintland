@@ -25,6 +25,10 @@ mintland (0.3.2) unstable; urgency=medium
   * Lighten the icon islands, keep them free of trees, and add an
     "Icon island size" slider.
   * Add more parchment stains and faded patches to the paper.
+  * Paint the stains as irregular noise blobs instead of even circles.
+  * Keep the whole sprite footprint out of icon islands, not just the feet.
+  * Fill icon islands as solid squircles so no gaps show between icons.
+  * Darken the compass rose and draw it above the icon islands.
 
  -- Alex <smartor777@gmail.com>  Thu, 26 Nov 2026 06:50:00 +0300
 
