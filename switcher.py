@@ -651,7 +651,7 @@ class Switcher(Gtk.Window):
         self._busy_until = 0.0
         self._updating = False
 
-        self.set_default_size(1180, 680)
+        self.set_default_size(1160, 636)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_border_width(12)
         self.set_icon_name("preferences-desktop-wallpaper")
@@ -749,7 +749,7 @@ class Switcher(Gtk.Window):
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
-        self.settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         scroll.add(self.settings_box)
         outer.pack_start(scroll, True, True, 0)
 
@@ -789,8 +789,10 @@ class Switcher(Gtk.Window):
         desc = Gtk.Label(label=theme_text(self.lang, tid, "desc", info.get("desc", "")))
         desc.set_xalign(0.5)
         desc.set_line_wrap(True)
-        desc.set_max_width_chars(24)
+        desc.set_max_width_chars(22)
         desc.get_style_context().add_class("hint")
+        desc.set_lines(2)
+        desc.set_ellipsize(3)
         box.pack_start(desc, False, False, 0)
         card.add(box)
         card.connect("clicked", lambda _b, t=tid: self._select_theme(t))
@@ -813,7 +815,7 @@ class Switcher(Gtk.Window):
 
     def _make_thumb(self, tid):
         info = THEME_INFO.get(tid, {})
-        width, height = 196, 110
+        width, height = 168, 70
         path = self._thumb_path(tid, self.state["params"].get(tid, {}).get("variant"))
         try:
             return AnimatedThumb(path, width, height)
@@ -1017,6 +1019,7 @@ class Switcher(Gtk.Window):
         scale.set_value(float(value))
         scale.set_draw_value(False)
         scale.set_hexpand(True)
+        scale.set_size_request(-1, 22)
         val_label = Gtk.Label(label=fmt_value(p, value, self.theme_id, self.lang))
         val_label.set_xalign(1)
         val_label.set_size_request(74, -1)
